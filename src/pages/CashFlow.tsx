@@ -59,11 +59,7 @@ export default function CashFlow() {
     },
   ]
 
-  const fmt = (n: number, cur: string = 'USD') => {
-    if (n === 0) return '—'
-    const abs = Math.abs(n).toLocaleString('en-US', {maximumFractionDigits:0})
-    return (n < 0 ? '-' : '+') + (cur === 'USD' ? '$' : '') + abs + (cur !== 'USD' ? ' ' + cur : '')
-  }
+
 
   const fmtAmt = (n: number) => {
     if (n === 0) return '—'
