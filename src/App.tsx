@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Transactions from './pages/Transactions'
+import PL from './pages/PL'
 
 export type Page = 'dashboard' | 'transactions' | 'pl' | 'cashflow' | 'reports'
 
@@ -28,6 +29,7 @@ function AppContent() {
       {page === 'pl' && <div style={{padding:'2rem',fontFamily:'system-ui'}}>P&L Report — coming soon</div>}
       {page === 'cashflow' && <div style={{padding:'2rem',fontFamily:'system-ui'}}>Cash Flow — coming soon</div>}
       {page === 'reports' && <div style={{padding:'2rem',fontFamily:'system-ui'}}>Reports — coming soon</div>}
+      {page === 'pl' && <PL />}
     </NavContext.Provider>
   )
 }
