@@ -4,6 +4,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Transactions from './pages/Transactions'
 import PL from './pages/PL'
+import CashFlow from './pages/CashFlow'
 
 export type Page = 'dashboard' | 'transactions' | 'pl' | 'cashflow' | 'reports'
 
@@ -30,6 +31,7 @@ function AppContent() {
       {page === 'cashflow' && <div style={{padding:'2rem',fontFamily:'system-ui'}}>Cash Flow — coming soon</div>}
       {page === 'reports' && <div style={{padding:'2rem',fontFamily:'system-ui'}}>Reports — coming soon</div>}
       {page === 'pl' && <PL />}
+      {page === 'cashflow' && <CashFlow />}
     </NavContext.Provider>
   )
 }
