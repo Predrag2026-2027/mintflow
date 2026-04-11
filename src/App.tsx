@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import Transactions from './pages/Transactions'
 import PL from './pages/PL'
 import CashFlow from './pages/CashFlow'
+import Reports from './pages/Reports'
 
 export type Page = 'dashboard' | 'transactions' | 'pl' | 'cashflow' | 'reports'
 
@@ -32,6 +33,7 @@ function AppContent() {
       {page === 'reports' && <div style={{padding:'2rem',fontFamily:'system-ui'}}>Reports — coming soon</div>}
       {page === 'pl' && <PL />}
       {page === 'cashflow' && <CashFlow />}
+      {page === 'reports' && <Reports />}
     </NavContext.Provider>
   )
 }
