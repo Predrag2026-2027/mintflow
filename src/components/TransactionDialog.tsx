@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 
 interface Props { onClose: () => void }
@@ -47,12 +47,6 @@ const expDescs: Record<string, string[]> = {
   'Salary expenses domestic': ['Net Salary & Contributions','Other domestic salary'],
 }
 
-const banks: Record<string, string[]> = {
-  'SFBC': ['Truist Bank (USD)','BOA (USD)','Amex Card (USD)','PayPal (USD)'],
-  'Constellation LLC': ['Raiffeisen Bank (RSD)','Raiffeisen Bank (USD)','Raiffeisen Bank (EUR)','Intesa Bank (RSD)','Intesa Bank (USD)','Unicredit Bank (RSD)','Unicredit Bank (USD)','AIK Bank (RSD)','AIK Bank (USD)'],
-  'Social Growth LLC-FZ': ['WIO Bank (USD)','WIO Bank (AED)'],
-}
-
 const typeHints: Record<string, string> = {
   expense: 'Expense — cost allocated to P&L. Requires P&L category and department.',
   revenue: 'Revenue — income recorded in P&L. Requires revenue stream.',
@@ -66,15 +60,25 @@ export default function TransactionDialog({ onClose }: Props) {
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
 
+  // Supabase data
+  const [companies, setCompanies] = useState<any[]>([])
+  const [banks, setBanks] = useState<any[]>([])
+  const [partners, setPartners] = useState<any[]>([])
+  const [allBanks, setAllBanks] = useState<any[]>([])
+
   // Step 1
-  const [company, setCompany] = useState('')
-  const [bank, setBank] = useState('')
+  const [companyId, setCompanyId] = useState('')
+  const [companyName, setCompanyName] = useState('')
+  const [bankId, setBankId] = useState('')
   const [currency, setCurrency] = useState('')
   const [statement, setStatement] = useState('')
   const [txDate, setTxDate] = useState(new Date().toISOString().split('T')[0])
   const [invDate, setInvDate] = useState('')
   const [dueDate, setDueDate] = useState('')
-  const [partner, setPartner] = useState('')
+  const [partnerId, setPartnerId] = useState('')
+  const [partnerSearch, setPartnerSearch] = useState('')
+  const [newPartnerName, setNewPartnerName] = useState('')
+  const [showNewPartner, setShowNewPartner] = useState(false)
   const [invNum, setInvNum] = useState('')
   const [showBankFields, setShowBankFields] = useState(false)
   const [accNum, setAccNum] = useState('')
@@ -110,24 +114,60 @@ export default function TransactionDialog({ onClose }: Props) {
     return 0
   })()
 
-  const stepTitles = ['Basic information','Transaction type','Payment details','Amounts & currency','Invoice matching','Review & post']
+  useEffect(() => {
+    const loadData = async () => {
+      const [{ data: comp }, { data: bnk }, { data: part }] = await Promise.all([
+        supabase.from('companies').select('*').order('name'),
+        supabase.from('banks').select('*').order('name'),
+        supabase.from('partners').select('*').order('name'),
+      ])
+      if (comp) setCompanies(comp)
+      if (bnk) setAllBanks(bnk)
+      if (part) setPartners(part)
+    }
+    loadData()
+  }, [])
+
+  useEffect(() => {
+    if (companyId) {
+      const filtered = allBanks.filter(b => b.company_id === companyId)
+      setBanks(filtered)
+      setBankId('')
+      setCurrency('')
+    }
+  }, [companyId, allBanks])
+
+  const filteredPartners = partners.filter(p =>
+    !partnerSearch || p.name.toLowerCase().includes(partnerSearch.toLowerCase())
+  )
+
+  const fetchRate = async () => {
+    const mockRates: Record<string, number> = { RSD: 117.4, EUR: 108.2, AED: 3.67, USD: 1 }
+    if (currency && mockRates[currency]) setExRate(mockRates[currency].toString())
+  }
 
   const toggleTag = (t: string) => setTags(prev => prev.includes(t) ? prev.filter(x=>x!==t) : [...prev, t])
 
-  const fetchRate = () => {
-    const rates: Record<string, number> = { RSD: 117.4, EUR: 108.2, AED: 3.67, USD: 1 }
-    if (currency && rates[currency]) setExRate(rates[currency].toString())
-  }
+  const stepTitles = ['Basic information','Transaction type','Payment details','Amounts & currency','Invoice matching','Review & post']
 
   const handlePost = async () => {
     setSaving(true)
     try {
-      const { data: companyData } = await supabase.from('companies').select('id').eq('name', company).single()
-      const { data: bankData } = await supabase.from('banks').select('id').eq('name', bank.split(' (')[0]).single()
+      let finalPartnerId = partnerId
+
+      if (showNewPartner && newPartnerName) {
+        const { data: newP } = await supabase
+          .from('partners')
+          .insert({ name: newPartnerName })
+          .select()
+          .single()
+        if (newP) finalPartnerId = newP.id
+      }
 
       await supabase.from('transactions').insert({
-        company_id: companyData?.id,
-        bank_id: bankData?.id,
+        company_id: companyId || null,
+        bank_id: bankId || null,
+        partner_id: finalPartnerId || null,
         transaction_date: txDate,
         invoice_date: invDate || null,
         due_date: dueDate || null,
@@ -204,29 +244,30 @@ export default function TransactionDialog({ onClose }: Props) {
                 <div style={s.row2}>
                   <div style={s.field}>
                     <label style={s.lbl}>Company <span style={{color:'#E24B4A'}}>*</span></label>
-                    <select style={s.select} value={company} onChange={e=>{setCompany(e.target.value);setBank('');setCurrency('')}}>
+                    <select style={s.select} value={companyId} onChange={e => {
+                      setCompanyId(e.target.value)
+                      setCompanyName(companies.find(c=>c.id===e.target.value)?.name||'')
+                    }}>
                       <option value="">Select company...</option>
-                      <option>SFBC</option>
-                      <option>Constellation LLC</option>
-                      <option>Social Growth LLC-FZ</option>
+                      {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
                   <div style={s.field}>
                     <label style={s.lbl}>Bank / Account <span style={{color:'#E24B4A'}}>*</span></label>
-                    <select style={s.select} value={bank} onChange={e=>setBank(e.target.value)}>
+                    <select style={s.select} value={bankId} onChange={e => setBankId(e.target.value)}>
                       <option value="">Select bank...</option>
-                      {(banks[company]||[]).map(b=><option key={b}>{b}</option>)}
+                      {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                     </select>
                   </div>
                 </div>
                 <div style={s.row2}>
                   <div style={s.field}>
                     <label style={s.lbl}>Currency <span style={{color:'#E24B4A'}}>*</span></label>
-                    <select style={s.select} value={currency} onChange={e=>setCurrency(e.target.value)}>
+                    <select style={s.select} value={currency} onChange={e => setCurrency(e.target.value)}>
                       <option value="">Select...</option>
-                      {company==='SFBC'&&<option>USD</option>}
-                      {company==='Constellation LLC'&&<><option>RSD</option><option>USD</option><option>EUR</option></>}
-                      {company==='Social Growth LLC-FZ'&&<><option>USD</option><option>AED</option></>}
+                      {companyName==='SFBC' && <option>USD</option>}
+                      {companyName==='Constellation LLC' && <><option>RSD</option><option>USD</option><option>EUR</option></>}
+                      {companyName==='Social Growth LLC-FZ' && <><option>USD</option><option>AED</option></>}
                     </select>
                   </div>
                   <div style={s.field}>
@@ -256,16 +297,38 @@ export default function TransactionDialog({ onClose }: Props) {
 
               <div style={s.section}>
                 <div style={s.sectionTitle}>Partner</div>
-                <div style={s.row2}>
-                  <div style={s.field}>
-                    <label style={s.lbl}>Partner <span style={{color:'#E24B4A'}}>*</span></label>
-                    <input style={s.input} value={partner} onChange={e=>setPartner(e.target.value)} placeholder="Partner name..."/>
+                {!showNewPartner ? (
+                  <div style={s.row2}>
+                    <div style={s.field}>
+                      <label style={s.lbl}>Partner <span style={{color:'#E24B4A'}}>*</span></label>
+                      <input style={s.input} value={partnerSearch} onChange={e=>setPartnerSearch(e.target.value)} placeholder="Search partner..."/>
+                      {partnerSearch && (
+                        <div style={s.dropdown}>
+                          {filteredPartners.slice(0,6).map(p => (
+                            <div key={p.id} style={s.dropdownItem} onClick={() => { setPartnerId(p.id); setPartnerSearch(p.name) }}>{p.name}</div>
+                          ))}
+                          <div style={{...s.dropdownItem, color:'#1D9E75'}} onClick={() => { setShowNewPartner(true); setPartnerSearch('') }}>+ Add new partner</div>
+                        </div>
+                      )}
+                    </div>
+                    <div style={s.field}>
+                      <label style={s.lbl}>Invoice number</label>
+                      <input style={s.input} value={invNum} onChange={e=>setInvNum(e.target.value)} placeholder="e.g. INV-001/2026"/>
+                    </div>
                   </div>
-                  <div style={s.field}>
-                    <label style={s.lbl}>Invoice number</label>
-                    <input style={s.input} value={invNum} onChange={e=>setInvNum(e.target.value)} placeholder="e.g. INV-001/2026"/>
+                ) : (
+                  <div style={s.row2}>
+                    <div style={s.field}>
+                      <label style={s.lbl}>New partner name <span style={{color:'#E24B4A'}}>*</span></label>
+                      <input style={s.input} value={newPartnerName} onChange={e=>setNewPartnerName(e.target.value)} placeholder="Enter partner name..."/>
+                      <button style={s.linkBtn} onClick={() => setShowNewPartner(false)}>← Back to search</button>
+                    </div>
+                    <div style={s.field}>
+                      <label style={s.lbl}>Invoice number</label>
+                      <input style={s.input} value={invNum} onChange={e=>setInvNum(e.target.value)} placeholder="e.g. INV-001/2026"/>
+                    </div>
                   </div>
-                </div>
+                )}
                 {showBankFields && (
                   <div style={s.row3}>
                     <div style={s.field}>
@@ -282,7 +345,7 @@ export default function TransactionDialog({ onClose }: Props) {
                     </div>
                   </div>
                 )}
-                <button style={s.linkBtn} onClick={()=>setShowBankFields(!showBankFields)}>
+                <button style={s.linkBtn} onClick={() => setShowBankFields(!showBankFields)}>
                   {showBankFields ? '− Hide payment details' : '+ Show payment details'}
                 </button>
               </div>
@@ -303,9 +366,7 @@ export default function TransactionDialog({ onClose }: Props) {
                   ].map(t => (
                     <div key={t.id} style={{...s.typeBtn, ...(txType===t.id?s.typeBtnActive:{})}} onClick={()=>setTxType(t.id)}>
                       <div style={{...s.typeIcon, background:t.iconBg}}>
-                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke={t.iconStroke} strokeWidth="1.3">
-                          <circle cx="7" cy="7" r="5"/>
-                        </svg>
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke={t.iconStroke} strokeWidth="1.3"><circle cx="7" cy="7" r="5"/></svg>
                       </div>
                       <div style={s.typeLabel}>{t.label}</div>
                     </div>
@@ -424,11 +485,17 @@ export default function TransactionDialog({ onClose }: Props) {
                   <div style={s.row2}>
                     <div style={s.field}>
                       <label style={s.lbl}>From <span style={{color:'#E24B4A'}}>*</span></label>
-                      <select style={s.select}><option value="">Select source...</option>{Object.entries(banks).flatMap(([c,bs])=>bs.map(b=><option key={b}>{c} — {b}</option>))}</select>
+                      <select style={s.select}>
+                        <option value="">Select source...</option>
+                        {allBanks.map(b=><option key={b.id} value={b.id}>{companies.find(c=>c.id===b.company_id)?.name} — {b.name}</option>)}
+                      </select>
                     </div>
                     <div style={s.field}>
                       <label style={s.lbl}>To <span style={{color:'#E24B4A'}}>*</span></label>
-                      <select style={s.select}><option value="">Select destination...</option>{Object.entries(banks).flatMap(([c,bs])=>bs.map(b=><option key={b}>{c} — {b}</option>))}</select>
+                      <select style={s.select}>
+                        <option value="">Select destination...</option>
+                        {allBanks.map(b=><option key={b.id} value={b.id}>{companies.find(c=>c.id===b.company_id)?.name} — {b.name}</option>)}
+                      </select>
                     </div>
                   </div>
                 </div>
@@ -441,11 +508,17 @@ export default function TransactionDialog({ onClose }: Props) {
                   <div style={s.row2}>
                     <div style={s.field}>
                       <label style={s.lbl}>From company <span style={{color:'#E24B4A'}}>*</span></label>
-                      <select style={s.select}><option value="">Select...</option><option>SFBC</option><option>Constellation LLC</option><option>Social Growth LLC-FZ</option></select>
+                      <select style={s.select}>
+                        <option value="">Select...</option>
+                        {companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
                     </div>
                     <div style={s.field}>
                       <label style={s.lbl}>To company <span style={{color:'#E24B4A'}}>*</span></label>
-                      <select style={s.select}><option value="">Select...</option><option>SFBC</option><option>Constellation LLC</option><option>Social Growth LLC-FZ</option></select>
+                      <select style={s.select}>
+                        <option value="">Select...</option>
+                        {companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
                     </div>
                   </div>
                 </div>
@@ -462,7 +535,7 @@ export default function TransactionDialog({ onClose }: Props) {
                     </div>
                     <div style={s.field}>
                       <label style={s.lbl}>Pair with existing PT</label>
-                      <select style={s.select}><option value="">New pass-through</option><option>PT-2026-001 ($5,000)</option></select>
+                      <select style={s.select}><option value="">New pass-through</option></select>
                     </div>
                   </div>
                 </div>
@@ -482,9 +555,7 @@ export default function TransactionDialog({ onClose }: Props) {
                   </label>
                 </div>
                 {!hasInstallments && <div style={{fontSize:'13px',color:'#888',marginTop:'8px'}}>Single payment on due date.</div>}
-                {hasInstallments && (
-                  <div style={{marginTop:'10px',fontSize:'13px',color:'#888'}}>Installment schedule will be configured after posting.</div>
-                )}
+                {hasInstallments && <div style={{fontSize:'13px',color:'#888',marginTop:'8px'}}>Installment schedule configured after posting.</div>}
               </div>
               <div style={s.section}>
                 <div style={s.sectionTitle}>Transaction tags</div>
@@ -508,8 +579,7 @@ export default function TransactionDialog({ onClose }: Props) {
                 </label>
               </div>
               <div style={{...s.infoBox, margin:'10px 0'}}>
-                {isIndexed ? 'Rate fetched on transaction date (indexed).' : 'Rate fetched on invoice date (non-indexed).'}
-                {currency && currency !== 'USD' ? ' Source: NBS.' : ''}
+                {currency === 'USD' ? 'No conversion needed — amount is already in USD.' : `Rate will be fetched from ${currency === 'AED' ? 'ExchangeRate-API' : 'NBS'} on ${isIndexed ? 'transaction' : 'invoice'} date.`}
               </div>
               <div style={s.row2}>
                 <div style={s.field}>
@@ -519,8 +589,8 @@ export default function TransactionDialog({ onClose }: Props) {
                 <div style={s.field}>
                   <label style={s.lbl}>Exchange rate</label>
                   <div style={{display:'flex',gap:'6px'}}>
-                    <input type="number" style={{...s.input,flex:1}} value={exRate} onChange={e=>setExRate(e.target.value)} placeholder="Auto-fetch"/>
-                    <button style={s.fetchBtn} onClick={fetchRate}>Fetch</button>
+                    <input type="number" style={{...s.input,flex:1}} value={exRate} onChange={e=>setExRate(e.target.value)} placeholder={currency==='USD'?'N/A':'Auto-fetch'}/>
+                    {currency !== 'USD' && <button style={s.fetchBtn} onClick={fetchRate}>Fetch</button>}
                   </div>
                 </div>
               </div>
@@ -546,9 +616,6 @@ export default function TransactionDialog({ onClose }: Props) {
                   <label style={s.lbl}>Match with existing invoice</label>
                   <select style={s.select}>
                     <option value="">No match / new invoice</option>
-                    <option>INV-001 — Stuff Up Bro ($9,900) — Pending</option>
-                    <option>INV-002 — Google Ireland ($41,440) — Partial</option>
-                    <option>INV-003 — S-Leasing ($1,080) — Pending</option>
                   </select>
                 </div>
                 <div style={s.field}>
@@ -569,12 +636,18 @@ export default function TransactionDialog({ onClose }: Props) {
               <div style={s.sectionTitle}>Review before posting</div>
               {[
                 { title:'Basic information', rows:[
-                  ['Company', company||'—'],['Bank', bank||'—'],['Partner', partner||'—'],
-                  ['Transaction date', txDate||'—'],['Invoice number', invNum||'—'],
+                  ['Company', companies.find(c=>c.id===companyId)?.name||'—'],
+                  ['Bank', banks.find(b=>b.id===bankId)?.name||'—'],
+                  ['Partner', showNewPartner ? newPartnerName : (partners.find(p=>p.id===partnerId)?.name||partnerSearch||'—')],
+                  ['Transaction date', txDate||'—'],
+                  ['Invoice number', invNum||'—'],
                 ]},
                 { title:'Classification', rows:[
-                  ['Type', txType],['P&L Category', plCat||'—'],['P&L Sub-category', plSub||'—'],
-                  ['Department', dept||'—'],['Expense description', expDesc||'—'],
+                  ['Type', txType],
+                  ['P&L Category', plCat||'—'],
+                  ['P&L Sub-category', plSub||'—'],
+                  ['Department', dept||'—'],
+                  ['Expense description', expDesc||'—'],
                 ]},
                 { title:'Amounts', rows:[
                   ['Original amount', amount?`${parseFloat(amount).toLocaleString()} ${currency}`:'—'],
@@ -632,11 +705,13 @@ const s: Record<string, React.CSSProperties> = {
   sectionTitle: { fontSize:'11px', fontWeight:'500', color:'#888', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'10px', paddingBottom:'6px', borderBottom:'0.5px solid #e5e5e5' },
   row2: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px', marginBottom:'12px' },
   row3: { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'12px', marginBottom:'12px' },
-  field: { display:'flex', flexDirection:'column', gap:'4px' },
+  field: { display:'flex', flexDirection:'column', gap:'4px', position:'relative' },
   lbl: { fontSize:'11px', fontWeight:'500', color:'#888', textTransform:'uppercase', letterSpacing:'0.07em' },
   select: { fontFamily:'system-ui,sans-serif', fontSize:'13px', padding:'8px 10px', border:'0.5px solid #e5e5e5', borderRadius:'8px', background:'#fff', color:'#111', outline:'none' },
   input: { fontFamily:'system-ui,sans-serif', fontSize:'13px', padding:'8px 10px', border:'0.5px solid #e5e5e5', borderRadius:'8px', background:'#fff', color:'#111', outline:'none' },
   textarea: { fontFamily:'system-ui,sans-serif', fontSize:'13px', padding:'8px 10px', border:'0.5px solid #e5e5e5', borderRadius:'8px', background:'#fff', color:'#111', outline:'none', resize:'vertical', minHeight:'60px' },
+  dropdown: { position:'absolute', top:'100%', left:0, right:0, background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'8px', zIndex:100, boxShadow:'0 4px 12px rgba(0,0,0,0.08)', marginTop:'2px' },
+  dropdownItem: { padding:'8px 12px', fontSize:'13px', color:'#111', cursor:'pointer', borderBottom:'0.5px solid #f0f0ee' },
   linkBtn: { background:'none', border:'none', color:'#1D9E75', fontSize:'12px', cursor:'pointer', padding:'4px 0', fontFamily:'system-ui,sans-serif' },
   typeGrid: { display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:'8px', marginBottom:'8px' },
   typeBtn: { border:'0.5px solid #e5e5e5', borderRadius:'8px', padding:'10px 6px', background:'#f5f5f3', cursor:'pointer', textAlign:'center' },
