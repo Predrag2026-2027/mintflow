@@ -205,7 +205,7 @@ const s: Record<string, React.CSSProperties> = {
   searchInput: { fontFamily:'system-ui,sans-serif', fontSize:'13px', border:'0.5px solid #e5e5e5', borderRadius:'8px', padding:'8px 12px', outline:'none', background:'#fff', color:'#111', flex:'1', minWidth:'200px' },
   filterSelect: { fontFamily:'system-ui,sans-serif', fontSize:'13px', border:'0.5px solid #e5e5e5', borderRadius:'8px', padding:'8px 12px', outline:'none', background:'#fff', color:'#111', cursor:'pointer' },
   totalBadge: { fontSize:'13px', color:'#666', background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'8px', padding:'8px 12px', marginLeft:'auto', whiteSpace:'nowrap' },
-  tableWrap: { background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'12px', overflow:'hidden' },
+  tableWrap: { background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'12px', overflow:'visible' },
   table: { width:'100%', borderCollapse:'collapse', fontSize:'13px' },
   thead: { background:'#f5f5f3' },
   th: { padding:'10px 12px', textAlign:'left', fontSize:'10px', fontWeight:'500', color:'#888', textTransform:'uppercase', letterSpacing:'0.08em', borderBottom:'0.5px solid #e5e5e5', whiteSpace:'nowrap' },
@@ -220,6 +220,6 @@ const s: Record<string, React.CSSProperties> = {
   usdCell: { fontSize:'13px', fontWeight:'500', color:'#1D9E75', whiteSpace:'nowrap' },
   badge: { fontSize:'10px', fontWeight:'500', padding:'2px 8px', borderRadius:'20px', textTransform:'capitalize', whiteSpace:'nowrap' },
   editBtn: { background:'none', border:'0.5px solid #e5e5e5', borderRadius:'6px', padding:'4px 8px', cursor:'pointer', color:'#888', fontSize:'14px' },
-  contextMenu: { position:'absolute', right:0, top:'100%', background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'8px', zIndex:100, minWidth:'120px', boxShadow:'0 4px 12px rgba(0,0,0,0.08)' },
+  contextMenu: { position:'fixed', right:'auto', background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'8px', zIndex:9999, minWidth:'120px', boxShadow:'0 4px 12px rgba(0,0,0,0.15)' },
   contextItem: { padding:'8px 14px', fontSize:'13px', color:'#111', cursor:'pointer', borderBottom:'0.5px solid #f0f0ee' },
 }
