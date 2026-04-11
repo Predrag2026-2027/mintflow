@@ -111,12 +111,14 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   const [isIndexed, setIsIndexed] = useState(false)
 
   const usdAmount = (() => {
-    const a = parseFloat(amount) || 0
-    const r = parseFloat(exRate) || 0
-    if (currency === 'USD') return a
-    if (r > 0) return a / r
-    return 0
-  })()
+  const a = parseFloat(amount) || 0
+  const r = parseFloat(exRate) || 0
+  if (currency === 'USD') return a
+  if (currency === 'RSD') return r > 0 ? a / r : 0
+  if (currency === 'EUR') return r > 0 ? a / r : 0
+  if (currency === 'AED') return r > 0 ? a * r : 0
+  return 0
+})()
 
   useEffect(() => {
     const loadData = async () => {
@@ -146,13 +148,13 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   )
 
   const fetchRate = async () => {
-  if (!currency || currency === 'USD') {
-    setExRate('1')
-    return
+  if (!currency || currency === 'USD') { setExRate('1'); return }
+  const mockRates: Record<string, number> = {
+    RSD: 117.4,
+    EUR: 108.2,
+    AED: 0.272,
   }
-  const dateForRate = isIndexed ? txDate : (invDate || txDate)
-  const rateData = await getRate(currency, dateForRate, isIndexed)
-  setExRate(rateData.rate.toString())
+  setExRate(mockRates[currency]?.toString() || '')
 }
 
   const toggleTag = (t: string) => setTags(prev => prev.includes(t) ? prev.filter(x=>x!==t) : [...prev, t])
@@ -173,31 +175,37 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
         if (newP) finalPartnerId = newP.id
       }
 
-      await supabase.from('transactions').insert({
-        company_id: companyId || null,
-        bank_id: bankId || null,
-        partner_id: finalPartnerId || null,
-        transaction_date: txDate,
-        invoice_date: invDate || null,
-        due_date: dueDate || null,
-        invoice_number: invNum || null,
-        statement_number: statement || null,
-        type: txType,
-        status: 'posted',
-        currency: currency,
-        amount: parseFloat(amount),
-        exchange_rate: parseFloat(exRate) || null,
-        amount_usd: usdAmount,
-        is_indexed: isIndexed,
-        note: note || null,
-        tags: tags.length > 0 ? tags : null,
-        revenue_stream: revStream || null,
-        rev_alloc_type: revAlloc,
-        dept_split_type: deptSplit,
-        account_number: accNum || null,
-        model: model || null,
-        reference_number: refNum || null,
-      })
+      const payload = {
+  company_id: companyId || null,
+  bank_id: bankId || null,
+  partner_id: finalPartnerId || null,
+  transaction_date: txDate,
+  invoice_date: invDate || null,
+  due_date: dueDate || null,
+  invoice_number: invNum || null,
+  statement_number: statement || null,
+  type: txType,
+  status: 'posted',
+  currency: currency,
+  amount: parseFloat(amount),
+  exchange_rate: parseFloat(exRate) || null,
+  amount_usd: usdAmount,
+  is_indexed: isIndexed,
+  note: note || null,
+  tags: tags.length > 0 ? tags : null,
+  revenue_stream: revStream || null,
+  rev_alloc_type: revAlloc,
+  dept_split_type: deptSplit,
+  account_number: accNum || null,
+  model: model || null,
+  reference_number: refNum || null,
+}
+
+if (transaction?.id) {
+  await supabase.from('transactions').update(payload).eq('id', transaction.id)
+} else {
+  await supabase.from('transactions').insert(payload)
+}
       setSuccess(true)
       setTimeout(() => { setSuccess(false); onClose() }, 1500)
     } catch (err) {
