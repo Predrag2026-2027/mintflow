@@ -1,10 +1,8 @@
+import { getRate } from '../services/currencyService'
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
-import { getRate, convertToUSD } from '../services/currencyService'
 
 interface Props { onClose: () => void }
-
-const [rateSource, setRateSource] = useState('')
 
 const plSubs: Record<string, string[]> = {
   'Employee and Labour': ['Net Salaries','Tax on salary','Contributions on behalf of the employee','Contributions on behalf of the employer','Transportation cost','Salary Expenses Abroad','Private Health insurance','Health care expenses paid by employer','Warm Meal expenses','FitPass expenses','Employee participation in benefits','Renumeration, allowances and other benefits','Education and training of employees'],
@@ -149,17 +147,10 @@ export default function TransactionDialog({ onClose }: Props) {
     setExRate('1')
     return
   }
-  {rateSource && (
-  <div style={{fontSize:'11px', color:'#0F6E56', marginTop:'4px'}}>
-    Source: {rateSource}
-  </div>
-)}
   const dateForRate = isIndexed ? txDate : (invDate || txDate)
   const rateData = await getRate(currency, dateForRate, isIndexed)
   setExRate(rateData.rate.toString())
-  setRateSource(rateData.source)
 }
-  }
 
   const toggleTag = (t: string) => setTags(prev => prev.includes(t) ? prev.filter(x=>x!==t) : [...prev, t])
 
