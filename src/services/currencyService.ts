@@ -1,5 +1,3 @@
-const EXCHANGE_API_KEY = process.env.REACT_APP_EXCHANGE_API_KEY
-
 export interface ExchangeRate {
   from: string
   to: string
@@ -8,70 +6,6 @@ export interface ExchangeRate {
   source: string
 }
 
-// NBS XML feed parser za RSD kurseve
-export async function fetchNBSRate(currency: string, date: string): Promise<number | null> {
-  try {
-    const dateObj = new Date(date)
-    const day = String(dateObj.getDate()).padStart(2, '0')
-    const month = String(dateObj.getMonth() + 1).padStart(2, '0')
-    const year = dateObj.getFullYear()
-
-    const response = await fetch(
-      `https://kurs.kursna-lista.com/api/exchange-rates?date=${year}-${month}-${day}&currency=${currency}`,
-      { headers: { 'Accept': 'application/json' } }
-    )
-
-    if (!response.ok) throw new Error('NBS API error')
-    const data = await response.json()
-
-    if (data && data.length > 0) {
-      const rate = data.find((r: any) => r.currency_code === currency)
-      if (rate) return parseFloat(rate.middle_rate)
-    }
-    return null
-  } catch (err) {
-    console.error('NBS rate fetch error:', err)
-    return null
-  }
-}
-
-// ExchangeRate-API za AED/USD i fallback
-export async function fetchExchangeRate(from: string, to: string = 'USD'): Promise<number | null> {
-  try {
-    if (!EXCHANGE_API_KEY) {
-      console.warn('No exchange API key configured')
-      return getFallbackRate(from, to)
-    }
-
-    const response = await fetch(
-      `https://v6.exchangerate-api.com/v6/${EXCHANGE_API_KEY}/pair/${from}/${to}`
-    )
-
-    if (!response.ok) throw new Error('ExchangeRate API error')
-    const data = await response.json()
-
-    if (data.result === 'success') {
-      return data.conversion_rate
-    }
-    return null
-  } catch (err) {
-    console.error('Exchange rate fetch error:', err)
-    return getFallbackRate(from, to)
-  }
-}
-
-// Fallback kursevi ako API nije dostupan
-function getFallbackRate(from: string, to: string): number {
-  const fallbacks: Record<string, number> = {
-    'RSD_USD': 1 / 117.4,
-    'EUR_USD': 1.082,
-    'AED_USD': 0.272,
-    'USD_USD': 1,
-  }
-  return fallbacks[`${from}_${to}`] || 1
-}
-
-// Glavna funkcija — poziva pravu API zavisno od valute
 export async function getRate(
   currency: string,
   date: string,
@@ -83,49 +17,88 @@ export async function getRate(
     return { from: 'USD', to: 'USD', rate: 1, date: rateDate, source: 'N/A' }
   }
 
-  if (currency === 'RSD' || currency === 'EUR') {
-    // Pokušaj NBS feed
-    const nbsRate = await fetchNBSRate(currency, rateDate)
-    if (nbsRate) {
-      // NBS vraća RSD po jednoj jedinici strane valute
-      // Za RSD: koliko RSD = 1 USD → invertujemo
+  if (currency === 'RSD') {
+    try {
+      const response = await fetch(
+        `https://kurs.resenje.org/api/v1/currencies/usd/rates/${rateDate}`
+      )
+      if (response.ok) {
+        const data = await response.json()
+        if (data.rate) {
           return {
-        from: currency,
-        to: 'USD',
-        rate: currency === 'RSD' ? nbsRate : nbsRate,
-        date: rateDate,
-        source: 'NBS'
+            from: 'RSD',
+            to: 'USD',
+            rate: data.rate,
+            date: rateDate,
+            source: 'NBS via kurs.resenje.org'
+          }
+        }
       }
+    } catch (err) {
+      console.error('NBS rate fetch error:', err)
     }
-    // Fallback na ExchangeRate-API
-    const rate = await fetchExchangeRate(currency, 'USD')
-    return {
-      from: currency,
-      to: 'USD',
-      rate: rate || getFallbackRate(currency, 'USD'),
-      date: rateDate,
-      source: 'ExchangeRate-API (fallback)'
+    return { from: 'RSD', to: 'USD', rate: 117.0, date: rateDate, source: 'Fallback' }
+  }
+
+  if (currency === 'EUR') {
+    try {
+      const response = await fetch(
+        `https://kurs.resenje.org/api/v1/currencies/eur/rates/${rateDate}`
+      )
+      if (response.ok) {
+        const data = await response.json()
+        if (data.rate) {
+          const eurToUsd = await fetch(
+            `https://v6.exchangerate-api.com/v6/${process.env.REACT_APP_EXCHANGE_API_KEY}/pair/EUR/USD`
+          )
+          if (eurToUsd.ok) {
+            const eurData = await eurToUsd.json()
+            return {
+              from: 'EUR',
+              to: 'USD',
+              rate: eurData.conversion_rate || 1.08,
+              date: rateDate,
+              source: 'ExchangeRate-API'
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('EUR rate fetch error:', err)
     }
+    return { from: 'EUR', to: 'USD', rate: 1.08, date: rateDate, source: 'Fallback' }
   }
 
   if (currency === 'AED') {
-    const rate = await fetchExchangeRate('AED', 'USD')
-    return {
-      from: 'AED',
-      to: 'USD',
-      rate: rate || 0.272,
-      date: rateDate,
-      source: 'ExchangeRate-API'
+    try {
+      const response = await fetch(
+        `https://v6.exchangerate-api.com/v6/${process.env.REACT_APP_EXCHANGE_API_KEY}/pair/AED/USD`
+      )
+      if (response.ok) {
+        const data = await response.json()
+        if (data.conversion_rate) {
+          return {
+            from: 'AED',
+            to: 'USD',
+            rate: data.conversion_rate,
+            date: rateDate,
+            source: 'ExchangeRate-API'
+          }
+        }
+      }
+    } catch (err) {
+      console.error('AED rate fetch error:', err)
     }
+    return { from: 'AED', to: 'USD', rate: 0.272, date: rateDate, source: 'Fallback' }
   }
 
   return { from: currency, to: 'USD', rate: 1, date: rateDate, source: 'Manual' }
 }
 
-// Konverzija iznosa u USD
 export function convertToUSD(amount: number, currency: string, rate: number): number {
   if (currency === 'USD') return amount
-  if (currency === 'RSD' || currency === 'EUR') return amount / rate
+  if (currency === 'RSD') return amount / rate
+  if (currency === 'EUR') return amount * rate
   if (currency === 'AED') return amount * rate
   return amount
 }
