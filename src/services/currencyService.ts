@@ -89,8 +89,7 @@ export async function getRate(
     if (nbsRate) {
       // NBS vraća RSD po jednoj jedinici strane valute
       // Za RSD: koliko RSD = 1 USD → invertujemo
-      const usdRate = currency === 'RSD' ? (1 / nbsRate) : nbsRate
-      return {
+          return {
         from: currency,
         to: 'USD',
         rate: currency === 'RSD' ? nbsRate : nbsRate,
