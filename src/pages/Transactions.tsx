@@ -8,6 +8,8 @@ export default function Transactions() {
   const { user, signOut } = useAuth()
   const { setPage } = React.useContext(NavContext)
   const [showDialog, setShowDialog] = useState(false)
+  const [editTransaction, setEditTransaction] = useState<any>(null)
+  const [showMenu, setShowMenu] = useState<string | null>(null)
   const [filterEntity, setFilterEntity] = useState('all')
   const [filterType, setFilterType] = useState('all')
   const [search, setSearch] = useState('')
@@ -20,15 +22,21 @@ export default function Transactions() {
   }
 
   const fetchTransactions = async () => {
-  setLoading(true)
-  const { data, error } = await supabase
-    .from('transactions')
-    .select(`*, companies!transactions_company_id_fkey(name), banks!transactions_bank_id_fkey(name), partners!transactions_partner_id_fkey(name)`)
-    .order('transaction_date', { ascending: false })
-  console.log('Transactions:', data, 'Error:', error)
-  if (!error && data) setTransactions(data)
-  setLoading(false)
-}
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('transactions')
+      .select(`*, companies!transactions_company_id_fkey(name), banks!transactions_bank_id_fkey(name), partners!transactions_partner_id_fkey(name)`)
+      .order('transaction_date', { ascending: false })
+    if (!error && data) setTransactions(data)
+    setLoading(false)
+  }
+
+  const deleteTransaction = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this transaction?')) return
+    await supabase.from('transactions').delete().eq('id', id)
+    fetchTransactions()
+    setShowMenu(null)
+  }
 
   useEffect(() => { fetchTransactions() }, [])
 
@@ -87,19 +95,11 @@ export default function Transactions() {
             <div style={s.pageTitle}>Transactions</div>
             <div style={s.pageSub}>All entries across Constel Group entities</div>
           </div>
-          <button style={s.newBtn} onClick={() => setShowDialog(true)}>
-            + New transaction
-          </button>
+          <button style={s.newBtn} onClick={() => setShowDialog(true)}>+ New transaction</button>
         </div>
 
         <div style={s.filterBar}>
-          <input
-            type="text"
-            placeholder="Search partner or description..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={s.searchInput}
-          />
+          <input type="text" placeholder="Search partner or description..." value={search} onChange={e => setSearch(e.target.value)} style={s.searchInput}/>
           <select value={filterEntity} onChange={e => setFilterEntity(e.target.value)} style={s.filterSelect}>
             <option value="all">All entities</option>
             <option value="sfbc">SFBC</option>
@@ -114,16 +114,12 @@ export default function Transactions() {
             <option value="intercompany">Intercompany</option>
             <option value="passthrough">Pass-through</option>
           </select>
-          <div style={s.totalBadge}>
-            {filtered.length} entries · <strong>${totalUsd.toLocaleString('en-US',{maximumFractionDigits:0})} USD</strong>
-          </div>
+          <div style={s.totalBadge}>{filtered.length} entries · <strong>${totalUsd.toLocaleString('en-US',{maximumFractionDigits:0})} USD</strong></div>
         </div>
 
         <div style={s.tableWrap}>
           {loading ? (
-            <div style={{padding:'3rem', textAlign:'center', color:'#888', fontSize:'14px'}}>
-              Loading transactions...
-            </div>
+            <div style={{padding:'3rem', textAlign:'center', color:'#888', fontSize:'14px'}}>Loading transactions...</div>
           ) : filtered.length === 0 ? (
             <div style={{padding:'3rem', textAlign:'center'}}>
               <div style={{fontSize:'32px', marginBottom:'12px'}}>📭</div>
@@ -152,22 +148,24 @@ export default function Transactions() {
                   <tr key={t.id} style={{...s.tr, background: i%2===0?'#fff':'#fafaf9'}}>
                     <td style={s.td}><span style={s.dateCell}>{t.transaction_date}</span></td>
                     <td style={s.td}><span style={s.partnerCell}>{t.partners?.name || '—'}</span></td>
-                    <td style={s.td}>
-                      <span style={{...s.badge, background:typeColors[t.type]?.bg, color:typeColors[t.type]?.color}}>{t.type}</span>
-                    </td>
+                    <td style={s.td}><span style={{...s.badge, background:typeColors[t.type]?.bg, color:typeColors[t.type]?.color}}>{t.type}</span></td>
                     <td style={s.td}><span style={s.catCell}>{t.revenue_stream || '—'}</span></td>
                     <td style={s.td}><span style={s.descCell}>{t.note || '—'}</span></td>
                     <td style={s.td}><span style={s.compCell}>{t.companies?.name || '—'}</span></td>
-                    <td style={{...s.td, textAlign:'right'}}>
-                      <span style={s.amtCell}>{(t.amount||0).toLocaleString()} {t.currency}</span>
-                    </td>
-                    <td style={{...s.td, textAlign:'right'}}>
-                      <span style={s.usdCell}>${(t.amount_usd||0).toLocaleString()}</span>
-                    </td>
+                    <td style={{...s.td, textAlign:'right'}}><span style={s.amtCell}>{(t.amount||0).toLocaleString()} {t.currency}</span></td>
+                    <td style={{...s.td, textAlign:'right'}}><span style={s.usdCell}>${(t.amount_usd||0).toLocaleString()}</span></td>
+                    <td style={s.td}><span style={{...s.badge, background:statusColors[t.status]?.bg, color:statusColors[t.status]?.color}}>{t.status}</span></td>
                     <td style={s.td}>
-                      <span style={{...s.badge, background:statusColors[t.status]?.bg, color:statusColors[t.status]?.color}}>{t.status}</span>
+                      <div style={{position:'relative'}}>
+                        <button style={s.editBtn} onClick={() => setShowMenu(showMenu===t.id ? null : t.id)}>···</button>
+                        {showMenu===t.id && (
+                          <div style={s.contextMenu}>
+                            <div style={s.contextItem} onClick={() => { setEditTransaction(t); setShowMenu(null) }}>Edit</div>
+                            <div style={{...s.contextItem, color:'#A32D2D'}} onClick={() => deleteTransaction(t.id)}>Delete</div>
+                          </div>
+                        )}
+                      </div>
                     </td>
-                    <td style={s.td}><button style={s.editBtn}>···</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -176,7 +174,12 @@ export default function Transactions() {
         </div>
       </div>
 
-      {showDialog && <TransactionDialog onClose={() => { setShowDialog(false); fetchTransactions() }} />}
+      {(showDialog || editTransaction) && (
+        <TransactionDialog
+          onClose={() => { setShowDialog(false); setEditTransaction(null); fetchTransactions() }}
+          transaction={editTransaction}
+        />
+      )}
     </div>
   )
 }
@@ -217,4 +220,6 @@ const s: Record<string, React.CSSProperties> = {
   usdCell: { fontSize:'13px', fontWeight:'500', color:'#1D9E75', whiteSpace:'nowrap' },
   badge: { fontSize:'10px', fontWeight:'500', padding:'2px 8px', borderRadius:'20px', textTransform:'capitalize', whiteSpace:'nowrap' },
   editBtn: { background:'none', border:'0.5px solid #e5e5e5', borderRadius:'6px', padding:'4px 8px', cursor:'pointer', color:'#888', fontSize:'14px' },
+  contextMenu: { position:'absolute', right:0, top:'100%', background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'8px', zIndex:100, minWidth:'120px', boxShadow:'0 4px 12px rgba(0,0,0,0.08)' },
+  contextItem: { padding:'8px 14px', fontSize:'13px', color:'#111', cursor:'pointer', borderBottom:'0.5px solid #f0f0ee' },
 }

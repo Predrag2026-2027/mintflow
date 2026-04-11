@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import { getRate } from '../services/currencyService'
 
-interface Props { onClose: () => void }
+interface Props { 
+  onClose: () => void
+  transaction?: any
+}
 
 const plSubs: Record<string, string[]> = {
   'Employee and Labour': ['Net Salaries','Tax on salary','Contributions on behalf of the employee','Contributions on behalf of the employer','Transportation cost','Salary Expenses Abroad','Private Health insurance','Health care expenses paid by employer','Warm Meal expenses','FitPass expenses','Employee participation in benefits','Renumeration, allowances and other benefits','Education and training of employees'],
@@ -56,7 +59,7 @@ const typeHints: Record<string, string> = {
   passthrough: 'Pass-through (SFBC only) — must balance to zero monthly.',
 }
 
-export default function TransactionDialog({ onClose }: Props) {
+export default function TransactionDialog({ onClose, transaction }: Props) {
   const [step, setStep] = useState(1)
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
