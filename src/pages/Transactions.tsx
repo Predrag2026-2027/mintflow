@@ -1,7 +1,8 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import TransactionDialog from '../components/TransactionDialog'
 import { NavContext } from '../App'
+import { supabase } from '../supabase'
+import TransactionDialog from '../components/TransactionDialog'
 
 export default function Transactions() {
   const { user, signOut } = useAuth()
@@ -10,19 +11,30 @@ export default function Transactions() {
   const [filterEntity, setFilterEntity] = useState('all')
   const [filterType, setFilterType] = useState('all')
   const [search, setSearch] = useState('')
+  const [transactions, setTransactions] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const mockTx = [
-    { id:1, date:'2026-04-06', partner:'Basket Group', type:'expense', plCat:'General Business', desc:'Donation, sponsorships, gifts', dept:'General Business Expenses', currency:'RSD', amount:57600, amountUsd:490.2, status:'posted', company:'Constellation LLC' },
-    { id:2, date:'2026-04-01', partner:'Privredna komora Srbije', type:'expense', plCat:'General Business', desc:'Registration fees and taxes', dept:'General Business Expenses', currency:'RSD', amount:54432, amountUsd:463.1, status:'posted', company:'Constellation LLC' },
-    { id:3, date:'2026-03-31', partner:'Stuff Up Bro', type:'expense', plCat:'Professional and Production Services', desc:'Customer support services', dept:'CS Expenses', currency:'USD', amount:6013, amountUsd:6013, status:'posted', company:'Constellation LLC' },
-    { id:4, date:'2026-03-31', partner:'Google Ireland Limited', type:'expense', plCat:'Professional and Production Services', desc:'Marketing expenses from abroad', dept:'Marketing Expenses', currency:'RSD', amount:4726450, amountUsd:40225, status:'pending', company:'Constellation LLC' },
-    { id:5, date:'2026-03-31', partner:'S-Leasing doo Beograd', type:'expense', plCat:'General Business', desc:'Financial Leasing', dept:'General Business Expenses', currency:'RSD', amount:128327, amountUsd:1092.7, status:'posted', company:'Constellation LLC' },
-    { id:6, date:'2026-03-31', partner:'Wiener Stadische', type:'expense', plCat:'General Business', desc:'Rent and Mortgage', dept:'General Business Expenses', currency:'EUR', amount:6074.46, amountUsd:6584.2, status:'pending', company:'Constellation LLC' },
-    { id:7, date:'2026-03-15', partner:'Stuff Up Bro', type:'expense', plCat:'Professional and Production Services', desc:'Customer support services', dept:'CS Expenses', currency:'USD', amount:5000, amountUsd:5000, status:'posted', company:'Constellation LLC' },
-    { id:8, date:'2026-03-10', partner:'Generali Osiguranje', type:'expense', plCat:'Employee and Labour', desc:'Private Health insurance', dept:'General Business Expenses', currency:'RSD', amount:119053, amountUsd:1014.1, status:'posted', company:'Constellation LLC' },
-    { id:9, date:'2026-02-28', partner:'Stuff Up Bro', type:'expense', plCat:'Professional and Production Services', desc:'Customer support services', dept:'CS Expenses', currency:'USD', amount:5000, amountUsd:5000, status:'posted', company:'Constellation LLC' },
-    { id:10, date:'2026-01-22', partner:'Galvin & Mathews', type:'expense', plCat:'General Business', desc:'Capital expenditures', dept:'General Business Expenses', currency:'RSD', amount:753331, amountUsd:7500, status:'posted', company:'Constellation LLC' },
-  ]
+  const pageMap: Record<string, any> = {
+    'Dashboard':'dashboard','Transactions':'transactions',
+    'P&L':'pl','Cash Flow':'cashflow','Reports':'reports'
+  }
+
+  const fetchTransactions = async () => {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('transactions')
+      .select(`
+        *,
+        companies(name),
+        banks(name),
+        partners(name)
+      `)
+      .order('transaction_date', { ascending: false })
+    if (!error && data) setTransactions(data)
+    setLoading(false)
+  }
+
+  useEffect(() => { fetchTransactions() }, [])
 
   const typeColors: Record<string, {bg:string,color:string}> = {
     expense: { bg:'#FCEBEB', color:'#A32D2D' },
@@ -38,19 +50,16 @@ export default function Transactions() {
     draft: { bg:'#f0f0ee', color:'#666' },
   }
 
-  const filtered = mockTx.filter(t => {
-    const matchEntity = filterEntity==='all' || t.company.toLowerCase().includes(filterEntity)
+  const filtered = transactions.filter(t => {
+    const companyName = t.companies?.name || ''
+    const partnerName = t.partners?.name || ''
+    const matchEntity = filterEntity==='all' || companyName.toLowerCase().includes(filterEntity)
     const matchType = filterType==='all' || t.type===filterType
-    const matchSearch = !search || t.partner.toLowerCase().includes(search.toLowerCase()) || t.desc.toLowerCase().includes(search.toLowerCase())
+    const matchSearch = !search || partnerName.toLowerCase().includes(search.toLowerCase()) || (t.note||'').toLowerCase().includes(search.toLowerCase())
     return matchEntity && matchType && matchSearch
   })
 
-  const totalUsd = filtered.reduce((sum,t) => sum + t.amountUsd, 0)
-
-  const pageMap: Record<string, any> = {
-    'Dashboard':'dashboard','Transactions':'transactions',
-    'P&L':'pl','Cash Flow':'cashflow','Reports':'reports'
-  }
+  const totalUsd = filtered.reduce((sum,t) => sum + (t.amount_usd||0), 0)
 
   return (
     <div style={s.root}>
@@ -115,48 +124,63 @@ export default function Transactions() {
         </div>
 
         <div style={s.tableWrap}>
-          <table style={s.table}>
-            <thead>
-              <tr style={s.thead}>
-                <th style={s.th}>Date</th>
-                <th style={s.th}>Partner</th>
-                <th style={s.th}>Type</th>
-                <th style={s.th}>P&L Category</th>
-                <th style={s.th}>Description</th>
-                <th style={s.th}>Department</th>
-                <th style={s.th}>Company</th>
-                <th style={{...s.th, textAlign:'right'}}>Amount</th>
-                <th style={{...s.th, textAlign:'right'}}>USD</th>
-                <th style={s.th}>Status</th>
-                <th style={s.th}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((t, i) => (
-                <tr key={t.id} style={{...s.tr, background: i%2===0?'#fff':'#fafaf9'}}>
-                  <td style={s.td}><span style={s.dateCell}>{t.date}</span></td>
-                  <td style={s.td}><span style={s.partnerCell}>{t.partner}</span></td>
-                  <td style={s.td}>
-                    <span style={{...s.badge, background:typeColors[t.type]?.bg, color:typeColors[t.type]?.color}}>{t.type}</span>
-                  </td>
-                  <td style={s.td}><span style={s.catCell}>{t.plCat}</span></td>
-                  <td style={s.td}><span style={s.descCell}>{t.desc}</span></td>
-                  <td style={s.td}><span style={s.deptCell}>{t.dept}</span></td>
-                  <td style={s.td}><span style={s.compCell}>{t.company}</span></td>
-                  <td style={{...s.td, textAlign:'right'}}><span style={s.amtCell}>{t.amount.toLocaleString()} {t.currency}</span></td>
-                  <td style={{...s.td, textAlign:'right'}}><span style={s.usdCell}>${t.amountUsd.toLocaleString()}</span></td>
-                  <td style={s.td}>
-                    <span style={{...s.badge, background:statusColors[t.status]?.bg, color:statusColors[t.status]?.color}}>{t.status}</span>
-                  </td>
-                  <td style={s.td}><button style={s.editBtn}>···</button></td>
+          {loading ? (
+            <div style={{padding:'3rem', textAlign:'center', color:'#888', fontSize:'14px'}}>
+              Loading transactions...
+            </div>
+          ) : filtered.length === 0 ? (
+            <div style={{padding:'3rem', textAlign:'center'}}>
+              <div style={{fontSize:'32px', marginBottom:'12px'}}>📭</div>
+              <div style={{fontSize:'15px', fontWeight:'500', color:'#111', marginBottom:'6px'}}>No transactions yet</div>
+              <div style={{fontSize:'13px', color:'#888', marginBottom:'20px'}}>Click "+ New transaction" to add your first entry.</div>
+              <button style={s.newBtn} onClick={() => setShowDialog(true)}>+ New transaction</button>
+            </div>
+          ) : (
+            <table style={s.table}>
+              <thead>
+                <tr style={s.thead}>
+                  <th style={s.th}>Date</th>
+                  <th style={s.th}>Partner</th>
+                  <th style={s.th}>Type</th>
+                  <th style={s.th}>P&L Category</th>
+                  <th style={s.th}>Note</th>
+                  <th style={s.th}>Company</th>
+                  <th style={{...s.th, textAlign:'right'}}>Amount</th>
+                  <th style={{...s.th, textAlign:'right'}}>USD</th>
+                  <th style={s.th}>Status</th>
+                  <th style={s.th}></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map((t, i) => (
+                  <tr key={t.id} style={{...s.tr, background: i%2===0?'#fff':'#fafaf9'}}>
+                    <td style={s.td}><span style={s.dateCell}>{t.transaction_date}</span></td>
+                    <td style={s.td}><span style={s.partnerCell}>{t.partners?.name || '—'}</span></td>
+                    <td style={s.td}>
+                      <span style={{...s.badge, background:typeColors[t.type]?.bg, color:typeColors[t.type]?.color}}>{t.type}</span>
+                    </td>
+                    <td style={s.td}><span style={s.catCell}>{t.revenue_stream || '—'}</span></td>
+                    <td style={s.td}><span style={s.descCell}>{t.note || '—'}</span></td>
+                    <td style={s.td}><span style={s.compCell}>{t.companies?.name || '—'}</span></td>
+                    <td style={{...s.td, textAlign:'right'}}>
+                      <span style={s.amtCell}>{(t.amount||0).toLocaleString()} {t.currency}</span>
+                    </td>
+                    <td style={{...s.td, textAlign:'right'}}>
+                      <span style={s.usdCell}>${(t.amount_usd||0).toLocaleString()}</span>
+                    </td>
+                    <td style={s.td}>
+                      <span style={{...s.badge, background:statusColors[t.status]?.bg, color:statusColors[t.status]?.color}}>{t.status}</span>
+                    </td>
+                    <td style={s.td}><button style={s.editBtn}>···</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
-      {showDialog && <TransactionDialog onClose={() => setShowDialog(false)} />}
+      {showDialog && <TransactionDialog onClose={() => { setShowDialog(false); fetchTransactions() }} />}
     </div>
   )
 }
@@ -186,13 +210,12 @@ const s: Record<string, React.CSSProperties> = {
   table: { width:'100%', borderCollapse:'collapse', fontSize:'13px' },
   thead: { background:'#f5f5f3' },
   th: { padding:'10px 12px', textAlign:'left', fontSize:'10px', fontWeight:'500', color:'#888', textTransform:'uppercase', letterSpacing:'0.08em', borderBottom:'0.5px solid #e5e5e5', whiteSpace:'nowrap' },
-  tr: { borderBottom:'0.5px solid #f0f0ee', transition:'background 0.1s' },
+  tr: { borderBottom:'0.5px solid #f0f0ee' },
   td: { padding:'10px 12px', verticalAlign:'middle', color:'#111' },
   dateCell: { fontSize:'12px', color:'#666', whiteSpace:'nowrap' },
   partnerCell: { fontSize:'13px', fontWeight:'500', color:'#111' },
   catCell: { fontSize:'11px', color:'#666' },
   descCell: { fontSize:'11px', color:'#888', maxWidth:'160px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'block' },
-  deptCell: { fontSize:'11px', color:'#888' },
   compCell: { fontSize:'11px', color:'#888' },
   amtCell: { fontSize:'13px', fontWeight:'500', color:'#111', whiteSpace:'nowrap' },
   usdCell: { fontSize:'13px', fontWeight:'500', color:'#1D9E75', whiteSpace:'nowrap' },
