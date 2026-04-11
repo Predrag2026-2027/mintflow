@@ -20,19 +20,15 @@ export default function Transactions() {
   }
 
   const fetchTransactions = async () => {
-    setLoading(true)
-    const { data, error } = await supabase
-      .from('transactions')
-      .select(`
-        *,
-        companies(name),
-        banks(name),
-        partners(name)
-      `)
-      .order('transaction_date', { ascending: false })
-    if (!error && data) setTransactions(data)
-    setLoading(false)
-  }
+  setLoading(true)
+  const { data, error } = await supabase
+    .from('transactions')
+    .select(`*, companies!transactions_company_id_fkey(name), banks!transactions_bank_id_fkey(name), partners!transactions_partner_id_fkey(name)`)
+    .order('transaction_date', { ascending: false })
+  console.log('Transactions:', data, 'Error:', error)
+  if (!error && data) setTransactions(data)
+  setLoading(false)
+}
 
   useEffect(() => { fetchTransactions() }, [])
 
