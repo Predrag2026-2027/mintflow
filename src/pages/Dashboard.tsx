@@ -8,20 +8,19 @@ export default function Dashboard() {
   const { user, signOut } = useAuth()
   const { setPage } = React.useContext(NavContext)
   const [entity, setEntity] = useState<Entity>('constel')
+  const [hoveredEntity, setHoveredEntity] = useState<Entity | null>(null)
   const [dateFrom, setDateFrom] = useState(() => {
     const d = new Date()
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`
   })
-  const [dateTo, setDateTo] = useState(() => {
-    const d = new Date()
-    return d.toISOString().split('T')[0]
-  })
+  const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0])
+  const [activeShortcut, setActiveShortcut] = useState('This month')
 
   const entities = [
-    { id:'constel' as Entity, name:'Constel Group', sub:'All companies · USD', badge:'Consolidated', badgeColor:'#0F6E56', badgeBg:'#E1F5EE', iconColor:'#1D9E75', iconBg:'#E1F5EE' },
-    { id:'sfbc' as Entity, name:'SFBC', sub:'4 accounts · USD', badge:'US', badgeColor:'#0C447C', badgeBg:'#E6F1FB', iconColor:'#185FA5', iconBg:'#E6F1FB' },
-    { id:'constellation' as Entity, name:'Constellation LLC', sub:'4 banks · RSD/USD/EUR', badge:'RS', badgeColor:'#633806', badgeBg:'#FAEEDA', iconColor:'#BA7517', iconBg:'#FAEEDA' },
-    { id:'social' as Entity, name:'Social Growth', sub:'WIO Bank · USD/AED', badge:'AE', badgeColor:'#72243E', badgeBg:'#FBEAF0', iconColor:'#D4537E', iconBg:'#FBEAF0' },
+    { id:'constel' as Entity, name:'Constel Group', sub:'All companies · USD', badge:'Consolidated', badgeColor:'#0B5E49', badgeBg:'rgba(29,158,117,0.12)', iconColor:'#1D9E75', iconBg:'rgba(29,158,117,0.10)', ringColor:'rgba(29,158,117,0.5)' },
+    { id:'sfbc' as Entity, name:'SFBC', sub:'4 accounts · USD', badge:'US', badgeColor:'#0C447C', badgeBg:'rgba(24,95,165,0.10)', iconColor:'#185FA5', iconBg:'rgba(24,95,165,0.08)', ringColor:'rgba(24,95,165,0.45)' },
+    { id:'constellation' as Entity, name:'Constellation LLC', sub:'4 banks · RSD/USD/EUR', badge:'RS', badgeColor:'#633806', badgeBg:'rgba(186,117,23,0.12)', iconColor:'#BA7517', iconBg:'rgba(186,117,23,0.08)', ringColor:'rgba(186,117,23,0.45)' },
+    { id:'social' as Entity, name:'Social Growth', sub:'WIO Bank · USD/AED', badge:'AE', badgeColor:'#72243E', badgeBg:'rgba(212,83,126,0.12)', iconColor:'#D4537E', iconBg:'rgba(212,83,126,0.08)', ringColor:'rgba(212,83,126,0.45)' },
   ]
 
   const shortcuts = [
@@ -34,177 +33,282 @@ export default function Dashboard() {
   const alerts = [
     { type:'warn', text:'Constellation LLC — 5 invoices unmatched for current period.' },
     { type:'warn', text:'SFBC — 2 pass-through entries pending pair.' },
-    { type:'ok', text:'NBS exchange rates updated for April 9, 2026.' },
+    { type:'ok',   text:'NBS exchange rates updated for April 9, 2026.' },
   ]
 
   const metrics = [
-    { label:'Unmatched invoices', value:'7', sub:'Across all entities', color:'#854F0B' },
-    { label:'Pass-through status', value:'Balanced', sub:'SFBC · current period', color:'#0F6E56' },
-    { label:'Pending entries', value:'3', sub:'Awaiting posting', color:'#854F0B' },
-    { label:'IC transactions', value:'Matched', sub:'All periods clear', color:'#0F6E56' },
+    { label:'Unmatched invoices', value:'7',        sub:'Across all entities',    accent:'#BA7517', accentBg:'rgba(186,117,23,0.07)',  textColor:'#5C3205' },
+    { label:'Pass-through status', value:'Balanced', sub:'SFBC · current period', accent:'#1D9E75', accentBg:'rgba(29,158,117,0.07)', textColor:'#0B5E49' },
+    { label:'Pending entries',     value:'3',        sub:'Awaiting posting',       accent:'#BA7517', accentBg:'rgba(186,117,23,0.07)',  textColor:'#5C3205' },
+    { label:'IC transactions',     value:'Matched',  sub:'All periods clear',      accent:'#1D9E75', accentBg:'rgba(29,158,117,0.07)', textColor:'#0B5E49' },
   ]
 
-  const pageMap: Record<string, any> = {
+  const quickActions = [
+    { label:'New transaction',    icon:'＋', page:'transactions', accent:'#1D9E75' },
+    { label:'P&L report',         icon:'↗',  page:'pl',           accent:'#185FA5' },
+    { label:'Cash flow',          icon:'⇄',  page:'cashflow',     accent:'#185FA5' },
+    { label:'Unmatched invoices', icon:'⚠',  page:'transactions', accent:'#BA7517' },
+    { label:'User management',    icon:'◎',  page:'reports',      accent:'#888'    },
+  ]
+
+  const pageMap: Record<string, string> = {
     'Dashboard':'dashboard','Transactions':'transactions',
     'P&L':'pl','Cash Flow':'cashflow','Reports':'reports'
   }
 
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  const username = user?.email?.split('@')[0] ?? 'admin'
+
   return (
     <div style={s.root}>
+      {/* ── Nav ── */}
       <nav style={s.nav}>
         <div style={s.navLogo}>
-          <svg width="24" height="24" viewBox="0 0 36 36" fill="none">
-            <polygon points="18,2 34,30 2,30" fill="none" stroke="#1D9E75" strokeWidth="1.5"/>
-            <circle cx="18" cy="2" r="2" fill="#1D9E75"/>
-            <circle cx="34" cy="30" r="2" fill="#5DCAA5"/>
-            <circle cx="2" cy="30" r="2" fill="#9FE1CB"/>
+          <svg width="22" height="22" viewBox="0 0 36 36" fill="none">
+            <polygon points="18,2 34,30 2,30" fill="none" stroke="#1D9E75" strokeWidth="2"/>
+            <circle cx="18" cy="2" r="2.5" fill="#1D9E75"/>
+            <circle cx="34" cy="30" r="2"   fill="#5DCAA5"/>
+            <circle cx="2"  cy="30" r="2"   fill="#9FE1CB"/>
           </svg>
-          <span style={s.navLogoText}>Mint<span style={{color:'#1D9E75'}}>flow</span></span>
+          <span style={s.navLogoText}>
+            Mint<span style={{color:'#5DCAA5'}}>flow</span>
+          </span>
         </div>
+
         <div style={s.navLinks}>
           {['Dashboard','Transactions','P&L','Cash Flow','Reports'].map(l => (
-            <span key={l} style={l==='Dashboard' ? s.navLinkActive : s.navLink} onClick={() => setPage(pageMap[l])}>{l}</span>
+            <span
+              key={l}
+              className="nav-link"
+              style={l === 'Dashboard' ? s.navLinkActive : s.navLink}
+              onClick={() => setPage(pageMap[l] as any)}
+            >{l}</span>
           ))}
         </div>
+
         <div style={s.navRight}>
           <div style={s.navAvatar}>{user?.email?.substring(0,2).toUpperCase()}</div>
-          <span style={s.navEmail}>{user?.email}</span>
-          <span style={s.navRole}>Administrator</span>
-          <button style={s.navSignout} onClick={signOut}>Sign out</button>
+          <div>
+            <div style={s.navEmail}>{user?.email}</div>
+            <div style={s.navRole}>Administrator</div>
+          </div>
+          <button className="signout-btn" style={s.navSignout} onClick={signOut}>Sign out</button>
         </div>
       </nav>
 
+      {/* ── Body ── */}
       <div style={s.body}>
+
+        {/* Greeting */}
         <div style={s.greeting}>
-          <div style={s.greetingDate}>{new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</div>
-          <div style={s.greetingTitle}>Good morning, <span style={{color:'#1D9E75'}}>{user?.email?.split('@')[0]}</span></div>
-          <div style={s.greetingSub}>Select an entity to begin or review your alerts below.</div>
+          <div style={s.greetingDate}>
+            {new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'}).toUpperCase()}
+          </div>
+          <h1 style={s.greetingTitle}>
+            {greeting},{' '}
+            <span style={{color:'#1D9E75', fontStyle:'italic'}}>{username}</span>
+          </h1>
+          <p style={s.greetingSub}>Select an entity to begin, or review your alerts below.</p>
         </div>
 
+        {/* Entity selector */}
         <div style={s.sectionLabel}>Select entity</div>
         <div style={s.entityGrid}>
-          {entities.map(e => (
-            <div key={e.id} style={{...s.entityCard, ...(entity===e.id ? s.entityActive : {})}} onClick={() => setEntity(e.id)}>
-              <div style={{...s.entityBadge, color:e.badgeColor, background:e.badgeBg}}>{e.badge}</div>
-              <div style={{...s.entityIcon, background:e.iconBg}}>
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke={e.iconColor} strokeWidth="1.3">
-                  <rect x="2" y="4" width="14" height="10" rx="2"/><path d="M6 4v10M2 8h14"/>
-                </svg>
+          {entities.map(e => {
+            const isActive  = entity === e.id
+            const isHovered = hoveredEntity === e.id
+            return (
+              <div
+                key={e.id}
+                className="entity-card"
+                style={{
+                  ...s.entityCard,
+                  background: isActive ? e.iconBg : '#fff',
+                  boxShadow: isActive
+                    ? `0 0 0 2px ${e.ringColor}, 0 8px 24px rgba(0,0,0,0.10)`
+                    : isHovered
+                      ? '0 6px 20px rgba(0,0,0,0.10)'
+                      : '0 1px 4px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)',
+                }}
+                onClick={() => setEntity(e.id)}
+                onMouseEnter={() => setHoveredEntity(e.id)}
+                onMouseLeave={() => setHoveredEntity(null)}
+              >
+                <div style={{...s.entityBadge, color:e.badgeColor, background:e.badgeBg}}>{e.badge}</div>
+                <div style={{...s.entityIcon, background: isActive ? `${e.iconColor}22` : e.iconBg}}>
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke={e.iconColor} strokeWidth="1.5">
+                    <rect x="2" y="4" width="14" height="10" rx="2"/>
+                    <path d="M6 4v10M2 8h14"/>
+                  </svg>
+                </div>
+                <div style={{...s.entityName, color: isActive ? '#0a2a22' : '#0D1B2A'}}>{e.name}</div>
+                <div style={{...s.entitySub,  color: isActive ? e.iconColor  : '#999'}}>{e.sub}</div>
               </div>
-              <div style={{...s.entityName, ...(entity===e.id?{color:'#085041'}:{})}}>{e.name}</div>
-              <div style={{...s.entitySub, ...(entity===e.id?{color:'#0F6E56'}:{})}}>{e.sub}</div>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
+        {/* Period bar */}
         <div style={s.periodBar}>
           <div style={s.periodGroup}>
             <span style={s.periodLabel}>From</span>
-            <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} style={s.dateInput}/>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={s.dateInput}/>
           </div>
           <span style={s.periodArrow}>→</span>
           <div style={s.periodGroup}>
             <span style={s.periodLabel}>To</span>
-            <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} style={s.dateInput}/>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={s.dateInput}/>
           </div>
-          <div style={s.shortcuts}>
+          <div style={s.segmented}>
             {shortcuts.map(sc => (
-              <button key={sc.label} style={s.shortcutBtn} onClick={()=>{setDateFrom(sc.from);setDateTo(sc.to)}}>{sc.label}</button>
+              <button
+                key={sc.label}
+                className="shortcut-btn"
+                style={activeShortcut === sc.label ? {...s.shortcutBtn, ...s.shortcutActive} : s.shortcutBtn}
+                onClick={() => { setDateFrom(sc.from); setDateTo(sc.to); setActiveShortcut(sc.label) }}
+              >{sc.label}</button>
             ))}
           </div>
-          <div style={s.periodDisplay}>{new Date(dateFrom).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})} – {new Date(dateTo).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>
+          <div style={s.periodDisplay}>
+            {new Date(dateFrom).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+            {' – '}
+            {new Date(dateTo).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+          </div>
         </div>
 
+        {/* Main content */}
         <div style={s.contentGrid}>
           <div>
+            {/* Metrics */}
             <div style={s.metricsGrid}>
               {metrics.map(m => (
-                <div key={m.label} style={s.metricCard}>
+                <div key={m.label} className="metric-card" style={{...s.metricCard, borderLeft:`3px solid ${m.accent}`, background:m.accentBg}}>
                   <div style={s.metricLabel}>{m.label}</div>
-                  <div style={{...s.metricValue, color:m.color}}>{m.value}</div>
+                  <div style={{...s.metricValue, color:m.textColor}}>{m.value}</div>
                   <div style={s.metricSub}>{m.sub}</div>
                 </div>
               ))}
             </div>
+
+            {/* Alerts */}
             <div style={s.alertCard}>
               <div style={s.alertHeader}>
                 <span style={s.alertTitle}>Alerts & notifications</span>
                 <span style={s.alertCount}>{alerts.length} active</span>
               </div>
-              {alerts.map((a,i) => (
-                <div key={i} style={s.alertItem}>
-                  <div style={{...s.alertDot, background:a.type==='ok'?'#1D9E75':'#BA7517'}}/>
+              {alerts.map((a, i) => (
+                <div key={i} className="alert-item" style={{
+                  ...s.alertItem,
+                  background: a.type==='ok' ? 'rgba(29,158,117,0.05)' : 'rgba(186,117,23,0.05)',
+                }}>
+                  <div style={{
+                    ...s.alertDot,
+                    background:  a.type==='ok' ? '#1D9E75' : '#BA7517',
+                    boxShadow: `0 0 0 4px ${a.type==='ok' ? 'rgba(29,158,117,0.15)' : 'rgba(186,117,23,0.15)'}`,
+                  }}/>
                   <span style={s.alertText}>{a.text}</span>
                 </div>
               ))}
             </div>
           </div>
+
+          {/* Quick actions */}
           <div style={s.quickCard}>
             <div style={s.quickTitle}>Quick actions</div>
-            {[
-              { label:'New transaction', page:'transactions' },
-              { label:'P&L report', page:'pl' },
-              { label:'Cash flow', page:'cashflow' },
-              { label:'Unmatched invoices', page:'transactions' },
-              { label:'User management', page:'reports' },
-            ].map(action => (
-              <button key={action.label} style={s.quickBtn} onClick={() => setPage(action.page as any)}>{action.label}</button>
+            {quickActions.map(action => (
+              <button
+                key={action.label}
+                className="quick-btn"
+                style={s.quickBtn}
+                onClick={() => setPage(action.page as any)}
+              >
+                <span style={{...s.quickIcon, color:action.accent}}>{action.icon}</span>
+                {action.label}
+              </button>
             ))}
           </div>
         </div>
+
       </div>
     </div>
   )
 }
 
+/* ─── Styles ─────────────────────────────────────────────── */
 const s: Record<string, React.CSSProperties> = {
-  root: { minHeight:'100vh', background:'#f5f5f3', fontFamily:'system-ui,sans-serif' },
-  nav: { background:'#0a1628', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 1.5rem', height:'52px' },
-  navLogo: { display:'flex', alignItems:'center', gap:'8px' },
-  navLogoText: { fontFamily:'Georgia,serif', fontSize:'18px', fontWeight:'500', color:'#fff' },
-  navLinks: { display:'flex', gap:'4px' },
-  navLink: { fontSize:'13px', color:'rgba(255,255,255,0.5)', padding:'6px 12px', borderRadius:'6px', cursor:'pointer' },
-  navLinkActive: { fontSize:'13px', color:'#fff', padding:'6px 12px', borderRadius:'6px', background:'rgba(255,255,255,0.08)', cursor:'pointer' },
-  navRight: { display:'flex', alignItems:'center', gap:'10px' },
-  navAvatar: { width:'30px', height:'30px', borderRadius:'50%', background:'#1D9E75', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11px', fontWeight:'500', color:'#fff' },
-  navEmail: { fontSize:'13px', color:'rgba(255,255,255,0.7)' },
-  navRole: { fontSize:'10px', background:'rgba(29,158,117,0.2)', color:'#5DCAA5', padding:'2px 8px', borderRadius:'20px', letterSpacing:'0.06em' },
-  navSignout: { background:'none', border:'0.5px solid rgba(255,255,255,0.15)', color:'rgba(255,255,255,0.5)', fontFamily:'system-ui,sans-serif', fontSize:'11px', padding:'5px 12px', borderRadius:'6px', cursor:'pointer' },
-  body: { padding:'2rem 1.5rem' },
-  greeting: { marginBottom:'2rem' },
-  greetingDate: { fontSize:'11px', color:'#888', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'4px' },
-  greetingTitle: { fontFamily:'Georgia,serif', fontSize:'26px', fontWeight:'400', color:'#111', marginBottom:'4px' },
-  greetingSub: { fontSize:'13px', color:'#888' },
-  sectionLabel: { fontSize:'11px', fontWeight:'500', color:'#888', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'1rem' },
-  entityGrid: { display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px', marginBottom:'1.5rem' },
-  entityCard: { background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'12px', padding:'1.25rem', cursor:'pointer', position:'relative', transition:'border-color 0.15s' },
-  entityActive: { border:'2px solid #1D9E75', background:'#E1F5EE' },
-  entityBadge: { position:'absolute', top:'10px', right:'10px', fontSize:'9px', fontWeight:'500', padding:'2px 7px', borderRadius:'20px', textTransform:'uppercase' },
-  entityIcon: { width:'36px', height:'36px', borderRadius:'8px', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:'12px' },
-  entityName: { fontSize:'14px', fontWeight:'500', color:'#111', marginBottom:'2px' },
-  entitySub: { fontSize:'11px', color:'#888' },
-  periodBar: { background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'12px', padding:'1rem 1.25rem', marginBottom:'1.5rem', display:'flex', alignItems:'center', gap:'1rem', flexWrap:'wrap' },
+  root: { minHeight:'100vh', background:'#F7F6F3', fontFamily:"'DM Sans', system-ui, sans-serif" },
+
+  /* Nav */
+  nav: {
+    background:'#0D1B2A',
+    display:'flex', alignItems:'center', justifyContent:'space-between',
+    padding:'0 2rem', height:'56px',
+    borderBottom:'1px solid rgba(255,255,255,0.04)',
+    position:'sticky', top:0, zIndex:100,
+  },
+  navLogo:     { display:'flex', alignItems:'center', gap:'9px' },
+  navLogoText: { fontFamily:"'DM Serif Display', Georgia, serif", fontSize:'19px', fontWeight:'400', color:'#fff', letterSpacing:'-0.01em' },
+  navLinks:    { display:'flex', gap:'2px' },
+  navLink:     { fontSize:'13px', color:'rgba(255,255,255,0.48)', padding:'6px 13px', borderRadius:'6px', cursor:'pointer', userSelect:'none' as const },
+  navLinkActive:{ fontSize:'13px', color:'#fff', fontWeight:'500', padding:'6px 13px', borderRadius:'6px', background:'rgba(255,255,255,0.10)', cursor:'pointer', userSelect:'none' as const },
+  navRight:    { display:'flex', alignItems:'center', gap:'12px' },
+  navAvatar:   { width:'32px', height:'32px', borderRadius:'50%', background:'linear-gradient(135deg,#1D9E75,#0B5E49)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11px', fontWeight:'600', color:'#fff', flexShrink:0 },
+  navEmail:    { fontSize:'12px', color:'rgba(255,255,255,0.60)', lineHeight:'1.3' },
+  navRole:     { fontSize:'10px', color:'#5DCAA5', letterSpacing:'0.06em', fontWeight:'600' },
+  navSignout:  { background:'transparent', border:'1px solid rgba(255,255,255,0.13)', color:'rgba(255,255,255,0.45)', fontFamily:"'DM Sans', system-ui, sans-serif", fontSize:'12px', padding:'5px 13px', borderRadius:'6px', cursor:'pointer', whiteSpace:'nowrap' as const },
+
+  /* Body */
+  body: { padding:'2.5rem 2rem', maxWidth:'1400px', margin:'0 auto' },
+
+  /* Greeting */
+  greeting:     { marginBottom:'2.5rem' },
+  greetingDate: { fontSize:'10.5px', color:'#aaa', letterSpacing:'0.14em', marginBottom:'6px', fontWeight:'500' },
+  greetingTitle:{ fontFamily:"'DM Serif Display', Georgia, serif", fontSize:'34px', fontWeight:'400', color:'#0D1B2A', margin:'0 0 8px', lineHeight:'1.15' },
+  greetingSub:  { fontSize:'14px', color:'#aaa', margin:0, fontWeight:'400' },
+
+  /* Section label */
+  sectionLabel: { fontSize:'11px', fontWeight:'600', color:'#bbb', textTransform:'uppercase' as const, letterSpacing:'0.14em', marginBottom:'12px' },
+
+  /* Entity grid */
+  entityGrid: { display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'14px', marginBottom:'1.5rem' },
+  entityCard: { borderRadius:'14px', padding:'1.4rem', cursor:'pointer', position:'relative' },
+  entityBadge:{ position:'absolute', top:'12px', right:'12px', fontSize:'9px', fontWeight:'600', padding:'2px 8px', borderRadius:'20px', textTransform:'uppercase' as const, letterSpacing:'0.06em' },
+  entityIcon: { width:'40px', height:'40px', borderRadius:'10px', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:'16px' },
+  entityName: { fontSize:'14px', fontWeight:'500', marginBottom:'4px', letterSpacing:'-0.01em' },
+  entitySub:  { fontSize:'11.5px', fontWeight:'400' },
+
+  /* Period bar */
+  periodBar:   { background:'#fff', borderRadius:'12px', padding:'0.85rem 1.25rem', marginBottom:'1.5rem', display:'flex', alignItems:'center', gap:'1rem', flexWrap:'wrap' as const, boxShadow:'0 1px 3px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04)' },
   periodGroup: { display:'flex', alignItems:'center', gap:'8px' },
-  periodLabel: { fontSize:'11px', fontWeight:'500', color:'#888', textTransform:'uppercase', letterSpacing:'0.08em', whiteSpace:'nowrap' },
-  dateInput: { fontFamily:'system-ui,sans-serif', fontSize:'13px', border:'0.5px solid #e5e5e5', borderRadius:'6px', padding:'6px 10px', outline:'none', color:'#111', background:'#fff' },
-  periodArrow: { fontSize:'13px', color:'#aaa' },
-  shortcuts: { display:'flex', gap:'6px' },
-  shortcutBtn: { fontFamily:'system-ui,sans-serif', fontSize:'11px', border:'0.5px solid #e5e5e5', borderRadius:'6px', padding:'5px 10px', background:'#f5f5f3', color:'#666', cursor:'pointer', whiteSpace:'nowrap' },
-  periodDisplay: { fontSize:'12px', color:'#0F6E56', fontWeight:'500', background:'#E1F5EE', padding:'4px 10px', borderRadius:'6px', marginLeft:'auto' },
-  contentGrid: { display:'grid', gridTemplateColumns:'1fr 280px', gap:'12px' },
-  metricsGrid: { display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'8px', marginBottom:'12px' },
-  metricCard: { background:'#f0f0ee', borderRadius:'8px', padding:'1rem' },
-  metricLabel: { fontSize:'11px', color:'#888', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'6px' },
-  metricValue: { fontSize:'20px', fontWeight:'500' },
-  metricSub: { fontSize:'11px', color:'#888', marginTop:'2px' },
-  alertCard: { background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'12px', padding:'1rem 1.25rem' },
-  alertHeader: { display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px' },
-  alertTitle: { fontSize:'13px', fontWeight:'500', color:'#111' },
-  alertCount: { fontSize:'11px', background:'#f0f0ee', color:'#888', padding:'2px 8px', borderRadius:'20px' },
-  alertItem: { display:'flex', alignItems:'flex-start', gap:'8px', padding:'8px 0', borderTop:'0.5px solid #f0f0ee' },
-  alertDot: { width:'6px', height:'6px', borderRadius:'50%', marginTop:'5px', flexShrink:0 },
-  alertText: { fontSize:'12px', color:'#666', lineHeight:1.5 },
-  quickCard: { background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'12px', padding:'1rem 1.25rem' },
-  quickTitle: { fontSize:'13px', fontWeight:'500', color:'#111', marginBottom:'12px' },
-  quickBtn: { display:'block', width:'100%', background:'#f5f5f3', border:'0.5px solid #e5e5e5', borderRadius:'8px', padding:'10px 12px', fontFamily:'system-ui,sans-serif', fontSize:'12px', color:'#111', cursor:'pointer', marginBottom:'6px', textAlign:'left' },
+  periodLabel: { fontSize:'11px', fontWeight:'600', color:'#bbb', textTransform:'uppercase' as const, letterSpacing:'0.1em', whiteSpace:'nowrap' as const },
+  dateInput:   { fontFamily:"'DM Sans', system-ui, sans-serif", fontSize:'13px', border:'1px solid rgba(0,0,0,0.09)', borderRadius:'7px', padding:'6px 10px', color:'#0D1B2A', background:'#FAFAF9' },
+  periodArrow: { fontSize:'14px', color:'#ddd' },
+  segmented:   { display:'flex', gap:'3px', background:'#F1F0ED', borderRadius:'8px', padding:'3px' },
+  shortcutBtn: { fontFamily:"'DM Sans', system-ui, sans-serif", fontSize:'12px', border:'none', borderRadius:'6px', padding:'5px 12px', background:'transparent', color:'#999', cursor:'pointer', whiteSpace:'nowrap' as const, fontWeight:'500' },
+  shortcutActive:{ background:'#fff', color:'#0F6E56', boxShadow:'0 1px 4px rgba(0,0,0,0.10)' },
+  periodDisplay:{ fontSize:'12px', color:'#0F6E56', fontWeight:'600', background:'rgba(29,158,117,0.09)', padding:'5px 12px', borderRadius:'7px', marginLeft:'auto', whiteSpace:'nowrap' as const, letterSpacing:'-0.01em' },
+
+  /* Content grid */
+  contentGrid: { display:'grid', gridTemplateColumns:'1fr 280px', gap:'14px' },
+  metricsGrid: { display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'10px', marginBottom:'14px' },
+  metricCard:  { borderRadius:'12px', padding:'1.1rem 1.1rem 1.1rem 1.3rem', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' },
+  metricLabel: { fontSize:'11px', color:'#aaa', textTransform:'uppercase' as const, letterSpacing:'0.08em', marginBottom:'8px', fontWeight:'600' },
+  metricValue: { fontSize:'26px', fontWeight:'400', lineHeight:'1', marginBottom:'5px', fontFamily:"'DM Serif Display', Georgia, serif" },
+  metricSub:   { fontSize:'11px', color:'#bbb', marginTop:'2px' },
+
+  /* Alert card */
+  alertCard:   { background:'#fff', borderRadius:'12px', padding:'1.1rem 1.25rem', boxShadow:'0 1px 4px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04)' },
+  alertHeader: { display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px' },
+  alertTitle:  { fontSize:'13px', fontWeight:'600', color:'#0D1B2A', letterSpacing:'-0.01em' },
+  alertCount:  { fontSize:'11px', background:'#F1F0ED', color:'#999', padding:'2px 9px', borderRadius:'20px', fontWeight:'500' },
+  alertItem:   { display:'flex', alignItems:'flex-start', gap:'10px', padding:'9px 10px', borderRadius:'8px', marginBottom:'4px' },
+  alertDot:    { width:'7px', height:'7px', borderRadius:'50%', marginTop:'5px', flexShrink:0 },
+  alertText:   { fontSize:'12.5px', color:'#555', lineHeight:'1.55', fontWeight:'400' },
+
+  /* Quick actions */
+  quickCard:  { background:'#fff', borderRadius:'12px', padding:'1.1rem 1.25rem', boxShadow:'0 1px 4px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04)', alignSelf:'start' },
+  quickTitle: { fontSize:'13px', fontWeight:'600', color:'#0D1B2A', marginBottom:'12px', letterSpacing:'-0.01em' },
+  quickBtn:   { display:'flex', alignItems:'center', gap:'10px', width:'100%', background:'#FAFAF8', border:'1px solid rgba(0,0,0,0.05)', borderRadius:'9px', padding:'10px 12px', fontFamily:"'DM Sans', system-ui, sans-serif", fontSize:'13px', color:'#333', cursor:'pointer', marginBottom:'6px', textAlign:'left' as const, fontWeight:'400' },
+  quickIcon:  { fontSize:'14px', width:'20px', textAlign:'center' as const, flexShrink:0 },
 }

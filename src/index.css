@@ -1,13 +1,77 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; }
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: 'DM Sans', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background: #F7F6F3;
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+
+/* Entity cards */
+.entity-card {
+  transition: transform 0.2s cubic-bezier(0.25,0.46,0.45,0.94),
+              box-shadow 0.2s cubic-bezier(0.25,0.46,0.45,0.94);
+}
+.entity-card:hover {
+  transform: translateY(-3px);
+}
+
+/* Nav links */
+.nav-link {
+  transition: color 0.15s, background 0.15s;
+}
+.nav-link:hover {
+  color: rgba(255,255,255,0.9) !important;
+  background: rgba(255,255,255,0.07) !important;
+}
+
+/* Quick action buttons */
+.quick-btn {
+  transition: background 0.15s, transform 0.1s;
+}
+.quick-btn:hover {
+  background: #F0EFEB !important;
+  transform: translateX(2px);
+}
+
+/* Shortcut buttons */
+.shortcut-btn {
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+/* Sign out hover */
+.signout-btn:hover {
+  border-color: rgba(255,255,255,0.3) !important;
+  color: rgba(255,255,255,0.7) !important;
+}
+
+/* Date inputs */
+input[type="date"]:focus {
+  outline: none;
+  border-color: rgba(29,158,117,0.45) !important;
+  box-shadow: 0 0 0 3px rgba(29,158,117,0.1) !important;
+}
+
+/* Alert items */
+.alert-item {
+  transition: background 0.15s;
+}
+.alert-item:hover {
+  filter: brightness(0.97);
+}
+
+/* Metric cards */
+.metric-card {
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.metric-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
 }
