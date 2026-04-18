@@ -47,13 +47,14 @@ export default function Dashboard() {
     { label:'New transaction',    icon:'＋', page:'transactions', accent:'#1D9E75' },
     { label:'P&L report',         icon:'↗',  page:'pl',           accent:'#185FA5' },
     { label:'Cash flow',          icon:'⇄',  page:'cashflow',     accent:'#185FA5' },
-    { label:'Unmatched invoices', icon:'⚠',  page:'transactions', accent:'#BA7517' },
-    { label:'User management',    icon:'◎',  page:'reports',      accent:'#888'    },
+    { label:'Partners',           icon:'🤝', page:'partners',     accent:'#BA7517' },
+    { label:'Settings',           icon:'⚙',  page:'settings',     accent:'#888'    },
   ]
 
   const pageMap: Record<string, string> = {
     'Dashboard':'dashboard','Transactions':'transactions',
-    'P&L':'pl','Cash Flow':'cashflow','Reports':'reports'
+    'P&L':'pl','Cash Flow':'cashflow','Reports':'reports',
+    'Partners':'partners','Settings':'settings'
   }
 
   const hour = new Date().getHours()
@@ -77,10 +78,9 @@ export default function Dashboard() {
         </div>
 
         <div style={s.navLinks}>
-          {['Dashboard','Transactions','P&L','Cash Flow','Reports'].map(l => (
+          {['Dashboard','Transactions','P&L','Cash Flow','Reports','Partners','Settings'].map(l => (
             <span
               key={l}
-              className="nav-link"
               style={l === 'Dashboard' ? s.navLinkActive : s.navLink}
               onClick={() => setPage(pageMap[l] as any)}
             >{l}</span>
@@ -93,7 +93,7 @@ export default function Dashboard() {
             <div style={s.navEmail}>{user?.email}</div>
             <div style={s.navRole}>Administrator</div>
           </div>
-          <button className="signout-btn" style={s.navSignout} onClick={signOut}>Sign out</button>
+          <button style={s.navSignout} onClick={signOut}>Sign out</button>
         </div>
       </nav>
 
@@ -121,7 +121,6 @@ export default function Dashboard() {
             return (
               <div
                 key={e.id}
-                className="entity-card"
                 style={{
                   ...s.entityCard,
                   background: isActive ? e.iconBg : '#fff',
@@ -164,7 +163,6 @@ export default function Dashboard() {
             {shortcuts.map(sc => (
               <button
                 key={sc.label}
-                className="shortcut-btn"
                 style={activeShortcut === sc.label ? {...s.shortcutBtn, ...s.shortcutActive} : s.shortcutBtn}
                 onClick={() => { setDateFrom(sc.from); setDateTo(sc.to); setActiveShortcut(sc.label) }}
               >{sc.label}</button>
@@ -183,7 +181,7 @@ export default function Dashboard() {
             {/* Metrics */}
             <div style={s.metricsGrid}>
               {metrics.map(m => (
-                <div key={m.label} className="metric-card" style={{...s.metricCard, borderLeft:`3px solid ${m.accent}`, background:m.accentBg}}>
+                <div key={m.label} style={{...s.metricCard, borderLeft:`3px solid ${m.accent}`, background:m.accentBg}}>
                   <div style={s.metricLabel}>{m.label}</div>
                   <div style={{...s.metricValue, color:m.textColor}}>{m.value}</div>
                   <div style={s.metricSub}>{m.sub}</div>
@@ -198,7 +196,7 @@ export default function Dashboard() {
                 <span style={s.alertCount}>{alerts.length} active</span>
               </div>
               {alerts.map((a, i) => (
-                <div key={i} className="alert-item" style={{
+                <div key={i} style={{
                   ...s.alertItem,
                   background: a.type==='ok' ? 'rgba(29,158,117,0.05)' : 'rgba(186,117,23,0.05)',
                 }}>
@@ -219,7 +217,6 @@ export default function Dashboard() {
             {quickActions.map(action => (
               <button
                 key={action.label}
-                className="quick-btn"
                 style={s.quickBtn}
                 onClick={() => setPage(action.page as any)}
               >
@@ -235,18 +232,9 @@ export default function Dashboard() {
   )
 }
 
-/* ─── Styles ─────────────────────────────────────────────── */
 const s: Record<string, React.CSSProperties> = {
   root: { minHeight:'100vh', background:'#F7F6F3', fontFamily:"'DM Sans', system-ui, sans-serif" },
-
-  /* Nav */
-  nav: {
-    background:'#0D1B2A',
-    display:'flex', alignItems:'center', justifyContent:'space-between',
-    padding:'0 2rem', height:'56px',
-    borderBottom:'1px solid rgba(255,255,255,0.04)',
-    position:'sticky', top:0, zIndex:100,
-  },
+  nav: { background:'#0D1B2A', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 2rem', height:'56px', borderBottom:'1px solid rgba(255,255,255,0.04)', position:'sticky', top:0, zIndex:100 },
   navLogo:     { display:'flex', alignItems:'center', gap:'9px' },
   navLogoText: { fontFamily:"'DM Serif Display', Georgia, serif", fontSize:'19px', fontWeight:'400', color:'#fff', letterSpacing:'-0.01em' },
   navLinks:    { display:'flex', gap:'2px' },
@@ -257,28 +245,18 @@ const s: Record<string, React.CSSProperties> = {
   navEmail:    { fontSize:'12px', color:'rgba(255,255,255,0.60)', lineHeight:'1.3' },
   navRole:     { fontSize:'10px', color:'#5DCAA5', letterSpacing:'0.06em', fontWeight:'600' },
   navSignout:  { background:'transparent', border:'1px solid rgba(255,255,255,0.13)', color:'rgba(255,255,255,0.45)', fontFamily:"'DM Sans', system-ui, sans-serif", fontSize:'12px', padding:'5px 13px', borderRadius:'6px', cursor:'pointer', whiteSpace:'nowrap' as const },
-
-  /* Body */
   body: { padding:'2.5rem 2rem', maxWidth:'1400px', margin:'0 auto' },
-
-  /* Greeting */
   greeting:     { marginBottom:'2.5rem' },
   greetingDate: { fontSize:'10.5px', color:'#aaa', letterSpacing:'0.14em', marginBottom:'6px', fontWeight:'500' },
   greetingTitle:{ fontFamily:"'DM Serif Display', Georgia, serif", fontSize:'34px', fontWeight:'400', color:'#0D1B2A', margin:'0 0 8px', lineHeight:'1.15' },
   greetingSub:  { fontSize:'14px', color:'#aaa', margin:0, fontWeight:'400' },
-
-  /* Section label */
   sectionLabel: { fontSize:'11px', fontWeight:'600', color:'#bbb', textTransform:'uppercase' as const, letterSpacing:'0.14em', marginBottom:'12px' },
-
-  /* Entity grid */
   entityGrid: { display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'14px', marginBottom:'1.5rem' },
-  entityCard: { borderRadius:'14px', padding:'1.4rem', cursor:'pointer', position:'relative' },
-  entityBadge:{ position:'absolute', top:'12px', right:'12px', fontSize:'9px', fontWeight:'600', padding:'2px 8px', borderRadius:'20px', textTransform:'uppercase' as const, letterSpacing:'0.06em' },
+  entityCard: { borderRadius:'14px', padding:'1.4rem', cursor:'pointer', position:'relative' as const },
+  entityBadge:{ position:'absolute' as const, top:'12px', right:'12px', fontSize:'9px', fontWeight:'600', padding:'2px 8px', borderRadius:'20px', textTransform:'uppercase' as const, letterSpacing:'0.06em' },
   entityIcon: { width:'40px', height:'40px', borderRadius:'10px', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:'16px' },
   entityName: { fontSize:'14px', fontWeight:'500', marginBottom:'4px', letterSpacing:'-0.01em' },
   entitySub:  { fontSize:'11.5px', fontWeight:'400' },
-
-  /* Period bar */
   periodBar:   { background:'#fff', borderRadius:'12px', padding:'0.85rem 1.25rem', marginBottom:'1.5rem', display:'flex', alignItems:'center', gap:'1rem', flexWrap:'wrap' as const, boxShadow:'0 1px 3px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04)' },
   periodGroup: { display:'flex', alignItems:'center', gap:'8px' },
   periodLabel: { fontSize:'11px', fontWeight:'600', color:'#bbb', textTransform:'uppercase' as const, letterSpacing:'0.1em', whiteSpace:'nowrap' as const },
@@ -288,16 +266,12 @@ const s: Record<string, React.CSSProperties> = {
   shortcutBtn: { fontFamily:"'DM Sans', system-ui, sans-serif", fontSize:'12px', border:'none', borderRadius:'6px', padding:'5px 12px', background:'transparent', color:'#999', cursor:'pointer', whiteSpace:'nowrap' as const, fontWeight:'500' },
   shortcutActive:{ background:'#fff', color:'#0F6E56', boxShadow:'0 1px 4px rgba(0,0,0,0.10)' },
   periodDisplay:{ fontSize:'12px', color:'#0F6E56', fontWeight:'600', background:'rgba(29,158,117,0.09)', padding:'5px 12px', borderRadius:'7px', marginLeft:'auto', whiteSpace:'nowrap' as const, letterSpacing:'-0.01em' },
-
-  /* Content grid */
   contentGrid: { display:'grid', gridTemplateColumns:'1fr 280px', gap:'14px' },
   metricsGrid: { display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'10px', marginBottom:'14px' },
   metricCard:  { borderRadius:'12px', padding:'1.1rem 1.1rem 1.1rem 1.3rem', boxShadow:'0 1px 4px rgba(0,0,0,0.05)' },
   metricLabel: { fontSize:'11px', color:'#aaa', textTransform:'uppercase' as const, letterSpacing:'0.08em', marginBottom:'8px', fontWeight:'600' },
   metricValue: { fontSize:'26px', fontWeight:'400', lineHeight:'1', marginBottom:'5px', fontFamily:"'DM Serif Display', Georgia, serif" },
   metricSub:   { fontSize:'11px', color:'#bbb', marginTop:'2px' },
-
-  /* Alert card */
   alertCard:   { background:'#fff', borderRadius:'12px', padding:'1.1rem 1.25rem', boxShadow:'0 1px 4px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04)' },
   alertHeader: { display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px' },
   alertTitle:  { fontSize:'13px', fontWeight:'600', color:'#0D1B2A', letterSpacing:'-0.01em' },
@@ -305,9 +279,7 @@ const s: Record<string, React.CSSProperties> = {
   alertItem:   { display:'flex', alignItems:'flex-start', gap:'10px', padding:'9px 10px', borderRadius:'8px', marginBottom:'4px' },
   alertDot:    { width:'7px', height:'7px', borderRadius:'50%', marginTop:'5px', flexShrink:0 },
   alertText:   { fontSize:'12.5px', color:'#555', lineHeight:'1.55', fontWeight:'400' },
-
-  /* Quick actions */
-  quickCard:  { background:'#fff', borderRadius:'12px', padding:'1.1rem 1.25rem', boxShadow:'0 1px 4px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04)', alignSelf:'start' },
+  quickCard:  { background:'#fff', borderRadius:'12px', padding:'1.1rem 1.25rem', boxShadow:'0 1px 4px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04)', alignSelf:'start' as const },
   quickTitle: { fontSize:'13px', fontWeight:'600', color:'#0D1B2A', marginBottom:'12px', letterSpacing:'-0.01em' },
   quickBtn:   { display:'flex', alignItems:'center', gap:'10px', width:'100%', background:'#FAFAF8', border:'1px solid rgba(0,0,0,0.05)', borderRadius:'9px', padding:'10px 12px', fontFamily:"'DM Sans', system-ui, sans-serif", fontSize:'13px', color:'#333', cursor:'pointer', marginBottom:'6px', textAlign:'left' as const, fontWeight:'400' },
   quickIcon:  { fontSize:'14px', width:'20px', textAlign:'center' as const, flexShrink:0 },
