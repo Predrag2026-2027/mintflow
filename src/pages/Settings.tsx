@@ -102,8 +102,8 @@ function PLCategoriesTab() {
     if (data) setSubcategories(data)
   }, [])
 
-  useEffect(() => { fetchCategories() }, [])
-  useEffect(() => { if (selectedCat) fetchSubcategories(selectedCat.id) }, [selectedCat])
+  useEffect(() => { fetchCategories() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (selectedCat) fetchSubcategories(selectedCat.id) }, [selectedCat]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const addCategory = async () => {
     if (!newCatName.trim()) return
@@ -268,8 +268,8 @@ function DepartmentsTab() {
     if (data) setSubcategories(data)
   }, [])
 
-  useEffect(() => { fetchDepartments() }, [])
-  useEffect(() => { if (selectedDept) fetchSubcategories(selectedDept.id) }, [selectedDept])
+  useEffect(() => { fetchDepartments() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (selectedDept) fetchSubcategories(selectedDept.id) }, [selectedDept]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const addDepartment = async () => {
     if (!newDeptName.trim()) return
@@ -432,8 +432,8 @@ function DescriptionsTab() {
     if (data) setDescriptions(data)
   }, [])
 
-  useEffect(() => { fetchSubcategories() }, [])
-  useEffect(() => { if (selectedSub) fetchDescriptions(selectedSub.id) }, [selectedSub])
+  useEffect(() => { fetchSubcategories() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (selectedSub) fetchDescriptions(selectedSub.id) }, [selectedSub]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const addDescription = async () => {
     if (!newDescName.trim() || !selectedSub) return
