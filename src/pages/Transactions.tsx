@@ -82,7 +82,10 @@ export default function Transactions() {
     fetchPassthroughs()
   }
 
-  useEffect(() => { fetchAll() }, [])
+  useEffect(() => {
+    fetchAll()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const deleteInvoice = async (id: string) => {
     if (!window.confirm('Delete this invoice? This may affect P&L.')) return

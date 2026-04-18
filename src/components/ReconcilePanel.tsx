@@ -45,6 +45,7 @@ export default function ReconcilePanel({ sourceType, sourceId, onClose, onReconc
 
   useEffect(() => {
     loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceId, sourceType])
 
   const loadData = async () => {
