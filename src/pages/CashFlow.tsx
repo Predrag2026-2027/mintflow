@@ -10,7 +10,8 @@ export default function CashFlow() {
 
   const pageMap: Record<string, any> = {
     'Dashboard':'dashboard','Transactions':'transactions',
-    'P&L':'pl','Cash Flow':'cashflow','Reports':'reports'
+    'P&L':'pl','Cash Flow':'cashflow','Reports':'reports',
+    'Partners':'partners','Settings':'settings'
   }
 
   const accounts = [
@@ -59,8 +60,6 @@ export default function CashFlow() {
     },
   ]
 
-
-
   const fmtAmt = (n: number) => {
     if (n === 0) return '—'
     const abs = Math.abs(n).toLocaleString('en-US', {maximumFractionDigits:0})
@@ -83,7 +82,7 @@ export default function CashFlow() {
           <span style={s.navLogoText}>Mint<span style={{color:'#1D9E75'}}>flow</span></span>
         </div>
         <div style={s.navLinks}>
-          {['Dashboard','Transactions','P&L','Cash Flow','Reports'].map(l => (
+          {['Dashboard','Transactions','P&L','Cash Flow','Reports','Partners','Settings'].map(l => (
             <span key={l} style={l==='Cash Flow' ? s.navLinkActive : s.navLink} onClick={() => setPage(pageMap[l])}>{l}</span>
           ))}
         </div>
@@ -246,15 +245,15 @@ const s: Record<string, React.CSSProperties> = {
   exportBtn: { fontFamily:'system-ui,sans-serif', fontSize:'13px', border:'0.5px solid #e5e5e5', borderRadius:'8px', padding:'8px 16px', background:'#0a1628', color:'#fff', cursor:'pointer' },
   summaryGrid: { display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px', marginBottom:'1.5rem' },
   summaryCard: { background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'12px', padding:'1rem 1.25rem' },
-  summaryLabel: { fontSize:'11px', color:'#888', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'8px' },
+  summaryLabel: { fontSize:'11px', color:'#888', textTransform:'uppercase' as const, letterSpacing:'0.08em', marginBottom:'8px' },
   summaryValue: { fontSize:'22px', fontWeight:'500' },
   summarySub: { fontSize:'11px', color:'#888', marginTop:'4px' },
   contentGrid: { display:'grid', gridTemplateColumns:'1fr 340px', gap:'16px' },
-  sectionLabel: { fontSize:'11px', fontWeight:'500', color:'#888', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'10px' },
+  sectionLabel: { fontSize:'11px', fontWeight:'500', color:'#888', textTransform:'uppercase' as const, letterSpacing:'0.1em', marginBottom:'10px' },
   tableWrap: { background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'12px', overflow:'hidden' },
-  table: { width:'100%', borderCollapse:'collapse', fontSize:'13px' },
+  table: { width:'100%', borderCollapse:'collapse' as const, fontSize:'13px' },
   theadRow: { background:'#0a1628' },
-  th: { padding:'10px 16px', textAlign:'left', fontSize:'10px', fontWeight:'500', color:'rgba(255,255,255,0.5)', textTransform:'uppercase', letterSpacing:'0.1em' },
+  th: { padding:'10px 16px', textAlign:'left' as const, fontSize:'10px', fontWeight:'500', color:'rgba(255,255,255,0.5)', textTransform:'uppercase' as const, letterSpacing:'0.1em' },
   catCell: { padding:'8px 16px', fontSize:'11px', fontWeight:'500', letterSpacing:'0.1em' },
   dataRow: { borderBottom:'0.5px solid #f0f0ee' },
   td: { padding:'9px 16px', color:'#333', fontSize:'13px' },
@@ -262,14 +261,14 @@ const s: Record<string, React.CSSProperties> = {
   subTotalCell: { padding:'8px 16px', fontSize:'12px', fontWeight:'500', color:'#666' },
   netRow: { background:'#0a1628' },
   netCell: { padding:'14px 16px', fontSize:'14px', fontWeight:'500', color:'#fff' },
-  accountsWrap: { display:'flex', flexDirection:'column', gap:'8px' },
+  accountsWrap: { display:'flex', flexDirection:'column' as const, gap:'8px' },
   accountCard: { background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'10px', padding:'12px 14px' },
   accountHeader: { display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:'10px' },
   accountName: { fontSize:'13px', fontWeight:'500', color:'#111' },
   accountCompany: { fontSize:'11px', color:'#888', marginTop:'2px' },
   currBadge: { fontSize:'10px', fontWeight:'500', padding:'2px 8px', borderRadius:'20px' },
   accountBalances: { display:'flex', alignItems:'center', gap:'10px' },
-  balLabel: { fontSize:'10px', color:'#888', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'3px' },
+  balLabel: { fontSize:'10px', color:'#888', textTransform:'uppercase' as const, letterSpacing:'0.06em', marginBottom:'3px' },
   balValue: { fontSize:'13px', fontWeight:'500', color:'#111' },
   diffBadge: { fontSize:'11px', fontWeight:'500', padding:'3px 8px', borderRadius:'20px', marginLeft:'auto' },
 }

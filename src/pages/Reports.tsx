@@ -9,90 +9,21 @@ export default function Reports() {
 
   const pageMap: Record<string, any> = {
     'Dashboard':'dashboard','Transactions':'transactions',
-    'P&L':'pl','Cash Flow':'cashflow','Reports':'reports'
+    'P&L':'pl','Cash Flow':'cashflow','Reports':'reports',
+    'Partners':'partners','Settings':'settings'
   }
 
   const reports = [
-    {
-      id: 'pl-monthly',
-      title: 'Monthly P&L',
-      desc: 'Profit & Loss by month with revenue stream breakdown',
-      category: 'P&L',
-      icon: '📊',
-      color: '#0F6E56', bg: '#E1F5EE',
-    },
-    {
-      id: 'pl-consolidated',
-      title: 'Consolidated P&L',
-      desc: 'Group-level P&L with IC eliminations',
-      category: 'P&L',
-      icon: '🏢',
-      color: '#0F6E56', bg: '#E1F5EE',
-    },
-    {
-      id: 'pl-by-dept',
-      title: 'P&L by Department',
-      desc: 'Expense breakdown per organizational unit',
-      category: 'P&L',
-      icon: '👥',
-      color: '#0F6E56', bg: '#E1F5EE',
-    },
-    {
-      id: 'cashflow-monthly',
-      title: 'Monthly Cash Flow',
-      desc: 'Operating, investing and financing activities',
-      category: 'Cash Flow',
-      icon: '💰',
-      color: '#0C447C', bg: '#E6F1FB',
-    },
-    {
-      id: 'bank-reconciliation',
-      title: 'Bank Reconciliation',
-      desc: 'Statement vs. recorded transactions per account',
-      category: 'Cash Flow',
-      icon: '🏦',
-      color: '#0C447C', bg: '#E6F1FB',
-    },
-    {
-      id: 'passthrough',
-      title: 'Pass-through Balance',
-      desc: 'SFBC pass-through IN vs. OUT monthly balance',
-      category: 'Compliance',
-      icon: '⚖️',
-      color: '#633806', bg: '#FAEEDA',
-    },
-    {
-      id: 'ic-elimination',
-      title: 'IC Elimination Report',
-      desc: 'Intercompany transactions flagged for consolidation',
-      category: 'Compliance',
-      icon: '🔗',
-      color: '#633806', bg: '#FAEEDA',
-    },
-    {
-      id: 'unmatched',
-      title: 'Unmatched Invoices',
-      desc: 'Invoices without corresponding payment transactions',
-      category: 'Compliance',
-      icon: '⚠️',
-      color: '#854F0B', bg: '#FAEEDA',
-    },
-    {
-      id: 'exchange-rates',
-      title: 'Exchange Rate Log',
-      desc: 'NBS and ExchangeRate-API rates used per period',
-      category: 'Reference',
-      icon: '💱',
-      color: '#444', bg: '#f0f0ee',
-    },
-    {
-      id: 'partner-summary',
-      title: 'Partner Summary',
-      desc: 'Total transactions per partner across all entities',
-      category: 'Reference',
-      icon: '🤝',
-      color: '#444', bg: '#f0f0ee',
-    },
+    { id:'pl-monthly', title:'Monthly P&L', desc:'Profit & Loss by month with revenue stream breakdown', category:'P&L', icon:'📊', color:'#0F6E56', bg:'#E1F5EE' },
+    { id:'pl-consolidated', title:'Consolidated P&L', desc:'Group-level P&L with IC eliminations', category:'P&L', icon:'🏢', color:'#0F6E56', bg:'#E1F5EE' },
+    { id:'pl-by-dept', title:'P&L by Department', desc:'Expense breakdown per organizational unit', category:'P&L', icon:'👥', color:'#0F6E56', bg:'#E1F5EE' },
+    { id:'cashflow-monthly', title:'Monthly Cash Flow', desc:'Operating, investing and financing activities', category:'Cash Flow', icon:'💰', color:'#0C447C', bg:'#E6F1FB' },
+    { id:'bank-reconciliation', title:'Bank Reconciliation', desc:'Statement vs. recorded transactions per account', category:'Cash Flow', icon:'🏦', color:'#0C447C', bg:'#E6F1FB' },
+    { id:'passthrough', title:'Pass-through Balance', desc:'SFBC pass-through IN vs. OUT monthly balance', category:'Compliance', icon:'⚖️', color:'#633806', bg:'#FAEEDA' },
+    { id:'ic-elimination', title:'IC Elimination Report', desc:'Intercompany transactions flagged for consolidation', category:'Compliance', icon:'🔗', color:'#633806', bg:'#FAEEDA' },
+    { id:'unmatched', title:'Unmatched Invoices', desc:'Invoices without corresponding payment transactions', category:'Compliance', icon:'⚠️', color:'#854F0B', bg:'#FAEEDA' },
+    { id:'exchange-rates', title:'Exchange Rate Log', desc:'NBS and ExchangeRate-API rates used per period', category:'Reference', icon:'💱', color:'#444', bg:'#f0f0ee' },
+    { id:'partner-summary', title:'Partner Summary', desc:'Total transactions per partner across all entities', category:'Reference', icon:'🤝', color:'#444', bg:'#f0f0ee' },
   ]
 
   const categories = ['P&L', 'Cash Flow', 'Compliance', 'Reference']
@@ -124,7 +55,7 @@ export default function Reports() {
           <span style={s.navLogoText}>Mint<span style={{color:'#1D9E75'}}>flow</span></span>
         </div>
         <div style={s.navLinks}>
-          {['Dashboard','Transactions','P&L','Cash Flow','Reports'].map(l => (
+          {['Dashboard','Transactions','P&L','Cash Flow','Reports','Partners','Settings'].map(l => (
             <span key={l} style={l==='Reports' ? s.navLinkActive : s.navLink} onClick={() => setPage(pageMap[l])}>{l}</span>
           ))}
         </div>
@@ -224,15 +155,15 @@ const s: Record<string, React.CSSProperties> = {
   filterSelect: { fontFamily:'system-ui,sans-serif', fontSize:'13px', border:'0.5px solid #e5e5e5', borderRadius:'8px', padding:'8px 12px', outline:'none', background:'#fff', color:'#111', cursor:'pointer' },
   kpiGrid: { display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px', marginBottom:'2rem' },
   kpiCard: { background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'12px', padding:'1rem 1.25rem' },
-  kpiLabel: { fontSize:'11px', color:'#888', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'8px' },
+  kpiLabel: { fontSize:'11px', color:'#888', textTransform:'uppercase' as const, letterSpacing:'0.08em', marginBottom:'8px' },
   kpiValue: { fontSize:'22px', fontWeight:'500', color:'#111', marginBottom:'8px' },
   kpiTrend: { display:'inline-flex', alignItems:'center', gap:'4px', fontSize:'11px', fontWeight:'500', padding:'3px 8px', borderRadius:'20px' },
   categorySection: { marginBottom:'2rem' },
   categoryHeader: { display:'flex', alignItems:'center', gap:'10px', marginBottom:'12px' },
-  categoryBadge: { fontSize:'11px', fontWeight:'500', padding:'3px 10px', borderRadius:'20px', textTransform:'uppercase', letterSpacing:'0.08em' },
+  categoryBadge: { fontSize:'11px', fontWeight:'500', padding:'3px 10px', borderRadius:'20px', textTransform:'uppercase' as const, letterSpacing:'0.08em' },
   categoryCount: { fontSize:'12px', color:'#888' },
   reportsGrid: { display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:'10px' },
-  reportCard: { background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'12px', padding:'1rem 1.25rem', display:'flex', alignItems:'center', gap:'12px', cursor:'pointer', transition:'border-color 0.15s' },
+  reportCard: { background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'12px', padding:'1rem 1.25rem', display:'flex', alignItems:'center', gap:'12px', cursor:'pointer' },
   reportCardActive: { border:'2px solid #1D9E75', background:'#E1F5EE' },
   reportIcon: { width:'44px', height:'44px', borderRadius:'10px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 },
   reportInfo: { flex:1 },

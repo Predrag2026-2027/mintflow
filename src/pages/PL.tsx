@@ -10,7 +10,8 @@ export default function PL() {
 
   const pageMap: Record<string, any> = {
     'Dashboard':'dashboard','Transactions':'transactions',
-    'P&L':'pl','Cash Flow':'cashflow','Reports':'reports'
+    'P&L':'pl','Cash Flow':'cashflow','Reports':'reports',
+    'Partners':'partners','Settings':'settings'
   }
 
   const plData = {
@@ -110,7 +111,7 @@ export default function PL() {
           <span style={s.navLogoText}>Mint<span style={{color:'#1D9E75'}}>flow</span></span>
         </div>
         <div style={s.navLinks}>
-          {['Dashboard','Transactions','P&L','Cash Flow','Reports'].map(l => (
+          {['Dashboard','Transactions','P&L','Cash Flow','Reports','Partners','Settings'].map(l => (
             <span key={l} style={l==='P&L' ? s.navLinkActive : s.navLink} onClick={() => setPage(pageMap[l])}>{l}</span>
           ))}
         </div>
@@ -285,14 +286,14 @@ const s: Record<string, React.CSSProperties> = {
   exportBtn: { fontFamily:'system-ui,sans-serif', fontSize:'13px', border:'0.5px solid #e5e5e5', borderRadius:'8px', padding:'8px 16px', background:'#0a1628', color:'#fff', cursor:'pointer' },
   summaryGrid: { display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px', marginBottom:'1.5rem' },
   summaryCard: { background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'12px', padding:'1rem 1.25rem' },
-  summaryLabel: { fontSize:'11px', color:'#888', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'8px' },
+  summaryLabel: { fontSize:'11px', color:'#888', textTransform:'uppercase' as const, letterSpacing:'0.08em', marginBottom:'8px' },
   summaryValue: { fontSize:'22px', fontWeight:'500' },
   tableWrap: { background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'12px', overflow:'hidden' },
-  table: { width:'100%', borderCollapse:'collapse', fontSize:'13px' },
+  table: { width:'100%', borderCollapse:'collapse' as const, fontSize:'13px' },
   theadRow: { background:'#0a1628' },
-  th: { padding:'10px 16px', textAlign:'left', fontSize:'10px', fontWeight:'500', color:'rgba(255,255,255,0.5)', textTransform:'uppercase', letterSpacing:'0.1em' },
+  th: { padding:'10px 16px', textAlign:'left' as const, fontSize:'10px', fontWeight:'500', color:'rgba(255,255,255,0.5)', textTransform:'uppercase' as const, letterSpacing:'0.1em' },
   catRow: { background:'#f0f0ee' },
-  catCell: { padding:'8px 16px', fontSize:'11px', fontWeight:'500', color:'#444', textTransform:'uppercase', letterSpacing:'0.1em' },
+  catCell: { padding:'8px 16px', fontSize:'11px', fontWeight:'500', color:'#444', textTransform:'uppercase' as const, letterSpacing:'0.1em' },
   subCatRow: { background:'#fafaf9' },
   subCatCell: { padding:'7px 16px', fontSize:'12px', fontWeight:'500', color:'#666', borderTop:'0.5px solid #e5e5e5' },
   dataRow: { borderBottom:'0.5px solid #f0f0ee' },
