@@ -1,0 +1,587 @@
+import React, { useState, useEffect, useCallback } from 'react'
+import { useAuth } from '../contexts/AuthContext'
+import { NavContext } from '../App'
+import { supabase } from '../supabase'
+
+type SettingsTab = 'pl' | 'departments' | 'descriptions'
+
+export default function Settings() {
+  const { user, signOut } = useAuth()
+  const { setPage } = React.useContext(NavContext)
+  const [activeTab, setActiveTab] = useState<SettingsTab>('pl')
+
+  const pageMap: Record<string, any> = {
+    'Dashboard': 'dashboard', 'Transactions': 'transactions',
+    'P&L': 'pl', 'Cash Flow': 'cashflow', 'Reports': 'reports',
+    'Partners': 'partners', 'Settings': 'settings'
+  }
+
+  return (
+    <div style={s.root}>
+      <nav style={s.nav}>
+        <div style={s.navLogo}>
+          <svg width="24" height="24" viewBox="0 0 36 36" fill="none">
+            <polygon points="18,2 34,30 2,30" fill="none" stroke="#1D9E75" strokeWidth="1.5" />
+            <circle cx="18" cy="2" r="2" fill="#1D9E75" />
+            <circle cx="34" cy="30" r="2" fill="#5DCAA5" />
+            <circle cx="2" cy="30" r="2" fill="#9FE1CB" />
+          </svg>
+          <span style={s.navLogoText}>Mint<span style={{ color: '#1D9E75' }}>flow</span></span>
+        </div>
+        <div style={s.navLinks}>
+          {['Dashboard', 'Transactions', 'P&L', 'Cash Flow', 'Reports', 'Partners', 'Settings'].map(l => (
+            <span key={l} style={l === 'Settings' ? s.navLinkActive : s.navLink}
+              onClick={() => setPage(pageMap[l])}>{l}</span>
+          ))}
+        </div>
+        <div style={s.navRight}>
+          <div style={s.navAvatar}>{user?.email?.substring(0, 2).toUpperCase()}</div>
+          <span style={s.navEmail}>{user?.email}</span>
+          <button style={s.navSignout} onClick={signOut}>Sign out</button>
+        </div>
+      </nav>
+
+      <div style={s.body}>
+        <div style={s.pageHeader}>
+          <div>
+            <div style={s.pageTitle}>Settings</div>
+            <div style={s.pageSub}>Manage P&L categories, departments and expense descriptions</div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div style={s.tabBar}>
+          {([
+            { id: 'pl', label: '📊 P&L Categories' },
+            { id: 'departments', label: '🏢 Departments' },
+            { id: 'descriptions', label: '🏷️ Expense descriptions' },
+          ] as { id: SettingsTab; label: string }[]).map(tab => (
+            <button key={tab.id}
+              style={{ ...s.tab, ...(activeTab === tab.id ? s.tabActive : {}) }}
+              onClick={() => setActiveTab(tab.id)}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'pl' && <PLCategoriesTab />}
+        {activeTab === 'departments' && <DepartmentsTab />}
+        {activeTab === 'descriptions' && <DescriptionsTab />}
+      </div>
+    </div>
+  )
+}
+
+// ── P&L Categories Tab ───────────────────────────────────
+function PLCategoriesTab() {
+  const [categories, setCategories] = useState<any[]>([])
+  const [subcategories, setSubcategories] = useState<any[]>([])
+  const [selectedCat, setSelectedCat] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [newCatName, setNewCatName] = useState('')
+  const [newSubName, setNewSubName] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState('')
+
+  const fetchCategories = useCallback(async () => {
+    setLoading(true)
+    const { data } = await supabase.from('pl_categories').select('*').order('sort_order')
+    if (data) {
+      setCategories(data)
+      if (!selectedCat && data.length > 0) setSelectedCat(data[0])
+    }
+    setLoading(false)
+  }, [selectedCat])
+
+  const fetchSubcategories = useCallback(async (catId: string) => {
+    const { data } = await supabase
+      .from('pl_subcategories')
+      .select('*')
+      .eq('category_id', catId)
+      .order('sort_order')
+    if (data) setSubcategories(data)
+  }, [])
+
+  useEffect(() => { fetchCategories() }, [])
+  useEffect(() => { if (selectedCat) fetchSubcategories(selectedCat.id) }, [selectedCat])
+
+  const addCategory = async () => {
+    if (!newCatName.trim()) return
+    await supabase.from('pl_categories').insert({ name: newCatName.trim(), sort_order: categories.length + 1 })
+    setNewCatName('')
+    fetchCategories()
+  }
+
+  const addSubcategory = async () => {
+    if (!newSubName.trim() || !selectedCat) return
+    await supabase.from('pl_subcategories').insert({
+      category_id: selectedCat.id,
+      name: newSubName.trim(),
+      sort_order: subcategories.length + 1
+    })
+    setNewSubName('')
+    fetchSubcategories(selectedCat.id)
+  }
+
+  const updateName = async (table: string, id: string) => {
+    if (!editingName.trim()) return
+    await supabase.from(table).update({ name: editingName.trim() }).eq('id', id)
+    setEditingId(null)
+    setEditingName('')
+    if (table === 'pl_categories') fetchCategories()
+    else if (selectedCat) fetchSubcategories(selectedCat.id)
+  }
+
+  const toggleActive = async (table: string, id: string, current: boolean) => {
+    await supabase.from(table).update({ is_active: !current }).eq('id', id)
+    if (table === 'pl_categories') fetchCategories()
+    else if (selectedCat) fetchSubcategories(selectedCat.id)
+  }
+
+  const deleteItem = async (table: string, id: string) => {
+    if (!window.confirm('Delete this item?')) return
+    await supabase.from(table).delete().eq('id', id)
+    if (table === 'pl_categories') { fetchCategories(); setSelectedCat(null) }
+    else if (selectedCat) fetchSubcategories(selectedCat.id)
+  }
+
+  if (loading) return <div style={s.loading}>Loading...</div>
+
+  return (
+    <div style={s.twoCol}>
+      {/* Left — categories */}
+      <div style={s.colPanel}>
+        <div style={s.colHeader}>
+          <div style={s.colTitle}>P&L Categories</div>
+          <span style={s.colCount}>{categories.length}</span>
+        </div>
+        <div style={s.itemList}>
+          {categories.map(cat => (
+            <div key={cat.id}
+              style={{ ...s.itemRow, ...(selectedCat?.id === cat.id ? s.itemRowActive : {}), opacity: cat.is_active ? 1 : 0.5 }}
+              onClick={() => setSelectedCat(cat)}>
+              {editingId === cat.id ? (
+                <input style={s.inlineInput} value={editingName}
+                  onChange={e => setEditingName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') updateName('pl_categories', cat.id) }}
+                  onClick={e => e.stopPropagation()} autoFocus />
+              ) : (
+                <span style={s.itemName}>{cat.name}</span>
+              )}
+              <div style={s.itemActions} onClick={e => e.stopPropagation()}>
+                {editingId === cat.id ? (
+                  <button style={s.saveBtn} onClick={() => updateName('pl_categories', cat.id)}>✓</button>
+                ) : (
+                  <button style={s.iconBtn} onClick={() => { setEditingId(cat.id); setEditingName(cat.name) }}>✏️</button>
+                )}
+                <button style={s.iconBtn} onClick={() => toggleActive('pl_categories', cat.id, cat.is_active)}>
+                  {cat.is_active ? '👁' : '🚫'}
+                </button>
+                <button style={s.iconBtn} onClick={() => deleteItem('pl_categories', cat.id)}>🗑</button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={s.addRow}>
+          <input style={s.addInput} value={newCatName} onChange={e => setNewCatName(e.target.value)}
+            placeholder="New category..." onKeyDown={e => { if (e.key === 'Enter') addCategory() }} />
+          <button style={s.addBtn} onClick={addCategory}>+ Add</button>
+        </div>
+      </div>
+
+      {/* Right — subcategories */}
+      <div style={s.colPanel}>
+        <div style={s.colHeader}>
+          <div style={s.colTitle}>
+            {selectedCat ? `Subcategories — ${selectedCat.name}` : 'Select a category'}
+          </div>
+          {selectedCat && <span style={s.colCount}>{subcategories.length}</span>}
+        </div>
+        {!selectedCat ? (
+          <div style={s.emptyHint}>← Select a P&L category to manage its subcategories</div>
+        ) : (
+          <>
+            <div style={s.itemList}>
+              {subcategories.map(sub => (
+                <div key={sub.id} style={{ ...s.itemRow, opacity: sub.is_active ? 1 : 0.5 }}>
+                  {editingId === sub.id ? (
+                    <input style={s.inlineInput} value={editingName}
+                      onChange={e => setEditingName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') updateName('pl_subcategories', sub.id) }}
+                      autoFocus />
+                  ) : (
+                    <span style={s.itemName}>{sub.name}</span>
+                  )}
+                  <div style={s.itemActions}>
+                    {editingId === sub.id ? (
+                      <button style={s.saveBtn} onClick={() => updateName('pl_subcategories', sub.id)}>✓</button>
+                    ) : (
+                      <button style={s.iconBtn} onClick={() => { setEditingId(sub.id); setEditingName(sub.name) }}>✏️</button>
+                    )}
+                    <button style={s.iconBtn} onClick={() => toggleActive('pl_subcategories', sub.id, sub.is_active)}>
+                      {sub.is_active ? '👁' : '🚫'}
+                    </button>
+                    <button style={s.iconBtn} onClick={() => deleteItem('pl_subcategories', sub.id)}>🗑</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={s.addRow}>
+              <input style={s.addInput} value={newSubName} onChange={e => setNewSubName(e.target.value)}
+                placeholder="New subcategory..." onKeyDown={e => { if (e.key === 'Enter') addSubcategory() }} />
+              <button style={s.addBtn} onClick={addSubcategory}>+ Add</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Departments Tab ──────────────────────────────────────
+function DepartmentsTab() {
+  const [departments, setDepartments] = useState<any[]>([])
+  const [subcategories, setSubcategories] = useState<any[]>([])
+  const [selectedDept, setSelectedDept] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [newDeptName, setNewDeptName] = useState('')
+  const [newSubName, setNewSubName] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState('')
+
+  const fetchDepartments = useCallback(async () => {
+    setLoading(true)
+    const { data } = await supabase.from('departments').select('*').order('sort_order')
+    if (data) {
+      setDepartments(data)
+      if (!selectedDept && data.length > 0) setSelectedDept(data[0])
+    }
+    setLoading(false)
+  }, [selectedDept])
+
+  const fetchSubcategories = useCallback(async (deptId: string) => {
+    const { data } = await supabase
+      .from('dept_subcategories')
+      .select('*')
+      .eq('department_id', deptId)
+      .order('sort_order')
+    if (data) setSubcategories(data)
+  }, [])
+
+  useEffect(() => { fetchDepartments() }, [])
+  useEffect(() => { if (selectedDept) fetchSubcategories(selectedDept.id) }, [selectedDept])
+
+  const addDepartment = async () => {
+    if (!newDeptName.trim()) return
+    await supabase.from('departments').insert({ name: newDeptName.trim(), sort_order: departments.length + 1 })
+    setNewDeptName('')
+    fetchDepartments()
+  }
+
+  const addSubcategory = async () => {
+    if (!newSubName.trim() || !selectedDept) return
+    await supabase.from('dept_subcategories').insert({
+      department_id: selectedDept.id,
+      name: newSubName.trim(),
+      sort_order: subcategories.length + 1
+    })
+    setNewSubName('')
+    fetchSubcategories(selectedDept.id)
+  }
+
+  const updateName = async (table: string, id: string) => {
+    if (!editingName.trim()) return
+    await supabase.from(table).update({ name: editingName.trim() }).eq('id', id)
+    setEditingId(null)
+    setEditingName('')
+    if (table === 'departments') fetchDepartments()
+    else if (selectedDept) fetchSubcategories(selectedDept.id)
+  }
+
+  const toggleActive = async (table: string, id: string, current: boolean) => {
+    await supabase.from(table).update({ is_active: !current }).eq('id', id)
+    if (table === 'departments') fetchDepartments()
+    else if (selectedDept) fetchSubcategories(selectedDept.id)
+  }
+
+  const deleteItem = async (table: string, id: string) => {
+    if (!window.confirm('Delete this item?')) return
+    await supabase.from(table).delete().eq('id', id)
+    if (table === 'departments') { fetchDepartments(); setSelectedDept(null) }
+    else if (selectedDept) fetchSubcategories(selectedDept.id)
+  }
+
+  if (loading) return <div style={s.loading}>Loading...</div>
+
+  return (
+    <div style={s.twoCol}>
+      <div style={s.colPanel}>
+        <div style={s.colHeader}>
+          <div style={s.colTitle}>Departments</div>
+          <span style={s.colCount}>{departments.length}</span>
+        </div>
+        <div style={s.itemList}>
+          {departments.map(dept => (
+            <div key={dept.id}
+              style={{ ...s.itemRow, ...(selectedDept?.id === dept.id ? s.itemRowActive : {}), opacity: dept.is_active ? 1 : 0.5 }}
+              onClick={() => setSelectedDept(dept)}>
+              {editingId === dept.id ? (
+                <input style={s.inlineInput} value={editingName}
+                  onChange={e => setEditingName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') updateName('departments', dept.id) }}
+                  onClick={e => e.stopPropagation()} autoFocus />
+              ) : (
+                <span style={s.itemName}>{dept.name}</span>
+              )}
+              <div style={s.itemActions} onClick={e => e.stopPropagation()}>
+                {editingId === dept.id ? (
+                  <button style={s.saveBtn} onClick={() => updateName('departments', dept.id)}>✓</button>
+                ) : (
+                  <button style={s.iconBtn} onClick={() => { setEditingId(dept.id); setEditingName(dept.name) }}>✏️</button>
+                )}
+                <button style={s.iconBtn} onClick={() => toggleActive('departments', dept.id, dept.is_active)}>
+                  {dept.is_active ? '👁' : '🚫'}
+                </button>
+                <button style={s.iconBtn} onClick={() => deleteItem('departments', dept.id)}>🗑</button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={s.addRow}>
+          <input style={s.addInput} value={newDeptName} onChange={e => setNewDeptName(e.target.value)}
+            placeholder="New department..." onKeyDown={e => { if (e.key === 'Enter') addDepartment() }} />
+          <button style={s.addBtn} onClick={addDepartment}>+ Add</button>
+        </div>
+      </div>
+
+      <div style={s.colPanel}>
+        <div style={s.colHeader}>
+          <div style={s.colTitle}>
+            {selectedDept ? `Subcategories — ${selectedDept.name}` : 'Select a department'}
+          </div>
+          {selectedDept && <span style={s.colCount}>{subcategories.length}</span>}
+        </div>
+        {!selectedDept ? (
+          <div style={s.emptyHint}>← Select a department to manage its subcategories</div>
+        ) : (
+          <>
+            <div style={s.itemList}>
+              {subcategories.map(sub => (
+                <div key={sub.id} style={{ ...s.itemRow, opacity: sub.is_active ? 1 : 0.5 }}>
+                  {editingId === sub.id ? (
+                    <input style={s.inlineInput} value={editingName}
+                      onChange={e => setEditingName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') updateName('dept_subcategories', sub.id) }}
+                      autoFocus />
+                  ) : (
+                    <span style={s.itemName}>{sub.name}</span>
+                  )}
+                  <div style={s.itemActions}>
+                    {editingId === sub.id ? (
+                      <button style={s.saveBtn} onClick={() => updateName('dept_subcategories', sub.id)}>✓</button>
+                    ) : (
+                      <button style={s.iconBtn} onClick={() => { setEditingId(sub.id); setEditingName(sub.name) }}>✏️</button>
+                    )}
+                    <button style={s.iconBtn} onClick={() => toggleActive('dept_subcategories', sub.id, sub.is_active)}>
+                      {sub.is_active ? '👁' : '🚫'}
+                    </button>
+                    <button style={s.iconBtn} onClick={() => deleteItem('dept_subcategories', sub.id)}>🗑</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={s.addRow}>
+              <input style={s.addInput} value={newSubName} onChange={e => setNewSubName(e.target.value)}
+                placeholder="New subcategory..." onKeyDown={e => { if (e.key === 'Enter') addSubcategory() }} />
+              <button style={s.addBtn} onClick={addSubcategory}>+ Add</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Expense Descriptions Tab ─────────────────────────────
+function DescriptionsTab() {
+  const [subcategories, setSubcategories] = useState<any[]>([])
+  const [descriptions, setDescriptions] = useState<any[]>([])
+  const [selectedSub, setSelectedSub] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [searchSub, setSearchSub] = useState('')
+  const [newDescName, setNewDescName] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState('')
+
+  const fetchSubcategories = useCallback(async () => {
+    setLoading(true)
+    const { data } = await supabase
+      .from('dept_subcategories')
+      .select('*, departments(name)')
+      .order('name')
+    if (data) setSubcategories(data)
+    setLoading(false)
+  }, [])
+
+  const fetchDescriptions = useCallback(async (subId: string) => {
+    const { data } = await supabase
+      .from('expense_descriptions')
+      .select('*')
+      .eq('dept_subcategory_id', subId)
+      .order('sort_order')
+    if (data) setDescriptions(data)
+  }, [])
+
+  useEffect(() => { fetchSubcategories() }, [])
+  useEffect(() => { if (selectedSub) fetchDescriptions(selectedSub.id) }, [selectedSub])
+
+  const addDescription = async () => {
+    if (!newDescName.trim() || !selectedSub) return
+    await supabase.from('expense_descriptions').insert({
+      dept_subcategory_id: selectedSub.id,
+      name: newDescName.trim(),
+      sort_order: descriptions.length + 1
+    })
+    setNewDescName('')
+    fetchDescriptions(selectedSub.id)
+  }
+
+  const updateName = async (id: string) => {
+    if (!editingName.trim()) return
+    await supabase.from('expense_descriptions').update({ name: editingName.trim() }).eq('id', id)
+    setEditingId(null)
+    setEditingName('')
+    if (selectedSub) fetchDescriptions(selectedSub.id)
+  }
+
+  const toggleActive = async (id: string, current: boolean) => {
+    await supabase.from('expense_descriptions').update({ is_active: !current }).eq('id', id)
+    if (selectedSub) fetchDescriptions(selectedSub.id)
+  }
+
+  const deleteDesc = async (id: string) => {
+    if (!window.confirm('Delete this description?')) return
+    await supabase.from('expense_descriptions').delete().eq('id', id)
+    if (selectedSub) fetchDescriptions(selectedSub.id)
+  }
+
+  const filteredSubs = subcategories.filter(sub =>
+    !searchSub ||
+    sub.name.toLowerCase().includes(searchSub.toLowerCase()) ||
+    (sub.departments?.name || '').toLowerCase().includes(searchSub.toLowerCase())
+  )
+
+  if (loading) return <div style={s.loading}>Loading...</div>
+
+  return (
+    <div style={s.twoCol}>
+      <div style={s.colPanel}>
+        <div style={s.colHeader}>
+          <div style={s.colTitle}>Dept. subcategories</div>
+          <span style={s.colCount}>{subcategories.length}</span>
+        </div>
+        <div style={{ padding: '8px 12px', borderBottom: '0.5px solid #f0f0ee' }}>
+          <input style={{ ...s.addInput, width: '100%', boxSizing: 'border-box' as const }}
+            value={searchSub} onChange={e => setSearchSub(e.target.value)}
+            placeholder="Search subcategories..." />
+        </div>
+        <div style={s.itemList}>
+          {filteredSubs.map(sub => (
+            <div key={sub.id}
+              style={{ ...s.itemRow, ...(selectedSub?.id === sub.id ? s.itemRowActive : {}) }}
+              onClick={() => setSelectedSub(sub)}>
+              <div>
+                <div style={s.itemName}>{sub.name}</div>
+                <div style={{ fontSize: '10px', color: '#aaa' }}>{sub.departments?.name}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={s.colPanel}>
+        <div style={s.colHeader}>
+          <div style={s.colTitle}>
+            {selectedSub ? `Descriptions — ${selectedSub.name}` : 'Select a subcategory'}
+          </div>
+          {selectedSub && <span style={s.colCount}>{descriptions.length}</span>}
+        </div>
+        {!selectedSub ? (
+          <div style={s.emptyHint}>← Select a subcategory to manage its expense descriptions</div>
+        ) : (
+          <>
+            <div style={s.itemList}>
+              {descriptions.map(desc => (
+                <div key={desc.id} style={{ ...s.itemRow, opacity: desc.is_active ? 1 : 0.5 }}>
+                  {editingId === desc.id ? (
+                    <input style={s.inlineInput} value={editingName}
+                      onChange={e => setEditingName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') updateName(desc.id) }}
+                      autoFocus />
+                  ) : (
+                    <span style={s.itemName}>{desc.name}</span>
+                  )}
+                  <div style={s.itemActions}>
+                    {editingId === desc.id ? (
+                      <button style={s.saveBtn} onClick={() => updateName(desc.id)}>✓</button>
+                    ) : (
+                      <button style={s.iconBtn} onClick={() => { setEditingId(desc.id); setEditingName(desc.name) }}>✏️</button>
+                    )}
+                    <button style={s.iconBtn} onClick={() => toggleActive(desc.id, desc.is_active)}>
+                      {desc.is_active ? '👁' : '🚫'}
+                    </button>
+                    <button style={s.iconBtn} onClick={() => deleteDesc(desc.id)}>🗑</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={s.addRow}>
+              <input style={s.addInput} value={newDescName} onChange={e => setNewDescName(e.target.value)}
+                placeholder="New description..." onKeyDown={e => { if (e.key === 'Enter') addDescription() }} />
+              <button style={s.addBtn} onClick={addDescription}>+ Add</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const s: Record<string, React.CSSProperties> = {
+  root: { minHeight: '100vh', background: '#f5f5f3', fontFamily: 'system-ui,sans-serif' },
+  nav: { background: '#0a1628', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1.5rem', height: '52px' },
+  navLogo: { display: 'flex', alignItems: 'center', gap: '8px' },
+  navLogoText: { fontFamily: 'Georgia,serif', fontSize: '18px', fontWeight: '500', color: '#fff' },
+  navLinks: { display: 'flex', gap: '4px' },
+  navLink: { fontSize: '13px', color: 'rgba(255,255,255,0.5)', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' },
+  navLinkActive: { fontSize: '13px', color: '#fff', padding: '6px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', cursor: 'pointer' },
+  navRight: { display: 'flex', alignItems: 'center', gap: '10px' },
+  navAvatar: { width: '30px', height: '30px', borderRadius: '50%', background: '#1D9E75', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '500', color: '#fff' },
+  navEmail: { fontSize: '13px', color: 'rgba(255,255,255,0.7)' },
+  navSignout: { background: 'none', border: '0.5px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.5)', fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer' },
+  body: { padding: '2rem 1.5rem' },
+  pageHeader: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.5rem' },
+  pageTitle: { fontFamily: 'Georgia,serif', fontSize: '24px', fontWeight: '400', color: '#111', marginBottom: '4px' },
+  pageSub: { fontSize: '13px', color: '#888' },
+  tabBar: { display: 'flex', gap: 0, borderBottom: '0.5px solid #e5e5e5', marginBottom: '1.5rem' },
+  tab: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '10px 20px', border: 'none', background: 'transparent', color: '#888', cursor: 'pointer', borderBottom: '2px solid transparent', marginBottom: '-0.5px' },
+  tabActive: { color: '#111', borderBottomColor: '#1D9E75', fontWeight: '500' },
+  twoCol: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start' },
+  colPanel: { background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '12px', overflow: 'hidden' },
+  colHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '0.5px solid #e5e5e5', background: '#f5f5f3' },
+  colTitle: { fontSize: '13px', fontWeight: '500', color: '#111' },
+  colCount: { fontSize: '11px', fontWeight: '500', padding: '2px 8px', borderRadius: '10px', background: '#E1F5EE', color: '#085041' },
+  itemList: { maxHeight: '420px', overflowY: 'auto' as const },
+  itemRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', borderBottom: '0.5px solid #f5f5f3', cursor: 'pointer' },
+  itemRowActive: { background: '#f0fdf8', borderLeft: '3px solid #1D9E75' },
+  itemName: { fontSize: '13px', color: '#111' },
+  itemActions: { display: 'flex', gap: '4px', flexShrink: 0 },
+  iconBtn: { background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', padding: '2px 4px', borderRadius: '4px', opacity: 0.6 },
+  saveBtn: { background: '#1D9E75', border: 'none', cursor: 'pointer', fontSize: '12px', padding: '2px 8px', borderRadius: '4px', color: '#fff' },
+  inlineInput: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '4px 8px', border: '1px solid #1D9E75', borderRadius: '6px', outline: 'none', flex: 1, color: '#111' },
+  addRow: { display: 'flex', gap: '6px', padding: '10px 12px', borderTop: '0.5px solid #e5e5e5', background: '#fafaf9' },
+  addInput: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '7px 10px', border: '0.5px solid #e5e5e5', borderRadius: '8px', outline: 'none', flex: 1, color: '#111', background: '#fff' },
+  addBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '7px 14px', border: 'none', borderRadius: '8px', background: '#1D9E75', color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' as const },
+  emptyHint: { padding: '2rem', textAlign: 'center' as const, color: '#aaa', fontSize: '13px' },
+  loading: { padding: '2rem', textAlign: 'center' as const, color: '#888', fontSize: '14px' },
+}
