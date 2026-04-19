@@ -2,11 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { NavContext } from '../App'
 import { supabase } from '../supabase'
+import UserManagement from '../components/UserManagement'
 
-type SettingsTab = 'pl' | 'departments' | 'descriptions'
+type SettingsTab = 'pl' | 'departments' | 'descriptions' | 'users'
 
 export default function Settings() {
-  const { user, signOut } = useAuth()
+  const { user, signOut, canManageSettings, canManageUsers } = useAuth()
   const { setPage } = React.useContext(NavContext)
   const [activeTab, setActiveTab] = useState<SettingsTab>('pl')
 
@@ -45,17 +46,18 @@ export default function Settings() {
         <div style={s.pageHeader}>
           <div>
             <div style={s.pageTitle}>Settings</div>
-            <div style={s.pageSub}>Manage P&L categories, departments and expense descriptions</div>
+            <div style={s.pageSub}>Manage P&L categories, departments, descriptions and users</div>
           </div>
         </div>
 
         {/* Tabs */}
         <div style={s.tabBar}>
           {([
-            { id: 'pl', label: '📊 P&L Categories' },
-            { id: 'departments', label: '🏢 Departments' },
-            { id: 'descriptions', label: '🏷️ Expense descriptions' },
-          ] as { id: SettingsTab; label: string }[]).map(tab => (
+            { id: 'pl', label: '📊 P&L Categories', show: true },
+            { id: 'departments', label: '🏢 Departments', show: true },
+            { id: 'descriptions', label: '🏷️ Expense descriptions', show: true },
+            { id: 'users', label: '👥 Users', show: canManageUsers },
+          ] as { id: SettingsTab; label: string; show: boolean }[]).filter(t => t.show).map(tab => (
             <button key={tab.id}
               style={{ ...s.tab, ...(activeTab === tab.id ? s.tabActive : {}) }}
               onClick={() => setActiveTab(tab.id)}>
@@ -64,16 +66,18 @@ export default function Settings() {
           ))}
         </div>
 
-        {activeTab === 'pl' && <PLCategoriesTab />}
-        {activeTab === 'departments' && <DepartmentsTab />}
-        {activeTab === 'descriptions' && <DescriptionsTab />}
+        {/* Tab content */}
+        {activeTab === 'pl' && <PLCategoriesTab canEdit={canManageSettings} />}
+        {activeTab === 'departments' && <DepartmentsTab canEdit={canManageSettings} />}
+        {activeTab === 'descriptions' && <DescriptionsTab canEdit={canManageSettings} />}
+        {activeTab === 'users' && <UserManagement />}
       </div>
     </div>
   )
 }
 
 // ── P&L Categories Tab ───────────────────────────────────
-function PLCategoriesTab() {
+function PLCategoriesTab({ canEdit }: { canEdit: boolean }) {
   const [categories, setCategories] = useState<any[]>([])
   const [subcategories, setSubcategories] = useState<any[]>([])
   const [selectedCat, setSelectedCat] = useState<any>(null)
@@ -94,11 +98,7 @@ function PLCategoriesTab() {
   }, [selectedCat])
 
   const fetchSubcategories = useCallback(async (catId: string) => {
-    const { data } = await supabase
-      .from('pl_subcategories')
-      .select('*')
-      .eq('category_id', catId)
-      .order('sort_order')
+    const { data } = await supabase.from('pl_subcategories').select('*').eq('category_id', catId).order('sort_order')
     if (data) setSubcategories(data)
   }, [])
 
@@ -106,40 +106,36 @@ function PLCategoriesTab() {
   useEffect(() => { if (selectedCat) fetchSubcategories(selectedCat.id) }, [selectedCat]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const addCategory = async () => {
-    if (!newCatName.trim()) return
+    if (!newCatName.trim() || !canEdit) return
     await supabase.from('pl_categories').insert({ name: newCatName.trim(), sort_order: categories.length + 1 })
     setNewCatName('')
     fetchCategories()
   }
 
   const addSubcategory = async () => {
-    if (!newSubName.trim() || !selectedCat) return
-    await supabase.from('pl_subcategories').insert({
-      category_id: selectedCat.id,
-      name: newSubName.trim(),
-      sort_order: subcategories.length + 1
-    })
+    if (!newSubName.trim() || !selectedCat || !canEdit) return
+    await supabase.from('pl_subcategories').insert({ category_id: selectedCat.id, name: newSubName.trim(), sort_order: subcategories.length + 1 })
     setNewSubName('')
     fetchSubcategories(selectedCat.id)
   }
 
   const updateName = async (table: string, id: string) => {
-    if (!editingName.trim()) return
+    if (!editingName.trim() || !canEdit) return
     await supabase.from(table).update({ name: editingName.trim() }).eq('id', id)
-    setEditingId(null)
-    setEditingName('')
+    setEditingId(null); setEditingName('')
     if (table === 'pl_categories') fetchCategories()
     else if (selectedCat) fetchSubcategories(selectedCat.id)
   }
 
   const toggleActive = async (table: string, id: string, current: boolean) => {
+    if (!canEdit) return
     await supabase.from(table).update({ is_active: !current }).eq('id', id)
     if (table === 'pl_categories') fetchCategories()
     else if (selectedCat) fetchSubcategories(selectedCat.id)
   }
 
   const deleteItem = async (table: string, id: string) => {
-    if (!window.confirm('Delete this item?')) return
+    if (!canEdit || !window.confirm('Delete this item?')) return
     await supabase.from(table).delete().eq('id', id)
     if (table === 'pl_categories') { fetchCategories(); setSelectedCat(null) }
     else if (selectedCat) fetchSubcategories(selectedCat.id)
@@ -148,98 +144,96 @@ function PLCategoriesTab() {
   if (loading) return <div style={s.loading}>Loading...</div>
 
   return (
-    <div style={s.twoCol}>
-      {/* Left — categories */}
-      <div style={s.colPanel}>
-        <div style={s.colHeader}>
-          <div style={s.colTitle}>P&L Categories</div>
-          <span style={s.colCount}>{categories.length}</span>
-        </div>
-        <div style={s.itemList}>
-          {categories.map(cat => (
-            <div key={cat.id}
-              style={{ ...s.itemRow, ...(selectedCat?.id === cat.id ? s.itemRowActive : {}), opacity: cat.is_active ? 1 : 0.5 }}
-              onClick={() => setSelectedCat(cat)}>
-              {editingId === cat.id ? (
-                <input style={s.inlineInput} value={editingName}
-                  onChange={e => setEditingName(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') updateName('pl_categories', cat.id) }}
-                  onClick={e => e.stopPropagation()} autoFocus />
-              ) : (
-                <span style={s.itemName}>{cat.name}</span>
-              )}
-              <div style={s.itemActions} onClick={e => e.stopPropagation()}>
-                {editingId === cat.id ? (
-                  <button style={s.saveBtn} onClick={() => updateName('pl_categories', cat.id)}>✓</button>
-                ) : (
-                  <button style={s.iconBtn} onClick={() => { setEditingId(cat.id); setEditingName(cat.name) }}>✏️</button>
-                )}
-                <button style={s.iconBtn} onClick={() => toggleActive('pl_categories', cat.id, cat.is_active)}>
-                  {cat.is_active ? '👁' : '🚫'}
-                </button>
-                <button style={s.iconBtn} onClick={() => deleteItem('pl_categories', cat.id)}>🗑</button>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div style={s.addRow}>
-          <input style={s.addInput} value={newCatName} onChange={e => setNewCatName(e.target.value)}
-            placeholder="New category..." onKeyDown={e => { if (e.key === 'Enter') addCategory() }} />
-          <button style={s.addBtn} onClick={addCategory}>+ Add</button>
-        </div>
-      </div>
-
-      {/* Right — subcategories */}
-      <div style={s.colPanel}>
-        <div style={s.colHeader}>
-          <div style={s.colTitle}>
-            {selectedCat ? `Subcategories — ${selectedCat.name}` : 'Select a category'}
+    <>
+      {!canEdit && <div style={s.readOnlyBanner}>👁 Read only — only administrators can modify categories.</div>}
+      <div style={s.twoCol}>
+        <div style={s.colPanel}>
+          <div style={s.colHeader}>
+            <div style={s.colTitle}>P&L Categories</div>
+            <span style={s.colCount}>{categories.length}</span>
           </div>
-          {selectedCat && <span style={s.colCount}>{subcategories.length}</span>}
-        </div>
-        {!selectedCat ? (
-          <div style={s.emptyHint}>← Select a P&L category to manage its subcategories</div>
-        ) : (
-          <>
-            <div style={s.itemList}>
-              {subcategories.map(sub => (
-                <div key={sub.id} style={{ ...s.itemRow, opacity: sub.is_active ? 1 : 0.5 }}>
-                  {editingId === sub.id ? (
-                    <input style={s.inlineInput} value={editingName}
-                      onChange={e => setEditingName(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') updateName('pl_subcategories', sub.id) }}
-                      autoFocus />
-                  ) : (
-                    <span style={s.itemName}>{sub.name}</span>
-                  )}
-                  <div style={s.itemActions}>
-                    {editingId === sub.id ? (
-                      <button style={s.saveBtn} onClick={() => updateName('pl_subcategories', sub.id)}>✓</button>
-                    ) : (
-                      <button style={s.iconBtn} onClick={() => { setEditingId(sub.id); setEditingName(sub.name) }}>✏️</button>
-                    )}
-                    <button style={s.iconBtn} onClick={() => toggleActive('pl_subcategories', sub.id, sub.is_active)}>
-                      {sub.is_active ? '👁' : '🚫'}
-                    </button>
-                    <button style={s.iconBtn} onClick={() => deleteItem('pl_subcategories', sub.id)}>🗑</button>
+          <div style={s.itemList}>
+            {categories.map(cat => (
+              <div key={cat.id}
+                style={{ ...s.itemRow, ...(selectedCat?.id === cat.id ? s.itemRowActive : {}), opacity: cat.is_active ? 1 : 0.5 }}
+                onClick={() => setSelectedCat(cat)}>
+                {editingId === cat.id ? (
+                  <input style={s.inlineInput} value={editingName} onChange={e => setEditingName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') updateName('pl_categories', cat.id) }}
+                    onClick={e => e.stopPropagation()} autoFocus />
+                ) : (
+                  <span style={s.itemName}>{cat.name}</span>
+                )}
+                {canEdit && (
+                  <div style={s.itemActions} onClick={e => e.stopPropagation()}>
+                    {editingId === cat.id
+                      ? <button style={s.saveBtn} onClick={() => updateName('pl_categories', cat.id)}>✓</button>
+                      : <button style={s.iconBtn} onClick={() => { setEditingId(cat.id); setEditingName(cat.name) }}>✏️</button>
+                    }
+                    <button style={s.iconBtn} onClick={() => toggleActive('pl_categories', cat.id, cat.is_active)}>{cat.is_active ? '👁' : '🚫'}</button>
+                    <button style={s.iconBtn} onClick={() => deleteItem('pl_categories', cat.id)}>🗑</button>
                   </div>
-                </div>
-              ))}
-            </div>
+                )}
+              </div>
+            ))}
+          </div>
+          {canEdit && (
             <div style={s.addRow}>
-              <input style={s.addInput} value={newSubName} onChange={e => setNewSubName(e.target.value)}
-                placeholder="New subcategory..." onKeyDown={e => { if (e.key === 'Enter') addSubcategory() }} />
-              <button style={s.addBtn} onClick={addSubcategory}>+ Add</button>
+              <input style={s.addInput} value={newCatName} onChange={e => setNewCatName(e.target.value)}
+                placeholder="New category..." onKeyDown={e => { if (e.key === 'Enter') addCategory() }} />
+              <button style={s.addBtn} onClick={addCategory}>+ Add</button>
             </div>
-          </>
-        )}
+          )}
+        </div>
+
+        <div style={s.colPanel}>
+          <div style={s.colHeader}>
+            <div style={s.colTitle}>{selectedCat ? `Subcategories — ${selectedCat.name}` : 'Select a category'}</div>
+            {selectedCat && <span style={s.colCount}>{subcategories.length}</span>}
+          </div>
+          {!selectedCat ? (
+            <div style={s.emptyHint}>← Select a P&L category to manage its subcategories</div>
+          ) : (
+            <>
+              <div style={s.itemList}>
+                {subcategories.map(sub => (
+                  <div key={sub.id} style={{ ...s.itemRow, opacity: sub.is_active ? 1 : 0.5 }}>
+                    {editingId === sub.id ? (
+                      <input style={s.inlineInput} value={editingName} onChange={e => setEditingName(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') updateName('pl_subcategories', sub.id) }} autoFocus />
+                    ) : (
+                      <span style={s.itemName}>{sub.name}</span>
+                    )}
+                    {canEdit && (
+                      <div style={s.itemActions}>
+                        {editingId === sub.id
+                          ? <button style={s.saveBtn} onClick={() => updateName('pl_subcategories', sub.id)}>✓</button>
+                          : <button style={s.iconBtn} onClick={() => { setEditingId(sub.id); setEditingName(sub.name) }}>✏️</button>
+                        }
+                        <button style={s.iconBtn} onClick={() => toggleActive('pl_subcategories', sub.id, sub.is_active)}>{sub.is_active ? '👁' : '🚫'}</button>
+                        <button style={s.iconBtn} onClick={() => deleteItem('pl_subcategories', sub.id)}>🗑</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {canEdit && (
+                <div style={s.addRow}>
+                  <input style={s.addInput} value={newSubName} onChange={e => setNewSubName(e.target.value)}
+                    placeholder="New subcategory..." onKeyDown={e => { if (e.key === 'Enter') addSubcategory() }} />
+                  <button style={s.addBtn} onClick={addSubcategory}>+ Add</button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 
 // ── Departments Tab ──────────────────────────────────────
-function DepartmentsTab() {
+function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
   const [departments, setDepartments] = useState<any[]>([])
   const [subcategories, setSubcategories] = useState<any[]>([])
   const [selectedDept, setSelectedDept] = useState<any>(null)
@@ -252,19 +246,12 @@ function DepartmentsTab() {
   const fetchDepartments = useCallback(async () => {
     setLoading(true)
     const { data } = await supabase.from('departments').select('*').order('sort_order')
-    if (data) {
-      setDepartments(data)
-      if (!selectedDept && data.length > 0) setSelectedDept(data[0])
-    }
+    if (data) { setDepartments(data); if (!selectedDept && data.length > 0) setSelectedDept(data[0]) }
     setLoading(false)
   }, [selectedDept])
 
   const fetchSubcategories = useCallback(async (deptId: string) => {
-    const { data } = await supabase
-      .from('dept_subcategories')
-      .select('*')
-      .eq('department_id', deptId)
-      .order('sort_order')
+    const { data } = await supabase.from('dept_subcategories').select('*').eq('department_id', deptId).order('sort_order')
     if (data) setSubcategories(data)
   }, [])
 
@@ -272,40 +259,34 @@ function DepartmentsTab() {
   useEffect(() => { if (selectedDept) fetchSubcategories(selectedDept.id) }, [selectedDept]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const addDepartment = async () => {
-    if (!newDeptName.trim()) return
+    if (!newDeptName.trim() || !canEdit) return
     await supabase.from('departments').insert({ name: newDeptName.trim(), sort_order: departments.length + 1 })
-    setNewDeptName('')
-    fetchDepartments()
+    setNewDeptName(''); fetchDepartments()
   }
 
   const addSubcategory = async () => {
-    if (!newSubName.trim() || !selectedDept) return
-    await supabase.from('dept_subcategories').insert({
-      department_id: selectedDept.id,
-      name: newSubName.trim(),
-      sort_order: subcategories.length + 1
-    })
-    setNewSubName('')
-    fetchSubcategories(selectedDept.id)
+    if (!newSubName.trim() || !selectedDept || !canEdit) return
+    await supabase.from('dept_subcategories').insert({ department_id: selectedDept.id, name: newSubName.trim(), sort_order: subcategories.length + 1 })
+    setNewSubName(''); fetchSubcategories(selectedDept.id)
   }
 
   const updateName = async (table: string, id: string) => {
-    if (!editingName.trim()) return
+    if (!editingName.trim() || !canEdit) return
     await supabase.from(table).update({ name: editingName.trim() }).eq('id', id)
-    setEditingId(null)
-    setEditingName('')
+    setEditingId(null); setEditingName('')
     if (table === 'departments') fetchDepartments()
     else if (selectedDept) fetchSubcategories(selectedDept.id)
   }
 
   const toggleActive = async (table: string, id: string, current: boolean) => {
+    if (!canEdit) return
     await supabase.from(table).update({ is_active: !current }).eq('id', id)
     if (table === 'departments') fetchDepartments()
     else if (selectedDept) fetchSubcategories(selectedDept.id)
   }
 
   const deleteItem = async (table: string, id: string) => {
-    if (!window.confirm('Delete this item?')) return
+    if (!canEdit || !window.confirm('Delete this item?')) return
     await supabase.from(table).delete().eq('id', id)
     if (table === 'departments') { fetchDepartments(); setSelectedDept(null) }
     else if (selectedDept) fetchSubcategories(selectedDept.id)
@@ -314,96 +295,96 @@ function DepartmentsTab() {
   if (loading) return <div style={s.loading}>Loading...</div>
 
   return (
-    <div style={s.twoCol}>
-      <div style={s.colPanel}>
-        <div style={s.colHeader}>
-          <div style={s.colTitle}>Departments</div>
-          <span style={s.colCount}>{departments.length}</span>
-        </div>
-        <div style={s.itemList}>
-          {departments.map(dept => (
-            <div key={dept.id}
-              style={{ ...s.itemRow, ...(selectedDept?.id === dept.id ? s.itemRowActive : {}), opacity: dept.is_active ? 1 : 0.5 }}
-              onClick={() => setSelectedDept(dept)}>
-              {editingId === dept.id ? (
-                <input style={s.inlineInput} value={editingName}
-                  onChange={e => setEditingName(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') updateName('departments', dept.id) }}
-                  onClick={e => e.stopPropagation()} autoFocus />
-              ) : (
-                <span style={s.itemName}>{dept.name}</span>
-              )}
-              <div style={s.itemActions} onClick={e => e.stopPropagation()}>
-                {editingId === dept.id ? (
-                  <button style={s.saveBtn} onClick={() => updateName('departments', dept.id)}>✓</button>
-                ) : (
-                  <button style={s.iconBtn} onClick={() => { setEditingId(dept.id); setEditingName(dept.name) }}>✏️</button>
-                )}
-                <button style={s.iconBtn} onClick={() => toggleActive('departments', dept.id, dept.is_active)}>
-                  {dept.is_active ? '👁' : '🚫'}
-                </button>
-                <button style={s.iconBtn} onClick={() => deleteItem('departments', dept.id)}>🗑</button>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div style={s.addRow}>
-          <input style={s.addInput} value={newDeptName} onChange={e => setNewDeptName(e.target.value)}
-            placeholder="New department..." onKeyDown={e => { if (e.key === 'Enter') addDepartment() }} />
-          <button style={s.addBtn} onClick={addDepartment}>+ Add</button>
-        </div>
-      </div>
-
-      <div style={s.colPanel}>
-        <div style={s.colHeader}>
-          <div style={s.colTitle}>
-            {selectedDept ? `Subcategories — ${selectedDept.name}` : 'Select a department'}
+    <>
+      {!canEdit && <div style={s.readOnlyBanner}>👁 Read only — only administrators can modify departments.</div>}
+      <div style={s.twoCol}>
+        <div style={s.colPanel}>
+          <div style={s.colHeader}>
+            <div style={s.colTitle}>Departments</div>
+            <span style={s.colCount}>{departments.length}</span>
           </div>
-          {selectedDept && <span style={s.colCount}>{subcategories.length}</span>}
-        </div>
-        {!selectedDept ? (
-          <div style={s.emptyHint}>← Select a department to manage its subcategories</div>
-        ) : (
-          <>
-            <div style={s.itemList}>
-              {subcategories.map(sub => (
-                <div key={sub.id} style={{ ...s.itemRow, opacity: sub.is_active ? 1 : 0.5 }}>
-                  {editingId === sub.id ? (
-                    <input style={s.inlineInput} value={editingName}
-                      onChange={e => setEditingName(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') updateName('dept_subcategories', sub.id) }}
-                      autoFocus />
-                  ) : (
-                    <span style={s.itemName}>{sub.name}</span>
-                  )}
-                  <div style={s.itemActions}>
-                    {editingId === sub.id ? (
-                      <button style={s.saveBtn} onClick={() => updateName('dept_subcategories', sub.id)}>✓</button>
-                    ) : (
-                      <button style={s.iconBtn} onClick={() => { setEditingId(sub.id); setEditingName(sub.name) }}>✏️</button>
-                    )}
-                    <button style={s.iconBtn} onClick={() => toggleActive('dept_subcategories', sub.id, sub.is_active)}>
-                      {sub.is_active ? '👁' : '🚫'}
-                    </button>
-                    <button style={s.iconBtn} onClick={() => deleteItem('dept_subcategories', sub.id)}>🗑</button>
+          <div style={s.itemList}>
+            {departments.map(dept => (
+              <div key={dept.id}
+                style={{ ...s.itemRow, ...(selectedDept?.id === dept.id ? s.itemRowActive : {}), opacity: dept.is_active ? 1 : 0.5 }}
+                onClick={() => setSelectedDept(dept)}>
+                {editingId === dept.id ? (
+                  <input style={s.inlineInput} value={editingName} onChange={e => setEditingName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') updateName('departments', dept.id) }}
+                    onClick={e => e.stopPropagation()} autoFocus />
+                ) : (
+                  <span style={s.itemName}>{dept.name}</span>
+                )}
+                {canEdit && (
+                  <div style={s.itemActions} onClick={e => e.stopPropagation()}>
+                    {editingId === dept.id
+                      ? <button style={s.saveBtn} onClick={() => updateName('departments', dept.id)}>✓</button>
+                      : <button style={s.iconBtn} onClick={() => { setEditingId(dept.id); setEditingName(dept.name) }}>✏️</button>
+                    }
+                    <button style={s.iconBtn} onClick={() => toggleActive('departments', dept.id, dept.is_active)}>{dept.is_active ? '👁' : '🚫'}</button>
+                    <button style={s.iconBtn} onClick={() => deleteItem('departments', dept.id)}>🗑</button>
                   </div>
-                </div>
-              ))}
-            </div>
+                )}
+              </div>
+            ))}
+          </div>
+          {canEdit && (
             <div style={s.addRow}>
-              <input style={s.addInput} value={newSubName} onChange={e => setNewSubName(e.target.value)}
-                placeholder="New subcategory..." onKeyDown={e => { if (e.key === 'Enter') addSubcategory() }} />
-              <button style={s.addBtn} onClick={addSubcategory}>+ Add</button>
+              <input style={s.addInput} value={newDeptName} onChange={e => setNewDeptName(e.target.value)}
+                placeholder="New department..." onKeyDown={e => { if (e.key === 'Enter') addDepartment() }} />
+              <button style={s.addBtn} onClick={addDepartment}>+ Add</button>
             </div>
-          </>
-        )}
+          )}
+        </div>
+
+        <div style={s.colPanel}>
+          <div style={s.colHeader}>
+            <div style={s.colTitle}>{selectedDept ? `Subcategories — ${selectedDept.name}` : 'Select a department'}</div>
+            {selectedDept && <span style={s.colCount}>{subcategories.length}</span>}
+          </div>
+          {!selectedDept ? (
+            <div style={s.emptyHint}>← Select a department to manage its subcategories</div>
+          ) : (
+            <>
+              <div style={s.itemList}>
+                {subcategories.map(sub => (
+                  <div key={sub.id} style={{ ...s.itemRow, opacity: sub.is_active ? 1 : 0.5 }}>
+                    {editingId === sub.id ? (
+                      <input style={s.inlineInput} value={editingName} onChange={e => setEditingName(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') updateName('dept_subcategories', sub.id) }} autoFocus />
+                    ) : (
+                      <span style={s.itemName}>{sub.name}</span>
+                    )}
+                    {canEdit && (
+                      <div style={s.itemActions}>
+                        {editingId === sub.id
+                          ? <button style={s.saveBtn} onClick={() => updateName('dept_subcategories', sub.id)}>✓</button>
+                          : <button style={s.iconBtn} onClick={() => { setEditingId(sub.id); setEditingName(sub.name) }}>✏️</button>
+                        }
+                        <button style={s.iconBtn} onClick={() => toggleActive('dept_subcategories', sub.id, sub.is_active)}>{sub.is_active ? '👁' : '🚫'}</button>
+                        <button style={s.iconBtn} onClick={() => deleteItem('dept_subcategories', sub.id)}>🗑</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {canEdit && (
+                <div style={s.addRow}>
+                  <input style={s.addInput} value={newSubName} onChange={e => setNewSubName(e.target.value)}
+                    placeholder="New subcategory..." onKeyDown={e => { if (e.key === 'Enter') addSubcategory() }} />
+                  <button style={s.addBtn} onClick={addSubcategory}>+ Add</button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 
 // ── Expense Descriptions Tab ─────────────────────────────
-function DescriptionsTab() {
+function DescriptionsTab({ canEdit }: { canEdit: boolean }) {
   const [subcategories, setSubcategories] = useState<any[]>([])
   const [descriptions, setDescriptions] = useState<any[]>([])
   const [selectedSub, setSelectedSub] = useState<any>(null)
@@ -415,20 +396,13 @@ function DescriptionsTab() {
 
   const fetchSubcategories = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase
-      .from('dept_subcategories')
-      .select('*, departments(name)')
-      .order('name')
+    const { data } = await supabase.from('dept_subcategories').select('*, departments(name)').order('name')
     if (data) setSubcategories(data)
     setLoading(false)
   }, [])
 
   const fetchDescriptions = useCallback(async (subId: string) => {
-    const { data } = await supabase
-      .from('expense_descriptions')
-      .select('*')
-      .eq('dept_subcategory_id', subId)
-      .order('sort_order')
+    const { data } = await supabase.from('expense_descriptions').select('*').eq('dept_subcategory_id', subId).order('sort_order')
     if (data) setDescriptions(data)
   }, [])
 
@@ -436,31 +410,26 @@ function DescriptionsTab() {
   useEffect(() => { if (selectedSub) fetchDescriptions(selectedSub.id) }, [selectedSub]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const addDescription = async () => {
-    if (!newDescName.trim() || !selectedSub) return
-    await supabase.from('expense_descriptions').insert({
-      dept_subcategory_id: selectedSub.id,
-      name: newDescName.trim(),
-      sort_order: descriptions.length + 1
-    })
-    setNewDescName('')
-    fetchDescriptions(selectedSub.id)
+    if (!newDescName.trim() || !selectedSub || !canEdit) return
+    await supabase.from('expense_descriptions').insert({ dept_subcategory_id: selectedSub.id, name: newDescName.trim(), sort_order: descriptions.length + 1 })
+    setNewDescName(''); fetchDescriptions(selectedSub.id)
   }
 
   const updateName = async (id: string) => {
-    if (!editingName.trim()) return
+    if (!editingName.trim() || !canEdit) return
     await supabase.from('expense_descriptions').update({ name: editingName.trim() }).eq('id', id)
-    setEditingId(null)
-    setEditingName('')
+    setEditingId(null); setEditingName('')
     if (selectedSub) fetchDescriptions(selectedSub.id)
   }
 
   const toggleActive = async (id: string, current: boolean) => {
+    if (!canEdit) return
     await supabase.from('expense_descriptions').update({ is_active: !current }).eq('id', id)
     if (selectedSub) fetchDescriptions(selectedSub.id)
   }
 
   const deleteDesc = async (id: string) => {
-    if (!window.confirm('Delete this description?')) return
+    if (!canEdit || !window.confirm('Delete this description?')) return
     await supabase.from('expense_descriptions').delete().eq('id', id)
     if (selectedSub) fetchDescriptions(selectedSub.id)
   }
@@ -474,76 +443,73 @@ function DescriptionsTab() {
   if (loading) return <div style={s.loading}>Loading...</div>
 
   return (
-    <div style={s.twoCol}>
-      <div style={s.colPanel}>
-        <div style={s.colHeader}>
-          <div style={s.colTitle}>Dept. subcategories</div>
-          <span style={s.colCount}>{subcategories.length}</span>
-        </div>
-        <div style={{ padding: '8px 12px', borderBottom: '0.5px solid #f0f0ee' }}>
-          <input style={{ ...s.addInput, width: '100%', boxSizing: 'border-box' as const }}
-            value={searchSub} onChange={e => setSearchSub(e.target.value)}
-            placeholder="Search subcategories..." />
-        </div>
-        <div style={s.itemList}>
-          {filteredSubs.map(sub => (
-            <div key={sub.id}
-              style={{ ...s.itemRow, ...(selectedSub?.id === sub.id ? s.itemRowActive : {}) }}
-              onClick={() => setSelectedSub(sub)}>
-              <div>
-                <div style={s.itemName}>{sub.name}</div>
-                <div style={{ fontSize: '10px', color: '#aaa' }}>{sub.departments?.name}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={s.colPanel}>
-        <div style={s.colHeader}>
-          <div style={s.colTitle}>
-            {selectedSub ? `Descriptions — ${selectedSub.name}` : 'Select a subcategory'}
+    <>
+      {!canEdit && <div style={s.readOnlyBanner}>👁 Read only — only administrators can modify descriptions.</div>}
+      <div style={s.twoCol}>
+        <div style={s.colPanel}>
+          <div style={s.colHeader}>
+            <div style={s.colTitle}>Dept. subcategories</div>
+            <span style={s.colCount}>{subcategories.length}</span>
           </div>
-          {selectedSub && <span style={s.colCount}>{descriptions.length}</span>}
-        </div>
-        {!selectedSub ? (
-          <div style={s.emptyHint}>← Select a subcategory to manage its expense descriptions</div>
-        ) : (
-          <>
-            <div style={s.itemList}>
-              {descriptions.map(desc => (
-                <div key={desc.id} style={{ ...s.itemRow, opacity: desc.is_active ? 1 : 0.5 }}>
-                  {editingId === desc.id ? (
-                    <input style={s.inlineInput} value={editingName}
-                      onChange={e => setEditingName(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') updateName(desc.id) }}
-                      autoFocus />
-                  ) : (
-                    <span style={s.itemName}>{desc.name}</span>
-                  )}
-                  <div style={s.itemActions}>
-                    {editingId === desc.id ? (
-                      <button style={s.saveBtn} onClick={() => updateName(desc.id)}>✓</button>
-                    ) : (
-                      <button style={s.iconBtn} onClick={() => { setEditingId(desc.id); setEditingName(desc.name) }}>✏️</button>
-                    )}
-                    <button style={s.iconBtn} onClick={() => toggleActive(desc.id, desc.is_active)}>
-                      {desc.is_active ? '👁' : '🚫'}
-                    </button>
-                    <button style={s.iconBtn} onClick={() => deleteDesc(desc.id)}>🗑</button>
-                  </div>
+          <div style={{ padding: '8px 12px', borderBottom: '0.5px solid #f0f0ee' }}>
+            <input style={{ ...s.addInput, width: '100%', boxSizing: 'border-box' as const }}
+              value={searchSub} onChange={e => setSearchSub(e.target.value)} placeholder="Search subcategories..." />
+          </div>
+          <div style={s.itemList}>
+            {filteredSubs.map(sub => (
+              <div key={sub.id} style={{ ...s.itemRow, ...(selectedSub?.id === sub.id ? s.itemRowActive : {}) }} onClick={() => setSelectedSub(sub)}>
+                <div>
+                  <div style={s.itemName}>{sub.name}</div>
+                  <div style={{ fontSize: '10px', color: '#aaa' }}>{sub.departments?.name}</div>
                 </div>
-              ))}
-            </div>
-            <div style={s.addRow}>
-              <input style={s.addInput} value={newDescName} onChange={e => setNewDescName(e.target.value)}
-                placeholder="New description..." onKeyDown={e => { if (e.key === 'Enter') addDescription() }} />
-              <button style={s.addBtn} onClick={addDescription}>+ Add</button>
-            </div>
-          </>
-        )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={s.colPanel}>
+          <div style={s.colHeader}>
+            <div style={s.colTitle}>{selectedSub ? `Descriptions — ${selectedSub.name}` : 'Select a subcategory'}</div>
+            {selectedSub && <span style={s.colCount}>{descriptions.length}</span>}
+          </div>
+          {!selectedSub ? (
+            <div style={s.emptyHint}>← Select a subcategory to manage its expense descriptions</div>
+          ) : (
+            <>
+              <div style={s.itemList}>
+                {descriptions.map(desc => (
+                  <div key={desc.id} style={{ ...s.itemRow, opacity: desc.is_active ? 1 : 0.5 }}>
+                    {editingId === desc.id ? (
+                      <input style={s.inlineInput} value={editingName} onChange={e => setEditingName(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') updateName(desc.id) }} autoFocus />
+                    ) : (
+                      <span style={s.itemName}>{desc.name}</span>
+                    )}
+                    {canEdit && (
+                      <div style={s.itemActions}>
+                        {editingId === desc.id
+                          ? <button style={s.saveBtn} onClick={() => updateName(desc.id)}>✓</button>
+                          : <button style={s.iconBtn} onClick={() => { setEditingId(desc.id); setEditingName(desc.name) }}>✏️</button>
+                        }
+                        <button style={s.iconBtn} onClick={() => toggleActive(desc.id, desc.is_active)}>{desc.is_active ? '👁' : '🚫'}</button>
+                        <button style={s.iconBtn} onClick={() => deleteDesc(desc.id)}>🗑</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {canEdit && (
+                <div style={s.addRow}>
+                  <input style={s.addInput} value={newDescName} onChange={e => setNewDescName(e.target.value)}
+                    placeholder="New description..." onKeyDown={e => { if (e.key === 'Enter') addDescription() }} />
+                  <button style={s.addBtn} onClick={addDescription}>+ Add</button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -566,6 +532,7 @@ const s: Record<string, React.CSSProperties> = {
   tabBar: { display: 'flex', gap: 0, borderBottom: '0.5px solid #e5e5e5', marginBottom: '1.5rem' },
   tab: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '10px 20px', border: 'none', background: 'transparent', color: '#888', cursor: 'pointer', borderBottom: '2px solid transparent', marginBottom: '-0.5px' },
   tabActive: { color: '#111', borderBottomColor: '#1D9E75', fontWeight: '500' },
+  readOnlyBanner: { background: '#FAEEDA', border: '0.5px solid #E5B96A', borderRadius: '8px', padding: '8px 14px', fontSize: '12px', color: '#633806', marginBottom: '16px' },
   twoCol: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start' },
   colPanel: { background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '12px', overflow: 'hidden' },
   colHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '0.5px solid #e5e5e5', background: '#f5f5f3' },
