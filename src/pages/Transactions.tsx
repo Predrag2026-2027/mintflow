@@ -43,7 +43,8 @@ export default function Transactions() {
 
   const pageMap: Record<string, any> = {
     'Dashboard': 'dashboard', 'Transactions': 'transactions',
-    'P&L': 'pl', 'Cash Flow': 'cashflow', 'Reports': 'reports'
+    'P&L': 'pl', 'Cash Flow': 'cashflow', 'Reports': 'reports',
+    'Partners': 'partners', 'Settings': 'settings'
   }
 
   const fetchInvoices = async () => {
@@ -197,7 +198,7 @@ export default function Transactions() {
           <span style={s.navLogoText}>Mint<span style={{ color: '#1D9E75' }}>flow</span></span>
         </div>
         <div style={s.navLinks}>
-          {['Dashboard', 'Transactions', 'P&L', 'Cash Flow', 'Reports'].map(l => (
+          {['Dashboard', 'Transactions', 'P&L', 'Cash Flow', 'Reports', 'Partners', 'Settings'].map(l => (
             <span key={l} style={l === 'Transactions' ? s.navLinkActive : s.navLink}
               onClick={() => setPage(pageMap[l])}>{l}</span>
           ))}
@@ -342,8 +343,6 @@ export default function Transactions() {
               <div style={{ fontSize: '14px', color: '#888' }}>Loading...</div>
             </div>
           ) : (
-
-            /* ── INVOICES ── */
             activeTab === 'invoices' && (
               filteredInvoices.length === 0 ? (
                 <div style={s.emptyState}>
@@ -410,9 +409,7 @@ export default function Transactions() {
                               {showMenu === inv.id && (
                                 <div style={s.contextMenu}>
                                   <div style={s.contextItem} onClick={() => { setEditInvoice(inv); setShowMenu(null) }}>Edit</div>
-                                  <div style={s.contextItem} onClick={() => { setReconcileSource({ type: 'invoice', id: inv.id }); setShowMenu(null) }}>
-                                    🔗 Reconcile
-                                  </div>
+                                  <div style={s.contextItem} onClick={() => { setReconcileSource({ type: 'invoice', id: inv.id }); setShowMenu(null) }}>🔗 Reconcile</div>
                                   <div style={{ ...s.contextItem, color: '#A32D2D' }} onClick={() => deleteInvoice(inv.id)}>Delete</div>
                                 </div>
                               )}
@@ -427,7 +424,6 @@ export default function Transactions() {
             )
           )}
 
-          {/* ── TRANSACTIONS ── */}
           {!loading && activeTab === 'transactions' && (
             filteredTransactions.length === 0 ? (
               <div style={s.emptyState}>
@@ -491,9 +487,7 @@ export default function Transactions() {
                             <div style={s.contextMenu}>
                               <div style={s.contextItem} onClick={() => { setEditTransaction(t); setShowMenu(null) }}>Edit</div>
                               {t.type === 'direct' && (
-                                <div style={s.contextItem} onClick={() => { setReconcileSource({ type: 'transaction', id: t.id }); setShowMenu(null) }}>
-                                  🔗 Reconcile
-                                </div>
+                                <div style={s.contextItem} onClick={() => { setReconcileSource({ type: 'transaction', id: t.id }); setShowMenu(null) }}>🔗 Reconcile</div>
                               )}
                               <div style={{ ...s.contextItem, color: '#A32D2D' }} onClick={() => deleteTransaction(t.id)}>Delete</div>
                             </div>
@@ -507,7 +501,6 @@ export default function Transactions() {
             )
           )}
 
-          {/* ── PASSTHROUGH ── */}
           {!loading && activeTab === 'passthrough' && (
             filteredPassthroughs.length === 0 ? (
               <div style={s.emptyState}>
