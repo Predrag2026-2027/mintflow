@@ -6,6 +6,7 @@ import InvoiceDialog from '../components/InvoiceDialog'
 import TransactionDialog from '../components/TransactionDialog'
 import PassthroughDialog from '../components/PassthroughDialog'
 import ReconcilePanel from '../components/ReconcilePanel'
+import BulkImport from '../components/BulkImport'
 
 type Tab = 'invoices' | 'transactions' | 'passthrough'
 
@@ -14,6 +15,7 @@ export default function Transactions() {
   const { setPage } = React.useContext(NavContext)
 
   const [activeTab, setActiveTab] = useState<Tab>('invoices')
+  const [showBulkImport, setShowBulkImport] = useState(false)
 
   // Dialogs
   const [showInvoiceDialog, setShowInvoiceDialog] = useState(false)
@@ -228,6 +230,9 @@ export default function Transactions() {
             <button style={s.btnPassthrough} onClick={() => { setEditPassthrough(null); setShowPassthroughDialog(true) }}>
               ⚡ Pass-through
             </button>
+            <button style={s.btnBulk} onClick={() => setShowBulkImport(true)}>
+  📥 Bulk import
+</button>
           </div>
         </div>
 
@@ -598,6 +603,12 @@ export default function Transactions() {
           onReconciled={() => fetchAll()}
         />
       )}
+      {showBulkImport && (
+  <BulkImport
+    onClose={() => setShowBulkImport(false)}
+    onImported={() => fetchAll()}
+  />
+)}
     </div>
   )
 }
@@ -622,6 +633,7 @@ const s: Record<string, React.CSSProperties> = {
   btnInvoice: { background: '#1D9E75', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 16px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer' },
   btnTransaction: { background: '#0C447C', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 16px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer' },
   btnPassthrough: { background: 'transparent', color: '#633806', border: '0.5px solid #E5B96A', borderRadius: '8px', padding: '9px 16px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer' },
+  btnBulk: { background: 'transparent', color: '#0C447C', border: '0.5px solid #0C447C', borderRadius: '8px', padding: '9px 16px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer' },
   summaryRow: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '1.5rem' },
   summaryCard: { background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '12px', padding: '14px 16px' },
   summaryCardAlert: { border: '0.5px solid #F5A9A9', background: '#FFF5F5' },
