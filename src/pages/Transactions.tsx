@@ -15,12 +15,12 @@ export default function Transactions() {
   const { setPage } = React.useContext(NavContext)
 
   const [activeTab, setActiveTab] = useState<Tab>('invoices')
-  const [showBulkImport, setShowBulkImport] = useState(false)
 
   // Dialogs
   const [showInvoiceDialog, setShowInvoiceDialog] = useState(false)
   const [showTransactionDialog, setShowTransactionDialog] = useState(false)
   const [showPassthroughDialog, setShowPassthroughDialog] = useState(false)
+  const [showBulkImport, setShowBulkImport] = useState(false)
   const [editInvoice, setEditInvoice] = useState<any>(null)
   const [editTransaction, setEditTransaction] = useState<any>(null)
   const [editPassthrough, setEditPassthrough] = useState<any>(null)
@@ -231,8 +231,8 @@ export default function Transactions() {
               ⚡ Pass-through
             </button>
             <button style={s.btnBulk} onClick={() => setShowBulkImport(true)}>
-  📥 Bulk import
-</button>
+              📥 Bulk import
+            </button>
           </div>
         </div>
 
@@ -434,8 +434,11 @@ export default function Transactions() {
               <div style={s.emptyState}>
                 <div style={{ fontSize: '32px', marginBottom: '12px' }}>💳</div>
                 <div style={{ fontSize: '15px', fontWeight: '500', color: '#111', marginBottom: '6px' }}>No transactions yet</div>
-                <div style={{ fontSize: '13px', color: '#888', marginBottom: '20px' }}>Click "New transaction" to record a bank entry.</div>
-                <button style={s.btnTransaction} onClick={() => setShowTransactionDialog(true)}>💳 New transaction</button>
+                <div style={{ fontSize: '13px', color: '#888', marginBottom: '20px' }}>Click "New transaction" or use Bulk import.</div>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                  <button style={s.btnTransaction} onClick={() => setShowTransactionDialog(true)}>💳 New transaction</button>
+                  <button style={s.btnBulk} onClick={() => setShowBulkImport(true)}>📥 Bulk import</button>
+                </div>
               </div>
             ) : (
               <table style={s.table}>
@@ -604,11 +607,11 @@ export default function Transactions() {
         />
       )}
       {showBulkImport && (
-  <BulkImport
-    onClose={() => setShowBulkImport(false)}
-    onImported={() => fetchAll()}
-  />
-)}
+        <BulkImport
+          onClose={() => setShowBulkImport(false)}
+          onImported={() => fetchAll()}
+        />
+      )}
     </div>
   )
 }
