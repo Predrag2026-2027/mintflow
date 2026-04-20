@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { supabase } from '../supabase'
 
 interface Props {
@@ -38,73 +38,58 @@ interface ImportRow {
   parsed: ParsedRow
   proposal: AIProposal | null
   status: RowStatus
-  editing: boolean
-  // editable overrides
   override_tx_type: 'direct' | 'invoice_payment'
   override_tx_subtype: 'expense' | 'revenue'
   override_pl_category: string
+  override_pl_subcategory: string
   override_department: string
+  override_dept_subcategory: string
   override_expense_description: string
   override_revenue_stream: string
+  override_rev_alloc: string
   override_partner_name: string
+  override_note: string
 }
-
-const PL_CATEGORIES = [
-  'Employee and Labour',
-  'Professional and Production Services',
-  'Banking and Finance',
-  'General Business',
-  'Vehicle Expense',
-  'Taxes',
-]
-
-const DEPARTMENTS = [
-  'Marketing Expenses',
-  'Development Expenses',
-  'Product Expenses',
-  'Design Expenses',
-  'Sales Expenses',
-  'CS Expenses',
-  'Office & Administration',
-  'Shareholder Expenses',
-  'General Business Expenses',
-  'Loans / Credit / Dividends',
-]
 
 const REVENUE_STREAMS = [
   'Social Growth', 'Aimfox', 'Outsourced Services',
   'VAT Claimed', 'Interest Received', 'Loans', 'Credit', 'Other',
 ]
 
+// Static fallbacks (used if DB load fails)
+const PL_CATEGORIES_FALLBACK = [
+  'Employee and Labour', 'Professional and Production Services',
+  'Banking and Finance', 'General Business', 'Vehicle Expense', 'Taxes',
+]
+const DEPARTMENTS_FALLBACK = [
+  'Marketing Expenses', 'Development Expenses', 'Product Expenses',
+  'Design Expenses', 'Sales Expenses', 'CS Expenses', 'Office & Administration',
+  'Shareholder Expenses', 'General Business Expenses', 'Loans / Credit / Dividends',
+]
+
 function parseRaiffeisenTxt(content: string): ParsedRow[] {
   const lines = content.split('\n').filter(l => l.trim())
   if (lines.length < 2) return []
   const rows: ParsedRow[] = []
-  const dataLines = lines.slice(1)
-
-  dataLines.forEach((line, index) => {
+  lines.slice(1).forEach((line, index) => {
     if (!line.trim()) return
     const cols = line.split('#')
     if (cols.length < 13) return
-
     const parseAmount = (s: string): number | null => {
       if (!s || !s.trim()) return null
       const cleaned = s.trim().replace(/\./g, '').replace(',', '.')
       const val = parseFloat(cleaned)
       return isNaN(val) ? null : val
     }
-
     const debit = parseAmount(cols[5])
     const credit = parseAmount(cols[6])
     if (debit === null && credit === null) return
-
     rows.push({
-      id: `row_${index}`,  // stable index-based ID
+      id: `row_${index}`,
       date: cols[1]?.trim() || '',
       statement_number: cols[2]?.trim() || '',
       currency: cols[3]?.trim() || 'RSD',
-      debit,
-      credit,
+      debit, credit,
       partner_name: cols[11]?.trim() || '',
       description: cols[12]?.trim() || cols[8]?.trim() || '',
       reference_number: cols[15]?.trim() || cols[14]?.trim() || '',
@@ -112,7 +97,6 @@ function parseRaiffeisenTxt(content: string): ParsedRow[] {
       account_number: cols[10]?.trim() || '',
     })
   })
-
   return rows
 }
 
@@ -126,17 +110,14 @@ function formatDate(d: string): string {
 function makeImportRow(parsed: ParsedRow): ImportRow {
   const isExpense = (parsed.debit || 0) > 0
   return {
-    parsed,
-    proposal: null,
-    status: 'pending',
-    editing: false,
+    parsed, proposal: null, status: 'pending',
     override_tx_type: 'direct',
     override_tx_subtype: isExpense ? 'expense' : 'revenue',
-    override_pl_category: '',
-    override_department: '',
-    override_expense_description: '',
-    override_revenue_stream: '',
-    override_partner_name: parsed.partner_name,
+    override_pl_category: '', override_pl_subcategory: '',
+    override_department: '', override_dept_subcategory: '',
+    override_expense_description: '', override_revenue_stream: '',
+    override_rev_alloc: 'sg100',
+    override_partner_name: parsed.partner_name, override_note: '',
   }
 }
 
@@ -157,23 +138,67 @@ export default function BulkImport({ onClose, onImported }: Props) {
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  React.useEffect(() => {
+  // Category data from DB
+  const [plCategories, setPlCategories] = useState<any[]>([])
+  const [plSubcategories, setPlSubcategories] = useState<any[]>([])
+  const [departments, setDepartments] = useState<any[]>([])
+  const [deptSubcategories, setDeptSubcategories] = useState<any[]>([])
+  const [expenseDescriptions, setExpenseDescriptions] = useState<any[]>([])
+
+  useEffect(() => {
     const load = async () => {
-      const [{ data: comp }, { data: bnk }, { data: part }] = await Promise.all([
+      const [
+        { data: comp }, { data: bnk }, { data: part },
+        { data: plCat }, { data: plSub }, { data: dept },
+        { data: deptSub }, { data: expDesc },
+      ] = await Promise.all([
         supabase.from('companies').select('*').order('name'),
         supabase.from('banks').select('*').order('name'),
         supabase.from('partners').select('*').order('name'),
+        supabase.from('pl_categories').select('*').eq('is_active', true).order('sort_order'),
+        supabase.from('pl_subcategories').select('*').eq('is_active', true).order('sort_order'),
+        supabase.from('departments').select('*').eq('is_active', true).order('sort_order'),
+        supabase.from('dept_subcategories').select('*').eq('is_active', true).order('sort_order'),
+        supabase.from('expense_descriptions').select('*').eq('is_active', true).order('sort_order'),
       ])
       if (comp) setCompanies(comp)
       if (bnk) setAllBanks(bnk)
       if (part) setPartners(part)
+      if (plCat) setPlCategories(plCat)
+      if (plSub) setPlSubcategories(plSub)
+      if (dept) setDepartments(dept)
+      if (deptSub) setDeptSubcategories(deptSub)
+      if (expDesc) setExpenseDescriptions(expDesc)
     }
     load()
   }, [])
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (company) setBanks(allBanks.filter(b => b.company_id === company))
   }, [company, allBanks])
+
+  const getPlSubs = (catName: string) => {
+    const cat = plCategories.find(c => c.name === catName)
+    return cat ? plSubcategories.filter(s => s.category_id === cat.id) : []
+  }
+
+  const getDeptSubs = (deptName: string) => {
+    const dept = departments.find(d => d.name === deptName)
+    return dept ? deptSubcategories.filter(s => s.department_id === dept.id) : []
+  }
+
+  const getExpDescs = (deptSubName: string) => {
+    const sub = deptSubcategories.find(s => s.name === deptSubName)
+    return sub ? expenseDescriptions.filter(e => e.dept_subcategory_id === sub.id) : []
+  }
+
+  const plCategoryNames = plCategories.length > 0
+    ? plCategories.map(c => c.name)
+    : PL_CATEGORIES_FALLBACK
+
+  const departmentNames = departments.length > 0
+    ? departments.map(d => d.name)
+    : DEPARTMENTS_FALLBACK
 
   const handleFile = async (file: File) => {
     setParseError('')
@@ -203,15 +228,11 @@ export default function BulkImport({ onClose, onImported }: Props) {
     const batchSize = 5
     const supabaseUrl = process.env.REACT_APP_SUPABASE_URL
     const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY
-
-    // Work on a snapshot of rows
     const snapshot = [...rows]
     const result: ImportRow[] = snapshot.map(r => ({ ...r }))
 
     for (let i = 0; i < snapshot.length; i += batchSize) {
       const batch = snapshot.slice(i, i + batchSize)
-
-      // Send stable IDs (index-based)
       const batchPayload = batch.map(r => ({
         row_id: r.parsed.id,
         date: r.parsed.date,
@@ -235,31 +256,21 @@ export default function BulkImport({ onClose, onImported }: Props) {
             body: JSON.stringify({ rows: batchPayload, partnerNames }),
           }
         )
-
-        if (!response.ok) {
-          const errText = await response.text()
-          throw new Error(`HTTP ${response.status}: ${errText}`)
-        }
-
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
         const data = await response.json()
-        let proposals: any[] = []
+        let proposals: AIProposal[] = []
         try {
           const clean = (data.result || '[]').replace(/```json|```/g, '').trim()
           proposals = JSON.parse(clean)
-        } catch {
-          proposals = []
-        }
+        } catch { proposals = [] }
 
-        // Match by row_id
         for (let j = i; j < Math.min(i + batchSize, snapshot.length); j++) {
           const rowId = snapshot[j].parsed.id
           const proposal = proposals.find((p: any) => p.row_id === rowId)
           if (proposal) {
             const isExpense = (snapshot[j].parsed.debit || 0) > 0
             result[j] = {
-              ...result[j],
-              proposal,
-              status: 'accepted',
+              ...result[j], proposal, status: 'accepted',
               override_tx_type: proposal.tx_type || 'direct',
               override_tx_subtype: proposal.tx_subtype || (isExpense ? 'expense' : 'revenue'),
               override_pl_category: proposal.pl_category || '',
@@ -271,12 +282,10 @@ export default function BulkImport({ onClose, onImported }: Props) {
           }
         }
       } catch (err: any) {
-        console.error('AI batch error:', err)
         setAnalyzeError(`AI analysis failed: ${err.message}`)
         setAnalyzing(false)
         return
       }
-
       setProgress(Math.round(((i + batchSize) / snapshot.length) * 100))
     }
 
@@ -308,7 +317,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
       const isExpense = (p.debit || 0) > 0
       const amount = isExpense ? (p.debit || 0) : (p.credit || 0)
 
-      // Find or create partner
       let partnerId: string | null = null
       const nameToMatch = row.override_partner_name || p.partner_name
       if (nameToMatch) {
@@ -322,33 +330,26 @@ export default function BulkImport({ onClose, onImported }: Props) {
       }
 
       await supabase.from('transactions').insert({
-        company_id: company,
-        bank_id: bank,
-        partner_id: partnerId,
-        transaction_date: formatDate(p.date),
-        statement_number: p.statement_number || null,
-        type: row.override_tx_type,
-        tx_subtype: row.override_tx_subtype,
-        currency: p.currency,
-        amount,
-        exchange_rate: null,
-        amount_usd: p.currency === 'USD' ? amount : null,
+        company_id: company, bank_id: bank, partner_id: partnerId,
+        transaction_date: formatDate(p.date), statement_number: p.statement_number || null,
+        type: row.override_tx_type, tx_subtype: row.override_tx_subtype,
+        currency: p.currency, amount,
+        exchange_rate: null, amount_usd: p.currency === 'USD' ? amount : null,
         pl_impact: isDirectWithPL,
         pl_category: isDirectWithPL ? (row.override_pl_category || null) : null,
+        pl_subcategory: isDirectWithPL ? (row.override_pl_subcategory || null) : null,
         department: isDirectWithPL ? (row.override_department || null) : null,
+        dept_subcategory: isDirectWithPL ? (row.override_dept_subcategory || null) : null,
         expense_description: isDirectWithPL ? (row.override_expense_description || null) : null,
         revenue_stream: isDirectWithPL ? (row.override_revenue_stream || null) : null,
-        account_number: p.account_number || null,
-        model: p.model || null,
+        rev_alloc_type: row.override_rev_alloc || 'sg100',
+        account_number: p.account_number || null, model: p.model || null,
         reference_number: p.reference_number || null,
-        note: p.description || null,
-        status: 'posted',
+        note: row.override_note || p.description || null, status: 'posted',
       })
-
       done++
       setProgress(Math.round((done / accepted.length) * 100))
     }
-
     setStep('done')
   }
 
@@ -381,9 +382,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
     <div style={s.overlay}>
       <div style={{ ...s.dialog, alignItems: 'center', justifyContent: 'center', gap: '16px', minHeight: '260px' }}>
         <div style={{ fontSize: '13px', color: '#888' }}>Posting transactions... {progress}%</div>
-        <div style={{ ...s.progressBar, width: '300px' }}>
-          <div style={{ ...s.progressFill, width: `${progress}%` }} />
-        </div>
+        <div style={{ ...s.progressBar, width: '300px' }}><div style={{ ...s.progressFill, width: `${progress}%` }} /></div>
       </div>
     </div>
   )
@@ -471,16 +470,13 @@ export default function BulkImport({ onClose, onImported }: Props) {
 
               {analyzing && (
                 <div style={s.analyzingBox}>
-                  <div style={{ fontSize: '13px', color: '#085041', marginBottom: '8px' }}>🤖 AI is analyzing {rows.length} rows...</div>
+                  <div style={{ fontSize: '13px', color: '#085041', marginBottom: '8px' }}>🤖 AI analyzes {rows.length} rows in batches of 5...</div>
                   <div style={s.progressBar}><div style={{ ...s.progressFill, width: `${progress}%`, transition: 'width 0.5s' }} /></div>
                   <div style={{ fontSize: '11px', color: '#1D9E75', marginTop: '6px' }}>{progress}% complete</div>
                 </div>
               )}
-
               {analyzeError && (
-                <div style={{ ...s.infoBox, background: '#FCEBEB', borderColor: '#F5A9A9', color: '#A32D2D', marginTop: '12px' }}>
-                  ⚠️ {analyzeError}
-                </div>
+                <div style={{ ...s.infoBox, background: '#FCEBEB', borderColor: '#F5A9A9', color: '#A32D2D', marginTop: '12px' }}>⚠️ {analyzeError}</div>
               )}
             </>
           )}
@@ -505,6 +501,9 @@ export default function BulkImport({ onClose, onImported }: Props) {
                   const amount = isExpense ? p.debit : p.credit
                   const isExpanded = expandedRow === p.id
                   const conf = row.proposal?.confidence ? confStyle(row.proposal.confidence) : null
+                  const plSubs = getPlSubs(row.override_pl_category)
+                  const deptSubs = getDeptSubs(row.override_department)
+                  const expDescs = getExpDescs(row.override_dept_subcategory)
 
                   return (
                     <div key={p.id} style={{
@@ -512,7 +511,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                       ...(row.status === 'accepted' ? s.reviewRowAccepted : {}),
                       ...(row.status === 'rejected' ? s.reviewRowRejected : {}),
                     }}>
-                      {/* Main row header */}
+                      {/* Row header */}
                       <div style={s.reviewRowMain} onClick={() => toggleExpand(p.id)}>
                         <div style={{ flexShrink: 0, width: '14px', fontSize: '11px', color: '#bbb' }}>{isExpanded ? '▼' : '▶'}</div>
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -544,72 +543,133 @@ export default function BulkImport({ onClose, onImported }: Props) {
                         </div>
                       </div>
 
-                      {/* Expanded edit panel */}
+                      {/* Edit panel */}
                       {isExpanded && (
                         <div style={s.editPanel}>
                           {row.proposal && (
-                            <div style={s.aiNotes}>
-                              🤖 AI: {row.proposal.notes || 'No notes'}
-                            </div>
+                            <div style={s.aiNotes}>🤖 AI: {row.proposal.notes}</div>
                           )}
 
-                          <div style={s.editGrid}>
-                            {/* Partner */}
+                          {/* Row 1: Partner + Type */}
+                          <div style={s.editGrid2}>
                             <div style={s.editField}>
                               <label style={s.editLbl}>Partner</label>
                               <input style={s.editInput} value={row.override_partner_name}
                                 onChange={e => updateRow(p.id, { override_partner_name: e.target.value })} />
                             </div>
-
-                            {/* Type */}
                             <div style={s.editField}>
                               <label style={s.editLbl}>Type</label>
                               <select style={s.editSelect} value={row.override_tx_type}
-                                onChange={e => updateRow(p.id, { override_tx_type: e.target.value as any })}>
+                                onChange={e => updateRow(p.id, { override_tx_type: e.target.value as any, override_pl_category: '', override_pl_subcategory: '', override_department: '', override_dept_subcategory: '', override_expense_description: '' })}>
                                 <option value="direct">⚡ Direct (P&L impact)</option>
                                 <option value="invoice_payment">💳 Invoice payment (cash only)</option>
                               </select>
                             </div>
+                          </div>
 
-                            {/* Subtype */}
+                          {/* Subtype */}
+                          <div style={{ ...s.editGrid2, marginTop: '8px' }}>
                             <div style={s.editField}>
                               <label style={s.editLbl}>Subtype</label>
                               <select style={s.editSelect} value={row.override_tx_subtype}
                                 onChange={e => updateRow(p.id, { override_tx_subtype: e.target.value as any })}>
-                                <option value="expense">Expense</option>
-                                <option value="revenue">Revenue</option>
+                                <option value="expense">📤 Expense</option>
+                                <option value="revenue">📥 Revenue</option>
                               </select>
                             </div>
+                            <div style={s.editField}>
+                              <label style={s.editLbl}>Note</label>
+                              <input style={s.editInput} value={row.override_note}
+                                onChange={e => updateRow(p.id, { override_note: e.target.value })}
+                                placeholder={p.description?.slice(0, 40)} />
+                            </div>
+                          </div>
 
-                            {/* P&L Category — only for direct */}
-                            {row.override_tx_type === 'direct' && row.override_tx_subtype === 'expense' && (
-                              <>
+                          {/* Direct + Expense: full P&L hierarchy */}
+                          {row.override_tx_type === 'direct' && row.override_tx_subtype === 'expense' && (
+                            <>
+                              <div style={s.editSectionTitle}>P&L Classification</div>
+                              <div style={s.editGrid2}>
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>P&L Category</label>
                                   <select style={s.editSelect} value={row.override_pl_category}
-                                    onChange={e => updateRow(p.id, { override_pl_category: e.target.value })}>
+                                    onChange={e => updateRow(p.id, { override_pl_category: e.target.value, override_pl_subcategory: '' })}>
                                     <option value="">Select category...</option>
-                                    {PL_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                                    {plCategoryNames.map(c => <option key={c}>{c}</option>)}
                                   </select>
                                 </div>
+                                <div style={s.editField}>
+                                  <label style={s.editLbl}>P&L Sub-category</label>
+                                  <select style={s.editSelect} value={row.override_pl_subcategory}
+                                    onChange={e => updateRow(p.id, { override_pl_subcategory: e.target.value })}
+                                    disabled={!row.override_pl_category || plSubs.length === 0}>
+                                    <option value="">Select sub-category...</option>
+                                    {plSubs.map(s => <option key={s.id}>{s.name}</option>)}
+                                  </select>
+                                </div>
+                              </div>
+
+                              <div style={s.editSectionTitle}>Department</div>
+                              <div style={s.editGrid2}>
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>Department</label>
                                   <select style={s.editSelect} value={row.override_department}
-                                    onChange={e => updateRow(p.id, { override_department: e.target.value })}>
+                                    onChange={e => updateRow(p.id, { override_department: e.target.value, override_dept_subcategory: '', override_expense_description: '' })}>
                                     <option value="">Select department...</option>
-                                    {DEPARTMENTS.map(d => <option key={d}>{d}</option>)}
+                                    {departmentNames.map(d => <option key={d}>{d}</option>)}
                                   </select>
                                 </div>
                                 <div style={s.editField}>
-                                  <label style={s.editLbl}>Expense description</label>
-                                  <input style={s.editInput} value={row.override_expense_description}
-                                    onChange={e => updateRow(p.id, { override_expense_description: e.target.value })}
-                                    placeholder="e.g. Telekom, AWS, Rent..." />
+                                  <label style={s.editLbl}>Dept. Sub-category</label>
+                                  <select style={s.editSelect} value={row.override_dept_subcategory}
+                                    onChange={e => updateRow(p.id, { override_dept_subcategory: e.target.value, override_expense_description: '' })}
+                                    disabled={!row.override_department || deptSubs.length === 0}>
+                                    <option value="">Select sub-category...</option>
+                                    {deptSubs.map(s => <option key={s.id}>{s.name}</option>)}
+                                  </select>
                                 </div>
-                              </>
-                            )}
+                              </div>
 
-                            {row.override_tx_type === 'direct' && row.override_tx_subtype === 'revenue' && (
+                              <div style={{ marginTop: '8px' }}>
+                                <div style={s.editField}>
+                                  <label style={s.editLbl}>Expense description</label>
+                                  {expDescs.length > 0 ? (
+                                    <select style={s.editSelect} value={row.override_expense_description}
+                                      onChange={e => updateRow(p.id, { override_expense_description: e.target.value })}>
+                                      <option value="">Select description...</option>
+                                      {expDescs.map(d => <option key={d.id}>{d.name}</option>)}
+                                    </select>
+                                  ) : (
+                                    <input style={s.editInput} value={row.override_expense_description}
+                                      onChange={e => updateRow(p.id, { override_expense_description: e.target.value })}
+                                      placeholder="e.g. Telekom, AWS, Rent..." />
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Revenue stream allocation */}
+                              <div style={s.editSectionTitle}>Revenue stream allocation</div>
+                              <div style={s.allocGrid}>
+                                {[
+                                  { id: 'sg100', label: '100% Social Growth', sub: 'Full allocation' },
+                                  { id: 'af100', label: '100% Aimfox', sub: 'Full allocation' },
+                                  { id: 'shared', label: 'Shared 50/50', sub: 'Both streams' },
+                                  { id: 'byval', label: 'By value', sub: 'Custom split' },
+                                ].map(a => (
+                                  <div key={a.id}
+                                    style={{ ...s.allocBtn, ...(row.override_rev_alloc === a.id ? s.allocBtnActive : {}) }}
+                                    onClick={() => updateRow(p.id, { override_rev_alloc: a.id })}>
+                                    <div style={{ fontSize: '11px', fontWeight: '500', color: '#111' }}>{a.label}</div>
+                                    <div style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>{a.sub}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          )}
+
+                          {/* Direct + Revenue */}
+                          {row.override_tx_type === 'direct' && row.override_tx_subtype === 'revenue' && (
+                            <div style={{ marginTop: '8px' }}>
                               <div style={s.editField}>
                                 <label style={s.editLbl}>Revenue stream</label>
                                 <select style={s.editSelect} value={row.override_revenue_stream}
@@ -618,11 +678,11 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                   {REVENUE_STREAMS.map(r => <option key={r}>{r}</option>)}
                                 </select>
                               </div>
-                            )}
-                          </div>
+                            </div>
+                          )}
 
-                          {/* Accept button at bottom of edit panel */}
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px', gap: '6px' }}>
+                          {/* Footer buttons */}
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px', gap: '6px' }}>
                             <button style={s.btnSmallRed} onClick={() => rejectRow(p.id)}>✕ Reject</button>
                             <button style={s.btnSmallGreen} onClick={() => { acceptRow(p.id); toggleExpand(p.id) }}>✓ Accept & close</button>
                           </div>
@@ -669,7 +729,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
 
 const s: Record<string, React.CSSProperties> = {
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-  dialog: { background: '#fff', borderRadius: '16px', width: '900px', maxWidth: '96vw', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  dialog: { background: '#fff', borderRadius: '16px', width: '920px', maxWidth: '96vw', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
   header: { background: '#0a1628', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
   headerTitle: { color: '#fff', fontSize: '15px', fontWeight: '500', marginBottom: '3px' },
   headerSub: { color: 'rgba(255,255,255,0.45)', fontSize: '12px' },
@@ -700,11 +760,15 @@ const s: Record<string, React.CSSProperties> = {
   reviewRowMain: { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', cursor: 'pointer' },
   editPanel: { padding: '14px 16px', borderTop: '0.5px solid #e5e5e5', background: '#f9f9f7' },
   aiNotes: { fontSize: '11px', color: '#085041', background: '#E1F5EE', border: '0.5px solid #5DCAA5', borderRadius: '6px', padding: '6px 10px', marginBottom: '12px' },
-  editGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' },
+  editSectionTitle: { fontSize: '10px', fontWeight: '500', color: '#aaa', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginTop: '12px', marginBottom: '8px', paddingBottom: '4px', borderBottom: '0.5px solid #e5e5e5' },
+  editGrid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' },
   editField: { display: 'flex', flexDirection: 'column' as const, gap: '4px' },
   editLbl: { fontSize: '10px', fontWeight: '500', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.07em' },
   editInput: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '7px 10px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#fff', color: '#111', outline: 'none' },
   editSelect: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '7px 10px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#fff', color: '#111', outline: 'none' },
+  allocGrid: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '8px', marginTop: '6px' },
+  allocBtn: { border: '0.5px solid #e5e5e5', borderRadius: '8px', padding: '8px 6px', background: '#f5f5f3', cursor: 'pointer', textAlign: 'center' as const },
+  allocBtnActive: { border: '2px solid #1D9E75', background: '#E1F5EE' },
   actionBtn: { width: '28px', height: '28px', borderRadius: '6px', border: '0.5px solid #e5e5e5', background: '#f5f5f3', cursor: 'pointer', fontSize: '12px', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   actionBtnAccepted: { background: '#E1F5EE', border: '1.5px solid #1D9E75', color: '#085041' },
   actionBtnRejected: { background: '#FCEBEB', border: '1.5px solid #E24B4A', color: '#A32D2D' },
