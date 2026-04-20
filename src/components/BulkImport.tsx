@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { supabase } from '../supabase'
+import * as XLSX from 'xlsx'
 
 interface Props {
   onClose: () => void
@@ -18,6 +19,7 @@ interface ParsedRow {
   reference_number: string
   model: string
   account_number: string
+  source_format: 'raiffeisen' | 'truist' | 'boa' | 'amex'
 }
 
 interface AIProposal {
@@ -57,17 +59,21 @@ interface ImportRow {
   override_note: string
 }
 
-const PAYMENT_METHODS = [
-  'Wire transfer', 'ACH transfer', 'Cash', 'Check',
-  'Credit card', 'Direct debit', 'Other',
-]
+const PAYMENT_METHODS = ['Wire transfer', 'ACH transfer', 'Cash', 'Check', 'Credit card', 'Direct debit', 'Other']
+const REVENUE_STREAMS = ['Social Growth', 'Aimfox', 'Outsourced Services', 'VAT Claimed', 'Interest Received', 'Loans', 'Credit', 'Other']
 
-const REVENUE_STREAMS = [
-  'Social Growth', 'Aimfox', 'Outsourced Services',
-  'VAT Claimed', 'Interest Received', 'Loans', 'Credit', 'Other',
-]
+// ── Format detection ──────────────────────────────────────
+function detectFormat(content: string, fileName: string): 'raiffeisen' | 'truist' | 'boa' | 'amex' | 'unknown' {
+  if (fileName.toLowerCase().endsWith('.xlsx') || fileName.toLowerCase().endsWith('.xls')) return 'amex'
+  const firstLine = content.split('\n')[0] || ''
+  if (firstLine.includes('Br. ra') || firstLine.includes('Datum obrade') || firstLine.startsWith('265-') || firstLine.startsWith('160-') || firstLine.startsWith('170-')) return 'raiffeisen'
+  if (firstLine.includes('Posted Date') && firstLine.includes('Transaction Date') && firstLine.includes('Merchant name')) return 'truist'
+  if (firstLine.includes('Description') && firstLine.includes('Summary Amt')) return 'boa'
+  return 'unknown'
+}
 
-function parseRaiffeisenTxt(content: string): ParsedRow[] {
+// ── Raiffeisen/Intesa parser ──────────────────────────────
+function parseRaiffeisen(content: string): ParsedRow[] {
   const lines = content.split('\n').filter(l => l.trim())
   if (lines.length < 2) return []
   const rows: ParsedRow[] = []
@@ -75,17 +81,16 @@ function parseRaiffeisenTxt(content: string): ParsedRow[] {
     if (!line.trim()) return
     const cols = line.split('#')
     if (cols.length < 13) return
-    const parseAmount = (s: string): number | null => {
+    const parseAmt = (s: string): number | null => {
       if (!s || !s.trim()) return null
-      const cleaned = s.trim().replace(/\./g, '').replace(',', '.')
-      const val = parseFloat(cleaned)
-      return isNaN(val) ? null : val
+      const v = parseFloat(s.trim().replace(/\./g, '').replace(',', '.'))
+      return isNaN(v) ? null : v
     }
-    const debit = parseAmount(cols[5])
-    const credit = parseAmount(cols[6])
+    const debit = parseAmt(cols[5])
+    const credit = parseAmt(cols[6])
     if (debit === null && credit === null) return
     rows.push({
-      id: `row_${index}`,
+      id: `row_${index}`, source_format: 'raiffeisen',
       date: cols[1]?.trim() || '',
       statement_number: cols[2]?.trim() || '',
       currency: cols[3]?.trim() || 'RSD',
@@ -100,6 +105,185 @@ function parseRaiffeisenTxt(content: string): ParsedRow[] {
   return rows
 }
 
+// ── Truist CSV parser ────────────────────────────────────
+function parseTruist(content: string): ParsedRow[] {
+  const lines = content.split('\n').filter(l => l.trim())
+  if (lines.length < 2) return []
+  const rows: ParsedRow[] = []
+
+  // Parse CSV respecting quoted fields
+  const parseCSVLine = (line: string): string[] => {
+    const result: string[] = []
+    let current = ''
+    let inQuotes = false
+    for (let i = 0; i < line.length; i++) {
+      if (line[i] === '"') { inQuotes = !inQuotes }
+      else if (line[i] === ',' && !inQuotes) { result.push(current.trim()); current = '' }
+      else { current += line[i] }
+    }
+    result.push(current.trim())
+    return result
+  }
+
+  lines.slice(1).forEach((line, index) => {
+    if (!line.trim()) return
+    const cols = parseCSVLine(line)
+    if (cols.length < 9) return
+    // Posted Date, Transaction Date, Type, Check#, Full description, Merchant name, Category, Sub-category, Amount
+    const type = cols[2]?.trim().toLowerCase()
+    const rawAmount = parseFloat(cols[8]?.replace(/[,$]/g, '') || '0') || 0
+    if (rawAmount === 0) return
+
+    // Debit/POS = expense (money out), Credit = revenue (money in)
+    const isExpense = type === 'debit' || type === 'pos'
+    const debit = isExpense ? rawAmount : null
+    const credit = isExpense ? null : rawAmount
+
+    // Format date from MM/DD/YYYY to DD.MM.YYYY for consistency
+    const rawDate = cols[1]?.trim() || cols[0]?.trim() || ''
+    const dateParts = rawDate.split('/')
+    const date = dateParts.length === 3 ? `${dateParts[1]}.${dateParts[0]}.${dateParts[2]}` : rawDate
+
+    rows.push({
+      id: `row_${index}`, source_format: 'truist',
+      date, statement_number: '', currency: 'USD',
+      debit, credit,
+      partner_name: cols[5]?.trim() || '',
+      description: cols[4]?.trim() || '',
+      reference_number: cols[3]?.trim() || '',
+      model: '', account_number: '',
+    })
+  })
+  return rows
+}
+
+// ── Bank of America CSV parser ───────────────────────────
+function parseBOA(content: string): ParsedRow[] {
+  const lines = content.split('\n').filter(l => l.trim())
+  const rows: ParsedRow[] = []
+
+  // Find data start — skip summary header, find line with "Date,Description,Amount"
+  let dataStart = 0
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].startsWith('Date,') && lines[i].includes('Description') && lines[i].includes('Amount')) {
+      dataStart = i + 1
+      break
+    }
+  }
+  if (dataStart === 0) return []
+
+  const parseCSVLine = (line: string): string[] => {
+    const result: string[] = []
+    let current = ''
+    let inQuotes = false
+    for (let i = 0; i < line.length; i++) {
+      if (line[i] === '"') { inQuotes = !inQuotes }
+      else if (line[i] === ',' && !inQuotes) { result.push(current.trim()); current = '' }
+      else { current += line[i] }
+    }
+    result.push(current.trim())
+    return result
+  }
+
+  lines.slice(dataStart).forEach((line, index) => {
+    if (!line.trim()) return
+    const cols = parseCSVLine(line)
+    if (cols.length < 3) return
+
+    // Date, Description, Amount, Running Bal
+    const rawDate = cols[0]?.trim() || ''
+    const description = cols[1]?.trim() || ''
+    const rawAmount = parseFloat(cols[2]?.replace(/[,$]/g, '') || '0') || 0
+    if (rawAmount === 0) return
+
+    // Skip balance rows
+    if (description.toLowerCase().includes('beginning balance') || description.toLowerCase().includes('ending balance')) return
+
+    // Negative = expense, positive = revenue
+    const debit = rawAmount < 0 ? Math.abs(rawAmount) : null
+    const credit = rawAmount > 0 ? rawAmount : null
+
+    // Format date MM/DD/YYYY → DD.MM.YYYY
+    const dateParts = rawDate.split('/')
+    const date = dateParts.length === 3 ? `${dateParts[1]}.${dateParts[0]}.${dateParts[2]}` : rawDate
+
+    // Extract partner name from description (first meaningful part)
+    let partnerName = description
+    if (description.includes('WIRE TYPE:')) {
+      const bnfMatch = description.match(/BNF:([^I]+?)(?:\s+ID:|$)/)
+      if (bnfMatch) partnerName = bnfMatch[1].trim()
+    } else if (description.includes(' DES:')) {
+      partnerName = description.split(' DES:')[0].trim()
+    }
+
+    rows.push({
+      id: `row_${index}`, source_format: 'boa',
+      date, statement_number: '', currency: 'USD',
+      debit, credit,
+      partner_name: partnerName.slice(0, 60),
+      description: description.slice(0, 200),
+      reference_number: '', model: '', account_number: '',
+    })
+  })
+  return rows
+}
+
+// ── Amex XLSX parser ─────────────────────────────────────
+function parseAmex(workbook: XLSX.WorkBook): ParsedRow[] {
+  const ws = workbook.Sheets[workbook.SheetNames[0]]
+  const data: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+  const rows: ParsedRow[] = []
+
+  // Find header row (contains "Date" and "Description" and "Amount")
+  let headerRow = -1
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i]
+    if (row[0] === 'Date' && row[2] === 'Description' && row[3] === 'Amount') {
+      headerRow = i
+      break
+    }
+  }
+  if (headerRow === -1) return []
+
+  data.slice(headerRow + 1).forEach((row, index) => {
+    if (!row[0] || !row[3]) return
+    const rawAmount = typeof row[3] === 'number' ? row[3] : parseFloat(String(row[3]).replace(/[,$]/g, '') || '0')
+    if (isNaN(rawAmount) || rawAmount === 0) return
+
+    // Amex: positive = charge (expense), negative = payment/credit (skip payments)
+    const isPayment = String(row[2] || '').toLowerCase().includes('payment') && rawAmount < 0
+    if (isPayment) return
+
+    const debit = rawAmount > 0 ? rawAmount : null
+    const credit = rawAmount < 0 ? Math.abs(rawAmount) : null
+
+    // Format date MM/DD/YYYY → DD.MM.YYYY
+    const rawDate = String(row[0] || '')
+    const dateParts = rawDate.split('/')
+    const date = dateParts.length === 3 ? `${dateParts[1]}.${dateParts[0]}.${dateParts[2]}` : rawDate
+
+    const description = String(row[2] || '').trim()
+    const category = String(row[11] || '').trim()
+    const city = String(row[7] || '').trim()
+
+    // Partner name: clean up description
+    let partnerName = description.split(/\s{2,}/)[0].trim()
+    if (city) partnerName = partnerName.replace(city, '').trim()
+
+    rows.push({
+      id: `row_${index}`, source_format: 'amex',
+      date, statement_number: String(row[10] || ''), currency: 'USD',
+      debit, credit,
+      partner_name: partnerName.slice(0, 60),
+      description: `${description}${category ? ` [${category}]` : ''}`,
+      reference_number: String(row[10] || ''),
+      model: '', account_number: '',
+    })
+  })
+  return rows
+}
+
+// ── Format date to YYYY-MM-DD ────────────────────────────
 function formatDate(d: string): string {
   if (!d) return ''
   const parts = d.split('.')
@@ -125,9 +309,18 @@ function makeImportRow(parsed: ParsedRow): ImportRow {
   }
 }
 
+const FORMAT_LABELS: Record<string, string> = {
+  raiffeisen: '🇷🇸 Raiffeisen/Intesa',
+  truist: '🇺🇸 Truist',
+  boa: '🇺🇸 Bank of America',
+  amex: '💳 American Express',
+}
+
+// ── Main Component ────────────────────────────────────────
 export default function BulkImport({ onClose, onImported }: Props) {
   const [step, setStep] = useState<'upload' | 'review' | 'posting' | 'done'>('upload')
   const [rows, setRows] = useState<ImportRow[]>([])
+  const [detectedFormat, setDetectedFormat] = useState<string>('')
   const [analyzing, setAnalyzing] = useState(false)
   const [progress, setProgress] = useState(0)
   const [analyzeError, setAnalyzeError] = useState('')
@@ -143,7 +336,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  // Category data from DB — stored with id + name
   const [plCategories, setPlCategories] = useState<any[]>([])
   const [plSubcategories, setPlSubcategories] = useState<any[]>([])
   const [departments, setDepartments] = useState<any[]>([])
@@ -161,10 +353,10 @@ export default function BulkImport({ onClose, onImported }: Props) {
         supabase.from('banks').select('*').order('name'),
         supabase.from('partners').select('*').order('name'),
         supabase.from('pl_categories').select('id,name,sort_order').order('sort_order'),
-supabase.from('pl_subcategories').select('id,name,category_id,sort_order').order('sort_order'),
-supabase.from('departments').select('id,name,sort_order').order('sort_order'),
-supabase.from('dept_subcategories').select('id,name,department_id,sort_order').order('sort_order'),
-supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_order').order('sort_order'),
+        supabase.from('pl_subcategories').select('id,name,category_id,sort_order').order('sort_order'),
+        supabase.from('departments').select('id,name,sort_order').order('sort_order'),
+        supabase.from('dept_subcategories').select('id,name,department_id,sort_order').order('sort_order'),
+        supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_order').order('sort_order'),
       ])
       if (comp) setCompanies(comp)
       if (bnk) setAllBanks(bnk)
@@ -182,41 +374,49 @@ supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_o
     if (company) setBanks(allBanks.filter(b => b.company_id === company))
   }, [company, allBanks])
 
-  // Load open invoices when company changes
   useEffect(() => {
     if (!company) return
     const fetchInvoices = async () => {
-      const { data } = await supabase
-        .from('v_invoice_status')
-        .select('*')
-        .eq('company_id', company)
-        .in('calculated_status', ['unpaid', 'partial'])
-        .order('due_date', { ascending: true })
+      const { data } = await supabase.from('v_invoice_status').select('*').eq('company_id', company)
+        .in('calculated_status', ['unpaid', 'partial']).order('due_date', { ascending: true })
       if (data) setOpenInvoices(data)
     }
     fetchInvoices()
   }, [company])
 
-  // Cascade helpers — by ID
-  const getPlSubs = (categoryId: string) =>
-    plSubcategories.filter(s => s.category_id === categoryId)
-
-  const getDeptSubs = (departmentId: string) =>
-    deptSubcategories.filter(s => s.department_id === departmentId)
-
-  const getExpDescs = (deptSubId: string) =>
-    expenseDescriptions.filter(e => e.dept_subcategory_id === deptSubId)
+  const getPlSubs = (catId: string) => plSubcategories.filter(s => s.category_id === catId)
+  const getDeptSubs = (deptId: string) => deptSubcategories.filter(s => s.department_id === deptId)
+  const getExpDescs = (subId: string) => expenseDescriptions.filter(e => e.dept_subcategory_id === subId)
 
   const handleFile = async (file: File) => {
     setParseError('')
     setFileName(file.name)
-    const text = await file.text()
-    const parsed = parseRaiffeisenTxt(text)
-    if (parsed.length === 0) {
-      setParseError('Could not parse file. Make sure it is a valid bank export (# separator format).')
-      return
+    setDetectedFormat('')
+
+    try {
+      if (file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')) {
+        // Amex XLSX
+        const buffer = await file.arrayBuffer()
+        const workbook = XLSX.read(buffer, { type: 'array' })
+        const parsed = parseAmex(workbook)
+        if (parsed.length === 0) { setParseError('Could not parse Amex file. Make sure it is a valid Amex export.'); return }
+        setDetectedFormat('amex')
+        setRows(parsed.map(makeImportRow))
+      } else {
+        const text = await file.text()
+        const format = detectFormat(text, file.name)
+        if (format === 'unknown') { setParseError('Unknown file format. Supported: Raiffeisen/Intesa TXT, Truist CSV, Bank of America CSV, Amex XLSX.'); return }
+        setDetectedFormat(format)
+        let parsed: ParsedRow[] = []
+        if (format === 'raiffeisen') parsed = parseRaiffeisen(text)
+        else if (format === 'truist') parsed = parseTruist(text)
+        else if (format === 'boa') parsed = parseBOA(text)
+        if (parsed.length === 0) { setParseError('No transactions found in file.'); return }
+        setRows(parsed.map(makeImportRow))
+      }
+    } catch (err: any) {
+      setParseError(`Failed to read file: ${err.message}`)
     }
-    setRows(parsed.map(makeImportRow))
   }
 
   const handleDrop = (e: React.DragEvent) => {
@@ -251,32 +451,20 @@ supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_o
       }))
 
       try {
-        const response = await fetch(
-          `${supabaseUrl}/functions/v1/ai-categorize`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${supabaseAnonKey}`,
-              'apikey': supabaseAnonKey || '',
-            },
-            body: JSON.stringify({ rows: batchPayload, partnerNames }),
-          }
-        )
+        const response = await fetch(`${supabaseUrl}/functions/v1/ai-categorize`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseAnonKey}`, 'apikey': supabaseAnonKey || '' },
+          body: JSON.stringify({ rows: batchPayload, partnerNames }),
+        })
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         const data = await response.json()
         let proposals: AIProposal[] = []
-        try {
-          const clean = (data.result || '[]').replace(/```json|```/g, '').trim()
-          proposals = JSON.parse(clean)
-        } catch { proposals = [] }
+        try { proposals = JSON.parse((data.result || '[]').replace(/```json|```/g, '').trim()) } catch { proposals = [] }
 
         for (let j = i; j < Math.min(i + batchSize, snapshot.length); j++) {
-          const rowId = snapshot[j].parsed.id
-          const proposal = proposals.find((p: any) => p.row_id === rowId)
+          const proposal = proposals.find((p: any) => p.row_id === snapshot[j].parsed.id)
           if (proposal) {
             const isExpense = (snapshot[j].parsed.debit || 0) > 0
-            // Match category by name from AI
             const matchedCat = plCategories.find(c => c.name === proposal.pl_category)
             const matchedDept = departments.find(d => d.name === proposal.department)
             result[j] = {
@@ -335,9 +523,8 @@ supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_o
       const nameToMatch = row.override_partner_name || p.partner_name
       if (nameToMatch) {
         const existing = localPartners.find(pt => pt.name.toLowerCase() === nameToMatch.toLowerCase())
-        if (existing) {
-          partnerId = existing.id
-        } else {
+        if (existing) { partnerId = existing.id }
+        else {
           const { data: newP } = await supabase.from('partners').insert({ name: nameToMatch }).select().single()
           if (newP) { partnerId = newP.id; localPartners.push(newP) }
         }
@@ -363,21 +550,13 @@ supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_o
         note: row.override_note || p.description || null, status: 'posted',
       }).select().single()
 
-      // Link to invoice if selected
       if (row.override_tx_type === 'invoice_payment' && row.override_linked_invoice_id && newTx?.id) {
-        const usdAmount = p.currency === 'USD' ? amount : null
         await supabase.from('invoice_transaction_links').insert({
-          invoice_id: row.override_linked_invoice_id,
-          transaction_id: newTx.id,
-          allocated_amount: amount,
-          allocated_amount_usd: usdAmount,
+          invoice_id: row.override_linked_invoice_id, transaction_id: newTx.id,
+          allocated_amount: amount, allocated_amount_usd: p.currency === 'USD' ? amount : null,
         })
-        // Update invoice status
-        const { data: invStatus } = await supabase
-          .from('v_invoice_status').select('calculated_status').eq('id', row.override_linked_invoice_id).single()
-        if (invStatus) {
-          await supabase.from('invoices').update({ status: invStatus.calculated_status }).eq('id', row.override_linked_invoice_id)
-        }
+        const { data: invStatus } = await supabase.from('v_invoice_status').select('calculated_status').eq('id', row.override_linked_invoice_id).single()
+        if (invStatus) await supabase.from('invoices').update({ status: invStatus.calculated_status }).eq('id', row.override_linked_invoice_id)
       }
 
       done++
@@ -426,13 +605,12 @@ supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_o
         <div style={s.header}>
           <div>
             <div style={s.headerTitle}>{step === 'upload' ? '📥 Bulk import — bank statement' : `📋 Review & post — ${rows.length} rows`}</div>
-            <div style={s.headerSub}>{step === 'upload' ? 'Upload a bank export file. AI will categorize each row.' : `${accepted} accepted · ${rejected} rejected · ${pending} pending`}</div>
+            <div style={s.headerSub}>{step === 'upload' ? 'Supports: Raiffeisen/Intesa · Truist · Bank of America · Amex' : `${accepted} accepted · ${rejected} rejected · ${pending} pending`}</div>
           </div>
           <button style={s.closeBtn} onClick={onClose}>×</button>
         </div>
 
         <div style={s.body}>
-          {/* ── UPLOAD ── */}
           {step === 'upload' && (
             <>
               <div style={s.section}>
@@ -458,19 +636,24 @@ supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_o
               <div style={s.section}>
                 <div style={s.sectionTitle}>Upload file</div>
                 <div style={s.dropZone} onDrop={handleDrop} onDragOver={e => e.preventDefault()} onClick={() => fileRef.current?.click()}>
-                  <input ref={fileRef} type="file" accept=".txt,.csv" style={{ display: 'none' }}
+                  <input ref={fileRef} type="file" accept=".txt,.csv,.xlsx,.xls" style={{ display: 'none' }}
                     onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]) }} />
                   {fileName ? (
                     <div>
                       <div style={{ fontSize: '24px', marginBottom: '8px' }}>📄</div>
                       <div style={{ fontSize: '14px', fontWeight: '500', color: '#1D9E75' }}>{fileName}</div>
-                      <div style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>{rows.length} rows parsed — click to change</div>
+                      {detectedFormat && <div style={{ fontSize: '12px', color: '#085041', marginTop: '4px', background: '#E1F5EE', padding: '3px 10px', borderRadius: '20px', display: 'inline-block' }}>{FORMAT_LABELS[detectedFormat]} detected</div>}
+                      <div style={{ fontSize: '12px', color: '#888', marginTop: '6px' }}>{rows.length} rows parsed — click to change</div>
                     </div>
                   ) : (
                     <div>
                       <div style={{ fontSize: '32px', marginBottom: '12px' }}>📂</div>
-                      <div style={{ fontSize: '14px', fontWeight: '500', color: '#111', marginBottom: '4px' }}>Drop file here or click to browse</div>
-                      <div style={{ fontSize: '12px', color: '#888' }}>Raiffeisen / Intesa TXT (# separator)</div>
+                      <div style={{ fontSize: '14px', fontWeight: '500', color: '#111', marginBottom: '8px' }}>Drop file here or click to browse</div>
+                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' as const }}>
+                        {Object.entries(FORMAT_LABELS).map(([k, v]) => (
+                          <span key={k} style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '20px', background: '#f0f0ee', color: '#666' }}>{v}</span>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -482,6 +665,7 @@ supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_o
                   <div style={s.sectionTitle}>Parsed preview</div>
                   <div style={s.infoBox}>
                     <strong>{rows.length} rows</strong> · <strong>{rows.filter(r => (r.parsed.debit || 0) > 0).length} expenses</strong> · <strong>{rows.filter(r => (r.parsed.credit || 0) > 0).length} revenues</strong>
+                    {detectedFormat && <span style={{ marginLeft: '8px', opacity: 0.8 }}>· {FORMAT_LABELS[detectedFormat]}</span>}
                   </div>
                   <div style={s.previewList}>
                     {rows.slice(0, 5).map(r => (
@@ -491,8 +675,8 @@ supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_o
                           <div style={{ fontSize: '11px', color: '#888' }}>{r.parsed.date} · {r.parsed.description?.slice(0, 60)}</div>
                         </div>
                         <div style={{ textAlign: 'right' as const }}>
-                          {(r.parsed.debit || 0) > 0 && <div style={{ fontSize: '13px', fontWeight: '500', color: '#A32D2D' }}>-{r.parsed.debit?.toLocaleString('sr-RS')} {r.parsed.currency}</div>}
-                          {(r.parsed.credit || 0) > 0 && <div style={{ fontSize: '13px', fontWeight: '500', color: '#1D9E75' }}>+{r.parsed.credit?.toLocaleString('sr-RS')} {r.parsed.currency}</div>}
+                          {(r.parsed.debit || 0) > 0 && <div style={{ fontSize: '13px', fontWeight: '500', color: '#A32D2D' }}>-{r.parsed.debit?.toLocaleString()} {r.parsed.currency}</div>}
+                          {(r.parsed.credit || 0) > 0 && <div style={{ fontSize: '13px', fontWeight: '500', color: '#1D9E75' }}>+{r.parsed.credit?.toLocaleString()} {r.parsed.currency}</div>}
                         </div>
                       </div>
                     ))}
@@ -503,18 +687,15 @@ supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_o
 
               {analyzing && (
                 <div style={s.analyzingBox}>
-                  <div style={{ fontSize: '13px', color: '#085041', marginBottom: '8px' }}>🤖 AI analyzes {rows.length} rows in batches of 5...</div>
+                  <div style={{ fontSize: '13px', color: '#085041', marginBottom: '8px' }}>🤖 AI analyzing {rows.length} rows...</div>
                   <div style={s.progressBar}><div style={{ ...s.progressFill, width: `${progress}%`, transition: 'width 0.5s' }} /></div>
                   <div style={{ fontSize: '11px', color: '#1D9E75', marginTop: '6px' }}>{progress}% complete</div>
                 </div>
               )}
-              {analyzeError && (
-                <div style={{ ...s.infoBox, background: '#FCEBEB', borderColor: '#F5A9A9', color: '#A32D2D', marginTop: '12px' }}>⚠️ {analyzeError}</div>
-              )}
+              {analyzeError && <div style={{ ...s.infoBox, background: '#FCEBEB', borderColor: '#F5A9A9', color: '#A32D2D', marginTop: '12px' }}>⚠️ {analyzeError}</div>}
             </>
           )}
 
-          {/* ── REVIEW ── */}
           {step === 'review' && (
             <>
               <div style={s.reviewSummary}>
@@ -534,32 +715,23 @@ supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_o
                   const amount = isExpense ? p.debit : p.credit
                   const isExpanded = expandedRow === p.id
                   const conf = row.proposal?.confidence ? confStyle(row.proposal.confidence) : null
-
-                  // Cascaded options based on selected IDs
                   const plSubs = getPlSubs(row.override_pl_category_id)
                   const deptSubs = getDeptSubs(row.override_department_id)
                   const expDescs = getExpDescs(row.override_dept_subcategory_id)
                   const linkedInvoice = openInvoices.find(i => i.id === row.override_linked_invoice_id)
 
                   return (
-                    <div key={p.id} style={{
-                      ...s.reviewRow,
-                      ...(row.status === 'accepted' ? s.reviewRowAccepted : {}),
-                      ...(row.status === 'rejected' ? s.reviewRowRejected : {}),
-                    }}>
-                      {/* Row header */}
+                    <div key={p.id} style={{ ...s.reviewRow, ...(row.status === 'accepted' ? s.reviewRowAccepted : {}), ...(row.status === 'rejected' ? s.reviewRowRejected : {}) }}>
                       <div style={s.reviewRowMain} onClick={() => toggleExpand(p.id)}>
                         <div style={{ flexShrink: 0, width: '14px', fontSize: '11px', color: '#bbb' }}>{isExpanded ? '▼' : '▶'}</div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px', flexWrap: 'wrap' as const }}>
                             <span style={{ fontSize: '13px', fontWeight: '500', color: '#111' }}>{row.override_partner_name || p.partner_name || '—'}</span>
-                            {conf && row.proposal && (
-                              <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: conf.bg, color: conf.color }}>{row.proposal.confidence}</span>
-                            )}
+                            {conf && row.proposal && <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: conf.bg, color: conf.color }}>{row.proposal.confidence}</span>}
                             <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: row.override_tx_type === 'direct' ? '#E1F5EE' : '#E6F1FB', color: row.override_tx_type === 'direct' ? '#085041' : '#0C447C' }}>
                               {row.override_tx_type === 'direct' ? '⚡ Direct' : '💳 Inv. payment'}
                             </span>
-                            {!row.proposal && <span style={{ fontSize: '10px', color: '#aaa', fontStyle: 'italic' }}>No AI proposal</span>}
+                            <span style={{ fontSize: '10px', color: '#aaa' }}>{FORMAT_LABELS[p.source_format]}</span>
                           </div>
                           <div style={{ fontSize: '11px', color: '#888' }}>{p.date} · {p.description?.slice(0, 65)}{(p.description?.length || 0) > 65 ? '...' : ''}</div>
                           {row.override_tx_type === 'direct' && row.override_pl_category_name && (
@@ -567,13 +739,15 @@ supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_o
                           )}
                           {row.override_tx_type === 'invoice_payment' && (
                             <div style={{ fontSize: '11px', color: '#0C447C', marginTop: '2px' }}>
-                              💳 Cash flow only{linkedInvoice ? ` · Closes: ${linkedInvoice.partner_name || '—'} ${linkedInvoice.invoice_number ? `(${linkedInvoice.invoice_number})` : ''}` : ' · No invoice linked'}
+                              💳 Cash flow only{linkedInvoice ? ` · Closes: ${linkedInvoice.partner_name || '—'}${linkedInvoice.invoice_number ? ` (${linkedInvoice.invoice_number})` : ''}` : ' · No invoice linked'}
                             </div>
                           )}
                         </div>
                         <div style={{ textAlign: 'right' as const, flexShrink: 0, marginRight: '10px' }}>
-                          <div style={{ fontSize: '13px', fontWeight: '500', color: isExpense ? '#A32D2D' : '#1D9E75' }}>{isExpense ? '-' : '+'}{amount?.toLocaleString('sr-RS')} {p.currency}</div>
-                          <div style={{ fontSize: '10px', color: '#aaa' }}>Izvod #{p.statement_number}</div>
+                          <div style={{ fontSize: '13px', fontWeight: '500', color: isExpense ? '#A32D2D' : '#1D9E75' }}>{isExpense ? '-' : '+'}{amount?.toLocaleString()} {p.currency}</div>
+                          <div style={{ fontSize: '10px', color: '#aaa' }}>
+                            {p.statement_number ? `Izvod #${p.statement_number}` : p.date}
+                          </div>
                         </div>
                         <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                           <button style={{ ...s.actionBtn, ...(row.status === 'accepted' ? s.actionBtnAccepted : {}) }} onClick={() => acceptRow(p.id)}>✓</button>
@@ -581,31 +755,19 @@ supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_o
                         </div>
                       </div>
 
-                      {/* ── EDIT PANEL ── */}
                       {isExpanded && (
                         <div style={s.editPanel}>
-                          {row.proposal && (
-                            <div style={s.aiNotes}>🤖 AI: {row.proposal.notes}</div>
-                          )}
+                          {row.proposal && <div style={s.aiNotes}>🤖 AI: {row.proposal.notes}</div>}
 
-                          {/* Basic fields */}
                           <div style={s.editGrid2}>
                             <div style={s.editField}>
                               <label style={s.editLbl}>Partner</label>
-                              <input style={s.editInput} value={row.override_partner_name}
-                                onChange={e => updateRow(p.id, { override_partner_name: e.target.value })} />
+                              <input style={s.editInput} value={row.override_partner_name} onChange={e => updateRow(p.id, { override_partner_name: e.target.value })} />
                             </div>
                             <div style={s.editField}>
                               <label style={s.editLbl}>Type</label>
                               <select style={s.editSelect} value={row.override_tx_type}
-                                onChange={e => updateRow(p.id, {
-                                  override_tx_type: e.target.value as any,
-                                  override_pl_category_id: '', override_pl_category_name: '',
-                                  override_pl_subcategory_id: '', override_pl_subcategory_name: '',
-                                  override_department_id: '', override_department_name: '',
-                                  override_dept_subcategory_id: '', override_dept_subcategory_name: '',
-                                  override_expense_description: '',
-                                })}>
+                                onChange={e => updateRow(p.id, { override_tx_type: e.target.value as any, override_pl_category_id: '', override_pl_category_name: '', override_pl_subcategory_id: '', override_pl_subcategory_name: '', override_department_id: '', override_department_name: '', override_dept_subcategory_id: '', override_dept_subcategory_name: '', override_expense_description: '' })}>
                                 <option value="direct">⚡ Direct (P&L impact)</option>
                                 <option value="invoice_payment">💳 Invoice payment (cash only)</option>
                               </select>
@@ -615,54 +777,45 @@ supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_o
                           <div style={{ ...s.editGrid2, marginTop: '8px' }}>
                             <div style={s.editField}>
                               <label style={s.editLbl}>Subtype</label>
-                              <select style={s.editSelect} value={row.override_tx_subtype}
-                                onChange={e => updateRow(p.id, { override_tx_subtype: e.target.value as any })}>
+                              <select style={s.editSelect} value={row.override_tx_subtype} onChange={e => updateRow(p.id, { override_tx_subtype: e.target.value as any })}>
                                 <option value="expense">📤 Expense</option>
                                 <option value="revenue">📥 Revenue</option>
                               </select>
                             </div>
                             <div style={s.editField}>
                               <label style={s.editLbl}>Note</label>
-                              <input style={s.editInput} value={row.override_note}
-                                onChange={e => updateRow(p.id, { override_note: e.target.value })}
-                                placeholder={p.description?.slice(0, 40)} />
+                              <input style={s.editInput} value={row.override_note} onChange={e => updateRow(p.id, { override_note: e.target.value })} placeholder={p.description?.slice(0, 40)} />
                             </div>
                           </div>
 
-                          {/* ── INVOICE PAYMENT ── */}
                           {row.override_tx_type === 'invoice_payment' && (
                             <>
                               <div style={s.editSectionTitle}>Payment details</div>
                               <div style={s.editGrid2}>
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>Payment method</label>
-                                  <select style={s.editSelect} value={row.override_payment_method}
-                                    onChange={e => updateRow(p.id, { override_payment_method: e.target.value })}>
+                                  <select style={s.editSelect} value={row.override_payment_method} onChange={e => updateRow(p.id, { override_payment_method: e.target.value })}>
                                     {PAYMENT_METHODS.map(m => <option key={m}>{m}</option>)}
                                   </select>
                                 </div>
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>Link to open invoice</label>
-                                  <select style={s.editSelect} value={row.override_linked_invoice_id}
-                                    onChange={e => updateRow(p.id, { override_linked_invoice_id: e.target.value })}>
-                                    <option value="">— No invoice (post standalone) —</option>
+                                  <select style={s.editSelect} value={row.override_linked_invoice_id} onChange={e => updateRow(p.id, { override_linked_invoice_id: e.target.value })}>
+                                    <option value="">— No invoice (standalone) —</option>
                                     {openInvoices.map(inv => (
-                                      <option key={inv.id} value={inv.id}>
-                                        {inv.partner_name || '—'}{inv.invoice_number ? ` · ${inv.invoice_number}` : ''} · ${(inv.remaining_usd || 0).toFixed(0)} rem.
-                                      </option>
+                                      <option key={inv.id} value={inv.id}>{inv.partner_name || '—'}{inv.invoice_number ? ` · ${inv.invoice_number}` : ''} · ${(inv.remaining_usd || 0).toFixed(0)} rem.</option>
                                     ))}
                                   </select>
                                 </div>
                               </div>
-                              {row.override_linked_invoice_id && linkedInvoice && (
+                              {linkedInvoice && (
                                 <div style={{ ...s.aiNotes, background: '#E6F1FB', borderColor: '#7FB8EE', color: '#0C447C', marginTop: '8px' }}>
-                                  💳 Will close invoice: <strong>{linkedInvoice.partner_name}</strong>{linkedInvoice.invoice_number ? ` · ${linkedInvoice.invoice_number}` : ''} · Remaining: <strong>${(linkedInvoice.remaining_usd || 0).toFixed(2)}</strong>
+                                  💳 Will close: <strong>{linkedInvoice.partner_name}</strong>{linkedInvoice.invoice_number ? ` · ${linkedInvoice.invoice_number}` : ''} · Remaining: <strong>${(linkedInvoice.remaining_usd || 0).toFixed(2)}</strong>
                                 </div>
                               )}
                             </>
                           )}
 
-                          {/* ── DIRECT EXPENSE ── */}
                           {row.override_tx_type === 'direct' && row.override_tx_subtype === 'expense' && (
                             <>
                               <div style={s.editSectionTitle}>P&L Classification</div>
@@ -670,14 +823,7 @@ supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_o
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>P&L Category</label>
                                   <select style={s.editSelect} value={row.override_pl_category_id}
-                                    onChange={e => {
-                                      const cat = plCategories.find(c => c.id === e.target.value)
-                                      updateRow(p.id, {
-                                        override_pl_category_id: e.target.value,
-                                        override_pl_category_name: cat?.name || '',
-                                        override_pl_subcategory_id: '', override_pl_subcategory_name: '',
-                                      })
-                                    }}>
+                                    onChange={e => { const c = plCategories.find(x => x.id === e.target.value); updateRow(p.id, { override_pl_category_id: e.target.value, override_pl_category_name: c?.name || '', override_pl_subcategory_id: '', override_pl_subcategory_name: '' }) }}>
                                     <option value="">Select category...</option>
                                     {plCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                   </select>
@@ -685,31 +831,19 @@ supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_o
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>P&L Sub-category</label>
                                   <select style={s.editSelect} value={row.override_pl_subcategory_id}
-                                    onChange={e => {
-                                      const sub = plSubcategories.find(s => s.id === e.target.value)
-                                      updateRow(p.id, { override_pl_subcategory_id: e.target.value, override_pl_subcategory_name: sub?.name || '' })
-                                    }}
+                                    onChange={e => { const sub = plSubcategories.find(x => x.id === e.target.value); updateRow(p.id, { override_pl_subcategory_id: e.target.value, override_pl_subcategory_name: sub?.name || '' }) }}
                                     disabled={!row.override_pl_category_id || plSubs.length === 0}>
                                     <option value="">Select sub-category...</option>
                                     {plSubs.map(sub => <option key={sub.id} value={sub.id}>{sub.name}</option>)}
                                   </select>
                                 </div>
                               </div>
-
                               <div style={s.editSectionTitle}>Department</div>
                               <div style={s.editGrid2}>
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>Department</label>
                                   <select style={s.editSelect} value={row.override_department_id}
-                                    onChange={e => {
-                                      const dept = departments.find(d => d.id === e.target.value)
-                                      updateRow(p.id, {
-                                        override_department_id: e.target.value,
-                                        override_department_name: dept?.name || '',
-                                        override_dept_subcategory_id: '', override_dept_subcategory_name: '',
-                                        override_expense_description: '',
-                                      })
-                                    }}>
+                                    onChange={e => { const d = departments.find(x => x.id === e.target.value); updateRow(p.id, { override_department_id: e.target.value, override_department_name: d?.name || '', override_dept_subcategory_id: '', override_dept_subcategory_name: '', override_expense_description: '' }) }}>
                                     <option value="">Select department...</option>
                                     {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                                   </select>
@@ -717,49 +851,30 @@ supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_o
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>Dept. Sub-category</label>
                                   <select style={s.editSelect} value={row.override_dept_subcategory_id}
-                                    onChange={e => {
-                                      const sub = deptSubcategories.find(s => s.id === e.target.value)
-                                      updateRow(p.id, {
-                                        override_dept_subcategory_id: e.target.value,
-                                        override_dept_subcategory_name: sub?.name || '',
-                                        override_expense_description: '',
-                                      })
-                                    }}
+                                    onChange={e => { const sub = deptSubcategories.find(x => x.id === e.target.value); updateRow(p.id, { override_dept_subcategory_id: e.target.value, override_dept_subcategory_name: sub?.name || '', override_expense_description: '' }) }}
                                     disabled={!row.override_department_id || deptSubs.length === 0}>
                                     <option value="">Select sub-category...</option>
                                     {deptSubs.map(sub => <option key={sub.id} value={sub.id}>{sub.name}</option>)}
                                   </select>
                                 </div>
                               </div>
-
                               <div style={{ marginTop: '8px' }}>
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>Expense description</label>
                                   {expDescs.length > 0 ? (
-                                    <select style={s.editSelect} value={row.override_expense_description}
-                                      onChange={e => updateRow(p.id, { override_expense_description: e.target.value })}>
+                                    <select style={s.editSelect} value={row.override_expense_description} onChange={e => updateRow(p.id, { override_expense_description: e.target.value })}>
                                       <option value="">Select description...</option>
                                       {expDescs.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
                                     </select>
                                   ) : (
-                                    <input style={s.editInput} value={row.override_expense_description}
-                                      onChange={e => updateRow(p.id, { override_expense_description: e.target.value })}
-                                      placeholder="e.g. Telekom, AWS, Rent..." />
+                                    <input style={s.editInput} value={row.override_expense_description} onChange={e => updateRow(p.id, { override_expense_description: e.target.value })} placeholder="e.g. Telekom, AWS, Rent..." />
                                   )}
                                 </div>
                               </div>
-
                               <div style={s.editSectionTitle}>Revenue stream allocation</div>
                               <div style={s.allocGrid}>
-                                {[
-                                  { id: 'sg100', label: '100% Social Growth', sub: 'Full allocation' },
-                                  { id: 'af100', label: '100% Aimfox', sub: 'Full allocation' },
-                                  { id: 'shared', label: 'Shared 50/50', sub: 'Both streams' },
-                                  { id: 'byval', label: 'By value', sub: 'Custom split' },
-                                ].map(a => (
-                                  <div key={a.id}
-                                    style={{ ...s.allocBtn, ...(row.override_rev_alloc === a.id ? s.allocBtnActive : {}) }}
-                                    onClick={() => updateRow(p.id, { override_rev_alloc: a.id })}>
+                                {[{ id: 'sg100', label: '100% Social Growth', sub: 'Full allocation' }, { id: 'af100', label: '100% Aimfox', sub: 'Full allocation' }, { id: 'shared', label: 'Shared 50/50', sub: 'Both streams' }, { id: 'byval', label: 'By value', sub: 'Custom split' }].map(a => (
+                                  <div key={a.id} style={{ ...s.allocBtn, ...(row.override_rev_alloc === a.id ? s.allocBtnActive : {}) }} onClick={() => updateRow(p.id, { override_rev_alloc: a.id })}>
                                     <div style={{ fontSize: '11px', fontWeight: '500', color: '#111' }}>{a.label}</div>
                                     <div style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>{a.sub}</div>
                                   </div>
@@ -768,13 +883,11 @@ supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_o
                             </>
                           )}
 
-                          {/* ── DIRECT REVENUE ── */}
                           {row.override_tx_type === 'direct' && row.override_tx_subtype === 'revenue' && (
                             <div style={{ marginTop: '8px' }}>
                               <div style={s.editField}>
                                 <label style={s.editLbl}>Revenue stream</label>
-                                <select style={s.editSelect} value={row.override_revenue_stream}
-                                  onChange={e => updateRow(p.id, { override_revenue_stream: e.target.value })}>
+                                <select style={s.editSelect} value={row.override_revenue_stream} onChange={e => updateRow(p.id, { override_revenue_stream: e.target.value })}>
                                   <option value="">Select stream...</option>
                                   {REVENUE_STREAMS.map(r => <option key={r}>{r}</option>)}
                                 </select>
@@ -782,7 +895,6 @@ supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_o
                             </div>
                           )}
 
-                          {/* Footer buttons */}
                           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px', gap: '6px' }}>
                             <button style={s.btnSmallRed} onClick={() => rejectRow(p.id)}>✕ Reject</button>
                             <button style={s.btnSmallGreen} onClick={() => { acceptRow(p.id); toggleExpand(p.id) }}>✓ Accept & close</button>
@@ -797,7 +909,6 @@ supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_o
           )}
         </div>
 
-        {/* Footer */}
         <div style={s.footer}>
           {step === 'upload' && (
             <>
