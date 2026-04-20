@@ -154,6 +154,11 @@ export default function BulkImport({ onClose, onImported }: Props) {
     const batchSize = 5
     const result: ImportRow[] = rows.map(r => ({ ...r }))
 
+    // Get auth session for Edge Function call
+    const { data: { session } } = await supabase.auth.getSession()
+    const supabaseUrl = process.env.REACT_APP_SUPABASE_URL
+    const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY
+
     for (let i = 0; i < rows.length; i += batchSize) {
       const batch = rows.slice(i, i + batchSize)
 
@@ -168,11 +173,25 @@ export default function BulkImport({ onClose, onImported }: Props) {
       }))
 
       try {
-        const { data, error } = await supabase.functions.invoke('ai-categorize', {
-          body: { rows: batchPayload, partnerNames },
-        })
+        const response = await fetch(
+          `${supabaseUrl}/functions/v1/ai-categorize`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session?.access_token}`,
+              'apikey': supabaseAnonKey || '',
+            },
+            body: JSON.stringify({ rows: batchPayload, partnerNames }),
+          }
+        )
 
-        if (error) throw new Error(error.message)
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}))
+          throw new Error(errData.error || `HTTP ${response.status}`)
+        }
+
+        const data = await response.json()
 
         let proposals: AIProposal[] = []
         try {
@@ -182,7 +201,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
           proposals = []
         }
 
-        // Apply proposals to correct rows by row_id
+        // Apply proposals by row_id
         for (let j = i; j < Math.min(i + batchSize, rows.length); j++) {
           const proposal = proposals.find(p => p.row_id === rows[j].parsed.id)
           if (proposal) {
@@ -192,7 +211,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
 
       } catch (err: any) {
         console.error('AI batch error:', err)
-        setAnalyzeError(`AI analysis failed: ${err.message}. Check Edge Function logs in Supabase.`)
+        setAnalyzeError(`AI analysis failed: ${err.message}`)
         setAnalyzing(false)
         return
       }
@@ -206,8 +225,8 @@ export default function BulkImport({ onClose, onImported }: Props) {
   }
 
   const toggleRow = (id: string) => setExpandedRow(prev => prev === id ? null : id)
-  const acceptRow = (id: string) => setRows(prev => prev.map(r => r.parsed.id === id ? { ...r, status: 'accepted' } : r))
-  const rejectRow = (id: string) => setRows(prev => prev.map(r => r.parsed.id === id ? { ...r, status: 'rejected' } : r))
+  const acceptRow = (id: string) => setRows(prev => prev.map(r => r.parsed.id === id ? { ...r, status: 'accepted' as RowStatus } : r))
+  const rejectRow = (id: string) => setRows(prev => prev.map(r => r.parsed.id === id ? { ...r, status: 'rejected' as RowStatus } : r))
   const acceptAll = () => setRows(prev => prev.map(r => ({ ...r, status: 'accepted' as RowStatus })))
   const rejectAll = () => setRows(prev => prev.map(r => ({ ...r, status: 'rejected' as RowStatus })))
 
@@ -290,7 +309,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="2"><path d="M5 13l4 4L19 7" /></svg>
         </div>
         <div style={{ fontFamily: 'Georgia,serif', fontSize: '22px', color: '#111' }}>Import complete!</div>
-        <div style={{ fontSize: '13px', color: '#888', textAlign: 'center' }}>
+        <div style={{ fontSize: '13px', color: '#888', textAlign: 'center' as const }}>
           {accepted} transaction{accepted !== 1 ? 's' : ''} posted.<br />
           {rejected} row{rejected !== 1 ? 's' : ''} skipped.
         </div>
@@ -397,7 +416,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                         </div>
                       </div>
                     ))}
-                    {rows.length > 5 && <div style={{ padding: '8px 14px', fontSize: '12px', color: '#aaa', textAlign: 'center' }}>+{rows.length - 5} more rows...</div>}
+                    {rows.length > 5 && <div style={{ padding: '8px 14px', fontSize: '12px', color: '#aaa', textAlign: 'center' as const }}>+{rows.length - 5} more rows...</div>}
                   </div>
                 </div>
               )}
@@ -475,9 +494,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                 {prop.tx_type === 'direct' ? '⚡ Direct' : '💳 Inv. payment'}
                               </span>
                             )}
-                            {!prop && (
-                              <span style={{ fontSize: '10px', color: '#aaa', fontStyle: 'italic' }}>No AI proposal</span>
-                            )}
+                            {!prop && <span style={{ fontSize: '10px', color: '#aaa', fontStyle: 'italic' }}>No AI proposal</span>}
                           </div>
                           <div style={{ fontSize: '11px', color: '#888' }}>
                             {p.date} · {p.description?.slice(0, 70)}{(p.description?.length || 0) > 70 ? '...' : ''}
@@ -524,7 +541,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                             </div>
                           ) : (
                             <div style={{ fontSize: '12px', color: '#aaa', fontStyle: 'italic' }}>
-                              No AI proposal available for this row. It will be posted as a direct transaction without P&L categorization.
+                              No AI proposal — will post as direct transaction without P&L categorization.
                             </div>
                           )}
                         </div>
@@ -563,7 +580,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                 {accepted} transaction{accepted !== 1 ? 's' : ''} will be posted
               </span>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button style={s.btnGhost} onClick={() => setStep('upload')}>← Back</button>
+                <button style={s.btnGhost} onClick={() => { setStep('upload'); setRows(rows.map(r => ({ ...r, status: 'pending' as RowStatus }))) }}>← Back</button>
                 <button
                   style={{ ...s.btnPrimary, opacity: accepted === 0 ? 0.5 : 1 }}
                   onClick={postAccepted}
