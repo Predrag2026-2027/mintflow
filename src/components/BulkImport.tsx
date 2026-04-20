@@ -102,7 +102,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
   const [step, setStep] = useState<'upload' | 'review' | 'posting' | 'done'>('upload')
   const [rows, setRows] = useState<ImportRow[]>([])
   const [analyzing, setAnalyzing] = useState(false)
-  const [posting, setPosting] = useState(false)
+  const [, setPosting] = useState(false)
   const [progress, setProgress] = useState(0)
   const [company, setCompany] = useState('')
   const [bank, setBank] = useState('')
