@@ -40,10 +40,16 @@ interface ImportRow {
   status: RowStatus
   override_tx_type: 'direct' | 'invoice_payment'
   override_tx_subtype: 'expense' | 'revenue'
-  override_pl_category: string
-  override_pl_subcategory: string
-  override_department: string
-  override_dept_subcategory: string
+  override_payment_method: string
+  override_linked_invoice_id: string
+  override_pl_category_id: string
+  override_pl_category_name: string
+  override_pl_subcategory_id: string
+  override_pl_subcategory_name: string
+  override_department_id: string
+  override_department_name: string
+  override_dept_subcategory_id: string
+  override_dept_subcategory_name: string
   override_expense_description: string
   override_revenue_stream: string
   override_rev_alloc: string
@@ -51,20 +57,14 @@ interface ImportRow {
   override_note: string
 }
 
+const PAYMENT_METHODS = [
+  'Wire transfer', 'ACH transfer', 'Cash', 'Check',
+  'Credit card', 'Direct debit', 'Other',
+]
+
 const REVENUE_STREAMS = [
   'Social Growth', 'Aimfox', 'Outsourced Services',
   'VAT Claimed', 'Interest Received', 'Loans', 'Credit', 'Other',
-]
-
-// Static fallbacks (used if DB load fails)
-const PL_CATEGORIES_FALLBACK = [
-  'Employee and Labour', 'Professional and Production Services',
-  'Banking and Finance', 'General Business', 'Vehicle Expense', 'Taxes',
-]
-const DEPARTMENTS_FALLBACK = [
-  'Marketing Expenses', 'Development Expenses', 'Product Expenses',
-  'Design Expenses', 'Sales Expenses', 'CS Expenses', 'Office & Administration',
-  'Shareholder Expenses', 'General Business Expenses', 'Loans / Credit / Dividends',
 ]
 
 function parseRaiffeisenTxt(content: string): ParsedRow[] {
@@ -113,8 +113,12 @@ function makeImportRow(parsed: ParsedRow): ImportRow {
     parsed, proposal: null, status: 'pending',
     override_tx_type: 'direct',
     override_tx_subtype: isExpense ? 'expense' : 'revenue',
-    override_pl_category: '', override_pl_subcategory: '',
-    override_department: '', override_dept_subcategory: '',
+    override_payment_method: 'Wire transfer',
+    override_linked_invoice_id: '',
+    override_pl_category_id: '', override_pl_category_name: '',
+    override_pl_subcategory_id: '', override_pl_subcategory_name: '',
+    override_department_id: '', override_department_name: '',
+    override_dept_subcategory_id: '', override_dept_subcategory_name: '',
     override_expense_description: '', override_revenue_stream: '',
     override_rev_alloc: 'sg100',
     override_partner_name: parsed.partner_name, override_note: '',
@@ -133,12 +137,13 @@ export default function BulkImport({ onClose, onImported }: Props) {
   const [banks, setBanks] = useState<any[]>([])
   const [allBanks, setAllBanks] = useState<any[]>([])
   const [partners, setPartners] = useState<any[]>([])
+  const [openInvoices, setOpenInvoices] = useState<any[]>([])
   const [fileName, setFileName] = useState('')
   const [parseError, setParseError] = useState('')
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  // Category data from DB
+  // Category data from DB — stored with id + name
   const [plCategories, setPlCategories] = useState<any[]>([])
   const [plSubcategories, setPlSubcategories] = useState<any[]>([])
   const [departments, setDepartments] = useState<any[]>([])
@@ -155,11 +160,11 @@ export default function BulkImport({ onClose, onImported }: Props) {
         supabase.from('companies').select('*').order('name'),
         supabase.from('banks').select('*').order('name'),
         supabase.from('partners').select('*').order('name'),
-        supabase.from('pl_categories').select('*').eq('is_active', true).order('sort_order'),
-        supabase.from('pl_subcategories').select('*').eq('is_active', true).order('sort_order'),
-        supabase.from('departments').select('*').eq('is_active', true).order('sort_order'),
-        supabase.from('dept_subcategories').select('*').eq('is_active', true).order('sort_order'),
-        supabase.from('expense_descriptions').select('*').eq('is_active', true).order('sort_order'),
+        supabase.from('pl_categories').select('id,name,sort_order').eq('is_active', true).order('sort_order'),
+        supabase.from('pl_subcategories').select('id,name,category_id,sort_order').eq('is_active', true).order('sort_order'),
+        supabase.from('departments').select('id,name,sort_order').eq('is_active', true).order('sort_order'),
+        supabase.from('dept_subcategories').select('id,name,department_id,sort_order').eq('is_active', true).order('sort_order'),
+        supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_order').eq('is_active', true).order('sort_order'),
       ])
       if (comp) setCompanies(comp)
       if (bnk) setAllBanks(bnk)
@@ -177,28 +182,30 @@ export default function BulkImport({ onClose, onImported }: Props) {
     if (company) setBanks(allBanks.filter(b => b.company_id === company))
   }, [company, allBanks])
 
-  const getPlSubs = (catName: string) => {
-    const cat = plCategories.find(c => c.name === catName)
-    return cat ? plSubcategories.filter(s => s.category_id === cat.id) : []
-  }
+  // Load open invoices when company changes
+  useEffect(() => {
+    if (!company) return
+    const fetchInvoices = async () => {
+      const { data } = await supabase
+        .from('v_invoice_status')
+        .select('*')
+        .eq('company_id', company)
+        .in('calculated_status', ['unpaid', 'partial'])
+        .order('due_date', { ascending: true })
+      if (data) setOpenInvoices(data)
+    }
+    fetchInvoices()
+  }, [company])
 
-  const getDeptSubs = (deptName: string) => {
-    const dept = departments.find(d => d.name === deptName)
-    return dept ? deptSubcategories.filter(s => s.department_id === dept.id) : []
-  }
+  // Cascade helpers — by ID
+  const getPlSubs = (categoryId: string) =>
+    plSubcategories.filter(s => s.category_id === categoryId)
 
-  const getExpDescs = (deptSubName: string) => {
-    const sub = deptSubcategories.find(s => s.name === deptSubName)
-    return sub ? expenseDescriptions.filter(e => e.dept_subcategory_id === sub.id) : []
-  }
+  const getDeptSubs = (departmentId: string) =>
+    deptSubcategories.filter(s => s.department_id === departmentId)
 
-  const plCategoryNames = plCategories.length > 0
-    ? plCategories.map(c => c.name)
-    : PL_CATEGORIES_FALLBACK
-
-  const departmentNames = departments.length > 0
-    ? departments.map(d => d.name)
-    : DEPARTMENTS_FALLBACK
+  const getExpDescs = (deptSubId: string) =>
+    expenseDescriptions.filter(e => e.dept_subcategory_id === deptSubId)
 
   const handleFile = async (file: File) => {
     setParseError('')
@@ -269,12 +276,19 @@ export default function BulkImport({ onClose, onImported }: Props) {
           const proposal = proposals.find((p: any) => p.row_id === rowId)
           if (proposal) {
             const isExpense = (snapshot[j].parsed.debit || 0) > 0
+            // Match category by name from AI
+            const matchedCat = plCategories.find(c => c.name === proposal.pl_category)
+            const matchedDept = departments.find(d => d.name === proposal.department)
             result[j] = {
               ...result[j], proposal, status: 'accepted',
               override_tx_type: proposal.tx_type || 'direct',
               override_tx_subtype: proposal.tx_subtype || (isExpense ? 'expense' : 'revenue'),
-              override_pl_category: proposal.pl_category || '',
-              override_department: proposal.department || '',
+              override_pl_category_id: matchedCat?.id || '',
+              override_pl_category_name: matchedCat?.name || proposal.pl_category || '',
+              override_pl_subcategory_id: '', override_pl_subcategory_name: '',
+              override_department_id: matchedDept?.id || '',
+              override_department_name: matchedDept?.name || proposal.department || '',
+              override_dept_subcategory_id: '', override_dept_subcategory_name: '',
               override_expense_description: proposal.expense_description || '',
               override_revenue_stream: proposal.revenue_stream || '',
               override_partner_name: proposal.partner_match || snapshot[j].parsed.partner_name,
@@ -329,24 +343,43 @@ export default function BulkImport({ onClose, onImported }: Props) {
         }
       }
 
-      await supabase.from('transactions').insert({
+      const { data: newTx } = await supabase.from('transactions').insert({
         company_id: company, bank_id: bank, partner_id: partnerId,
         transaction_date: formatDate(p.date), statement_number: p.statement_number || null,
         type: row.override_tx_type, tx_subtype: row.override_tx_subtype,
+        payment_method: row.override_payment_method || null,
         currency: p.currency, amount,
         exchange_rate: null, amount_usd: p.currency === 'USD' ? amount : null,
         pl_impact: isDirectWithPL,
-        pl_category: isDirectWithPL ? (row.override_pl_category || null) : null,
-        pl_subcategory: isDirectWithPL ? (row.override_pl_subcategory || null) : null,
-        department: isDirectWithPL ? (row.override_department || null) : null,
-        dept_subcategory: isDirectWithPL ? (row.override_dept_subcategory || null) : null,
+        pl_category: isDirectWithPL ? (row.override_pl_category_name || null) : null,
+        pl_subcategory: isDirectWithPL ? (row.override_pl_subcategory_name || null) : null,
+        department: isDirectWithPL ? (row.override_department_name || null) : null,
+        dept_subcategory: isDirectWithPL ? (row.override_dept_subcategory_name || null) : null,
         expense_description: isDirectWithPL ? (row.override_expense_description || null) : null,
         revenue_stream: isDirectWithPL ? (row.override_revenue_stream || null) : null,
         rev_alloc_type: row.override_rev_alloc || 'sg100',
         account_number: p.account_number || null, model: p.model || null,
         reference_number: p.reference_number || null,
         note: row.override_note || p.description || null, status: 'posted',
-      })
+      }).select().single()
+
+      // Link to invoice if selected
+      if (row.override_tx_type === 'invoice_payment' && row.override_linked_invoice_id && newTx?.id) {
+        const usdAmount = p.currency === 'USD' ? amount : null
+        await supabase.from('invoice_transaction_links').insert({
+          invoice_id: row.override_linked_invoice_id,
+          transaction_id: newTx.id,
+          allocated_amount: amount,
+          allocated_amount_usd: usdAmount,
+        })
+        // Update invoice status
+        const { data: invStatus } = await supabase
+          .from('v_invoice_status').select('calculated_status').eq('id', row.override_linked_invoice_id).single()
+        if (invStatus) {
+          await supabase.from('invoices').update({ status: invStatus.calculated_status }).eq('id', row.override_linked_invoice_id)
+        }
+      }
+
       done++
       setProgress(Math.round((done / accepted.length) * 100))
     }
@@ -501,9 +534,12 @@ export default function BulkImport({ onClose, onImported }: Props) {
                   const amount = isExpense ? p.debit : p.credit
                   const isExpanded = expandedRow === p.id
                   const conf = row.proposal?.confidence ? confStyle(row.proposal.confidence) : null
-                  const plSubs = getPlSubs(row.override_pl_category)
-                  const deptSubs = getDeptSubs(row.override_department)
-                  const expDescs = getExpDescs(row.override_dept_subcategory)
+
+                  // Cascaded options based on selected IDs
+                  const plSubs = getPlSubs(row.override_pl_category_id)
+                  const deptSubs = getDeptSubs(row.override_department_id)
+                  const expDescs = getExpDescs(row.override_dept_subcategory_id)
+                  const linkedInvoice = openInvoices.find(i => i.id === row.override_linked_invoice_id)
 
                   return (
                     <div key={p.id} style={{
@@ -526,11 +562,13 @@ export default function BulkImport({ onClose, onImported }: Props) {
                             {!row.proposal && <span style={{ fontSize: '10px', color: '#aaa', fontStyle: 'italic' }}>No AI proposal</span>}
                           </div>
                           <div style={{ fontSize: '11px', color: '#888' }}>{p.date} · {p.description?.slice(0, 65)}{(p.description?.length || 0) > 65 ? '...' : ''}</div>
-                          {row.override_tx_type === 'direct' && row.override_pl_category && (
-                            <div style={{ fontSize: '11px', color: '#1D9E75', marginTop: '2px' }}>📊 {row.override_pl_category}{row.override_department ? ` · ${row.override_department}` : ''}</div>
+                          {row.override_tx_type === 'direct' && row.override_pl_category_name && (
+                            <div style={{ fontSize: '11px', color: '#1D9E75', marginTop: '2px' }}>📊 {row.override_pl_category_name}{row.override_department_name ? ` · ${row.override_department_name}` : ''}</div>
                           )}
                           {row.override_tx_type === 'invoice_payment' && (
-                            <div style={{ fontSize: '11px', color: '#0C447C', marginTop: '2px' }}>💳 Cash flow only</div>
+                            <div style={{ fontSize: '11px', color: '#0C447C', marginTop: '2px' }}>
+                              💳 Cash flow only{linkedInvoice ? ` · Closes: ${linkedInvoice.partner_name || '—'} ${linkedInvoice.invoice_number ? `(${linkedInvoice.invoice_number})` : ''}` : ' · No invoice linked'}
+                            </div>
                           )}
                         </div>
                         <div style={{ textAlign: 'right' as const, flexShrink: 0, marginRight: '10px' }}>
@@ -543,14 +581,14 @@ export default function BulkImport({ onClose, onImported }: Props) {
                         </div>
                       </div>
 
-                      {/* Edit panel */}
+                      {/* ── EDIT PANEL ── */}
                       {isExpanded && (
                         <div style={s.editPanel}>
                           {row.proposal && (
                             <div style={s.aiNotes}>🤖 AI: {row.proposal.notes}</div>
                           )}
 
-                          {/* Row 1: Partner + Type */}
+                          {/* Basic fields */}
                           <div style={s.editGrid2}>
                             <div style={s.editField}>
                               <label style={s.editLbl}>Partner</label>
@@ -560,14 +598,20 @@ export default function BulkImport({ onClose, onImported }: Props) {
                             <div style={s.editField}>
                               <label style={s.editLbl}>Type</label>
                               <select style={s.editSelect} value={row.override_tx_type}
-                                onChange={e => updateRow(p.id, { override_tx_type: e.target.value as any, override_pl_category: '', override_pl_subcategory: '', override_department: '', override_dept_subcategory: '', override_expense_description: '' })}>
+                                onChange={e => updateRow(p.id, {
+                                  override_tx_type: e.target.value as any,
+                                  override_pl_category_id: '', override_pl_category_name: '',
+                                  override_pl_subcategory_id: '', override_pl_subcategory_name: '',
+                                  override_department_id: '', override_department_name: '',
+                                  override_dept_subcategory_id: '', override_dept_subcategory_name: '',
+                                  override_expense_description: '',
+                                })}>
                                 <option value="direct">⚡ Direct (P&L impact)</option>
                                 <option value="invoice_payment">💳 Invoice payment (cash only)</option>
                               </select>
                             </div>
                           </div>
 
-                          {/* Subtype */}
                           <div style={{ ...s.editGrid2, marginTop: '8px' }}>
                             <div style={s.editField}>
                               <label style={s.editLbl}>Subtype</label>
@@ -585,26 +629,69 @@ export default function BulkImport({ onClose, onImported }: Props) {
                             </div>
                           </div>
 
-                          {/* Direct + Expense: full P&L hierarchy */}
+                          {/* ── INVOICE PAYMENT ── */}
+                          {row.override_tx_type === 'invoice_payment' && (
+                            <>
+                              <div style={s.editSectionTitle}>Payment details</div>
+                              <div style={s.editGrid2}>
+                                <div style={s.editField}>
+                                  <label style={s.editLbl}>Payment method</label>
+                                  <select style={s.editSelect} value={row.override_payment_method}
+                                    onChange={e => updateRow(p.id, { override_payment_method: e.target.value })}>
+                                    {PAYMENT_METHODS.map(m => <option key={m}>{m}</option>)}
+                                  </select>
+                                </div>
+                                <div style={s.editField}>
+                                  <label style={s.editLbl}>Link to open invoice</label>
+                                  <select style={s.editSelect} value={row.override_linked_invoice_id}
+                                    onChange={e => updateRow(p.id, { override_linked_invoice_id: e.target.value })}>
+                                    <option value="">— No invoice (post standalone) —</option>
+                                    {openInvoices.map(inv => (
+                                      <option key={inv.id} value={inv.id}>
+                                        {inv.partner_name || '—'}{inv.invoice_number ? ` · ${inv.invoice_number}` : ''} · ${(inv.remaining_usd || 0).toFixed(0)} rem.
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                              {row.override_linked_invoice_id && linkedInvoice && (
+                                <div style={{ ...s.aiNotes, background: '#E6F1FB', borderColor: '#7FB8EE', color: '#0C447C', marginTop: '8px' }}>
+                                  💳 Will close invoice: <strong>{linkedInvoice.partner_name}</strong>{linkedInvoice.invoice_number ? ` · ${linkedInvoice.invoice_number}` : ''} · Remaining: <strong>${(linkedInvoice.remaining_usd || 0).toFixed(2)}</strong>
+                                </div>
+                              )}
+                            </>
+                          )}
+
+                          {/* ── DIRECT EXPENSE ── */}
                           {row.override_tx_type === 'direct' && row.override_tx_subtype === 'expense' && (
                             <>
                               <div style={s.editSectionTitle}>P&L Classification</div>
                               <div style={s.editGrid2}>
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>P&L Category</label>
-                                  <select style={s.editSelect} value={row.override_pl_category}
-                                    onChange={e => updateRow(p.id, { override_pl_category: e.target.value, override_pl_subcategory: '' })}>
+                                  <select style={s.editSelect} value={row.override_pl_category_id}
+                                    onChange={e => {
+                                      const cat = plCategories.find(c => c.id === e.target.value)
+                                      updateRow(p.id, {
+                                        override_pl_category_id: e.target.value,
+                                        override_pl_category_name: cat?.name || '',
+                                        override_pl_subcategory_id: '', override_pl_subcategory_name: '',
+                                      })
+                                    }}>
                                     <option value="">Select category...</option>
-                                    {plCategoryNames.map(c => <option key={c}>{c}</option>)}
+                                    {plCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                   </select>
                                 </div>
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>P&L Sub-category</label>
-                                  <select style={s.editSelect} value={row.override_pl_subcategory}
-                                    onChange={e => updateRow(p.id, { override_pl_subcategory: e.target.value })}
-                                    disabled={!row.override_pl_category || plSubs.length === 0}>
+                                  <select style={s.editSelect} value={row.override_pl_subcategory_id}
+                                    onChange={e => {
+                                      const sub = plSubcategories.find(s => s.id === e.target.value)
+                                      updateRow(p.id, { override_pl_subcategory_id: e.target.value, override_pl_subcategory_name: sub?.name || '' })
+                                    }}
+                                    disabled={!row.override_pl_category_id || plSubs.length === 0}>
                                     <option value="">Select sub-category...</option>
-                                    {plSubs.map(s => <option key={s.id}>{s.name}</option>)}
+                                    {plSubs.map(sub => <option key={sub.id} value={sub.id}>{sub.name}</option>)}
                                   </select>
                                 </div>
                               </div>
@@ -613,19 +700,34 @@ export default function BulkImport({ onClose, onImported }: Props) {
                               <div style={s.editGrid2}>
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>Department</label>
-                                  <select style={s.editSelect} value={row.override_department}
-                                    onChange={e => updateRow(p.id, { override_department: e.target.value, override_dept_subcategory: '', override_expense_description: '' })}>
+                                  <select style={s.editSelect} value={row.override_department_id}
+                                    onChange={e => {
+                                      const dept = departments.find(d => d.id === e.target.value)
+                                      updateRow(p.id, {
+                                        override_department_id: e.target.value,
+                                        override_department_name: dept?.name || '',
+                                        override_dept_subcategory_id: '', override_dept_subcategory_name: '',
+                                        override_expense_description: '',
+                                      })
+                                    }}>
                                     <option value="">Select department...</option>
-                                    {departmentNames.map(d => <option key={d}>{d}</option>)}
+                                    {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                                   </select>
                                 </div>
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>Dept. Sub-category</label>
-                                  <select style={s.editSelect} value={row.override_dept_subcategory}
-                                    onChange={e => updateRow(p.id, { override_dept_subcategory: e.target.value, override_expense_description: '' })}
-                                    disabled={!row.override_department || deptSubs.length === 0}>
+                                  <select style={s.editSelect} value={row.override_dept_subcategory_id}
+                                    onChange={e => {
+                                      const sub = deptSubcategories.find(s => s.id === e.target.value)
+                                      updateRow(p.id, {
+                                        override_dept_subcategory_id: e.target.value,
+                                        override_dept_subcategory_name: sub?.name || '',
+                                        override_expense_description: '',
+                                      })
+                                    }}
+                                    disabled={!row.override_department_id || deptSubs.length === 0}>
                                     <option value="">Select sub-category...</option>
-                                    {deptSubs.map(s => <option key={s.id}>{s.name}</option>)}
+                                    {deptSubs.map(sub => <option key={sub.id} value={sub.id}>{sub.name}</option>)}
                                   </select>
                                 </div>
                               </div>
@@ -637,7 +739,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                     <select style={s.editSelect} value={row.override_expense_description}
                                       onChange={e => updateRow(p.id, { override_expense_description: e.target.value })}>
                                       <option value="">Select description...</option>
-                                      {expDescs.map(d => <option key={d.id}>{d.name}</option>)}
+                                      {expDescs.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
                                     </select>
                                   ) : (
                                     <input style={s.editInput} value={row.override_expense_description}
@@ -647,7 +749,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                 </div>
                               </div>
 
-                              {/* Revenue stream allocation */}
                               <div style={s.editSectionTitle}>Revenue stream allocation</div>
                               <div style={s.allocGrid}>
                                 {[
@@ -667,7 +768,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                             </>
                           )}
 
-                          {/* Direct + Revenue */}
+                          {/* ── DIRECT REVENUE ── */}
                           {row.override_tx_type === 'direct' && row.override_tx_subtype === 'revenue' && (
                             <div style={{ marginTop: '8px' }}>
                               <div style={s.editField}>
@@ -760,7 +861,7 @@ const s: Record<string, React.CSSProperties> = {
   reviewRowMain: { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', cursor: 'pointer' },
   editPanel: { padding: '14px 16px', borderTop: '0.5px solid #e5e5e5', background: '#f9f9f7' },
   aiNotes: { fontSize: '11px', color: '#085041', background: '#E1F5EE', border: '0.5px solid #5DCAA5', borderRadius: '6px', padding: '6px 10px', marginBottom: '12px' },
-  editSectionTitle: { fontSize: '10px', fontWeight: '500', color: '#aaa', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginTop: '12px', marginBottom: '8px', paddingBottom: '4px', borderBottom: '0.5px solid #e5e5e5' },
+  editSectionTitle: { fontSize: '10px', fontWeight: '500', color: '#aaa', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginTop: '14px', marginBottom: '8px', paddingBottom: '4px', borderBottom: '0.5px solid #e5e5e5' },
   editGrid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' },
   editField: { display: 'flex', flexDirection: 'column' as const, gap: '4px' },
   editLbl: { fontSize: '10px', fontWeight: '500', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.07em' },
