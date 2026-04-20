@@ -154,8 +154,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
     const batchSize = 5
     const result: ImportRow[] = rows.map(r => ({ ...r }))
 
-    // Get auth session for Edge Function call
-    const { data: { session } } = await supabase.auth.getSession()
+    // Get auth session for Edge Function call  
     const supabaseUrl = process.env.REACT_APP_SUPABASE_URL
     const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY
 
@@ -179,7 +178,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session?.access_token}`,
+              'Authorization': `Bearer ${process.env.REACT_APP_SUPABASE_ANON_KEY}`,
               'apikey': supabaseAnonKey || '',
             },
             body: JSON.stringify({ rows: batchPayload, partnerNames }),
