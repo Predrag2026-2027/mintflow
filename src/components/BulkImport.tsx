@@ -160,11 +160,11 @@ export default function BulkImport({ onClose, onImported }: Props) {
         supabase.from('companies').select('*').order('name'),
         supabase.from('banks').select('*').order('name'),
         supabase.from('partners').select('*').order('name'),
-        supabase.from('pl_categories').select('id,name,sort_order').eq('is_active', true).order('sort_order'),
-        supabase.from('pl_subcategories').select('id,name,category_id,sort_order').eq('is_active', true).order('sort_order'),
-        supabase.from('departments').select('id,name,sort_order').eq('is_active', true).order('sort_order'),
-        supabase.from('dept_subcategories').select('id,name,department_id,sort_order').eq('is_active', true).order('sort_order'),
-        supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_order').eq('is_active', true).order('sort_order'),
+        supabase.from('pl_categories').select('id,name,sort_order').order('sort_order'),
+supabase.from('pl_subcategories').select('id,name,category_id,sort_order').order('sort_order'),
+supabase.from('departments').select('id,name,sort_order').order('sort_order'),
+supabase.from('dept_subcategories').select('id,name,department_id,sort_order').order('sort_order'),
+supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_order').order('sort_order'),
       ])
       if (comp) setCompanies(comp)
       if (bnk) setAllBanks(bnk)
