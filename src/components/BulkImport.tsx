@@ -472,9 +472,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
 
   const partnerNames = partners.map(p => p.name).join(', ')
     const batchSize = 5
-    const supabaseUrl = process.env.REACT_APP_SUPABASE_URL
-    const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY
-    const snapshot = [...rows]
+    const snapshot = [...rowsWithRates]
     const result: ImportRow[] = snapshot.map(r => ({ ...r }))
 
     for (let i = 0; i < snapshot.length; i += batchSize) {
