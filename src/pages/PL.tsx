@@ -14,7 +14,6 @@ export default function PL() {
   const [loading, setLoading] = useState(true)
   const [entries, setEntries] = useState<any[]>([])
   const [plCategories, setPlCategories] = useState<any[]>([])
-  const [plSubcategories, setPlSubcategories] = useState<any[]>([])
 
   const pageMap: Record<string, string> = {
     'Dashboard': 'dashboard', 'Transactions': 'transactions',
@@ -22,29 +21,27 @@ export default function PL() {
     'Partners': 'partners', 'Settings': 'settings',
   }
 
+  const currentYear = new Date().getFullYear()
+
   // ── Load companies + categories ──────────────────────
   useEffect(() => {
     const load = async () => {
-      const [{ data: comp }, { data: plCat }, { data: plSub }] = await Promise.all([
+      const [{ data: comp }, { data: plCat }] = await Promise.all([
         supabase.from('companies').select('id,name').order('name'),
         supabase.from('pl_categories').select('id,name,type,sort_order').order('sort_order'),
-        supabase.from('pl_subcategories').select('id,name,category_id,sort_order').order('sort_order'),
       ])
       if (comp) setCompanies(comp)
       if (plCat) setPlCategories(plCat)
-      if (plSub) setPlSubcategories(plSub)
     }
     load()
   }, [])
 
-  // ── Build date range from period ─────────────────────
+  // ── Build date range ─────────────────────────────────
   const getDateRange = useCallback(() => {
     if (periodType === 'month') {
       const [y, m] = periodValue.split('-')
-      const start = `${y}-${m}-01`
       const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate()
-      const end = `${y}-${m}-${lastDay}`
-      return { start, end }
+      return { start: `${y}-${m}-01`, end: `${y}-${m}-${lastDay}` }
     }
     if (periodType === 'quarter') {
       const [y, q] = periodValue.split('-Q')
@@ -57,22 +54,15 @@ export default function PL() {
         end: `${y}-${String(endMonth).padStart(2, '0')}-${lastDay}`,
       }
     }
-    // year
     return { start: `${periodValue}-01-01`, end: `${periodValue}-12-31` }
   }, [periodType, periodValue])
 
-  // ── Fetch P&L entries ────────────────────────────────
+  // ── Fetch entries ────────────────────────────────────
   const fetchEntries = useCallback(async () => {
     setLoading(true)
     const { start, end } = getDateRange()
-    let query = supabase
-      .from('v_pl_entries')
-      .select('*')
-      .gte('pl_date', start)
-      .lte('pl_date', end)
-
+    let query = supabase.from('v_pl_entries').select('*').gte('pl_date', start).lte('pl_date', end)
     if (companyId !== 'all') query = query.eq('company_id', companyId)
-
     const { data } = await query
     setEntries(data || [])
     setLoading(false)
@@ -80,18 +70,12 @@ export default function PL() {
 
   useEffect(() => { fetchEntries() }, [fetchEntries])
 
-  // ── Aggregate helpers ────────────────────────────────
-  const sumBy = (list: any[], field: string, filter?: (e: any) => boolean) => {
-    const filtered = filter ? list.filter(filter) : list
-    return filtered.reduce((s, e) => s + (e[field] || 0), 0)
-  }
-
+  // ── Allocation helper ────────────────────────────────
   const allocAmount = (e: any, stream: 'sg' | 'af') => {
     const amt = e.amount_usd || 0
     if (e.rev_alloc_type === 'sg100') return stream === 'sg' ? amt : 0
     if (e.rev_alloc_type === 'af100') return stream === 'af' ? amt : 0
-    if (e.rev_alloc_type === 'shared') return amt / 2
-    return amt / 2 // byval — treat as 50/50 for now
+    return amt / 2 // shared or byval
   }
 
   // ── Revenue ──────────────────────────────────────────
@@ -107,11 +91,8 @@ export default function PL() {
 
   // ── Reductions ───────────────────────────────────────
   const reductionCat = plCategories.find(c => c.name === 'Reductions')
-  const reductionEntries = reductionCat
-    ? entries.filter(e => e.pl_category === reductionCat.name)
-    : []
   const reductionByName: Record<string, { sg: number; af: number; total: number }> = {}
-  reductionEntries.forEach(e => {
+  entries.filter(e => reductionCat && e.pl_category === reductionCat.name).forEach(e => {
     const key = e.pl_subcategory || e.expense_description || 'Reductions'
     if (!reductionByName[key]) reductionByName[key] = { sg: 0, af: 0, total: 0 }
     reductionByName[key].sg += allocAmount(e, 'sg')
@@ -119,14 +100,13 @@ export default function PL() {
     reductionByName[key].total += e.amount_usd || 0
   })
 
-  // ── Expenses by category ─────────────────────────────
+  // ── Expenses ─────────────────────────────────────────
   const expenseCategories = plCategories.filter(c => c.type === 'expense' && c.name !== 'Reductions')
   const expenseEntries = entries.filter(e => e.tx_type === 'expense' || e.tx_type === 'invoice_expense')
 
   const getExpensesForCategory = (catName: string) => {
-    const catEntries = expenseEntries.filter(e => e.pl_category === catName)
     const bySubcat: Record<string, { sg: number; af: number; total: number }> = {}
-    catEntries.forEach(e => {
+    expenseEntries.filter(e => e.pl_category === catName).forEach(e => {
       const key = e.pl_subcategory || e.expense_description || catName
       if (!bySubcat[key]) bySubcat[key] = { sg: 0, af: 0, total: 0 }
       bySubcat[key].sg += allocAmount(e, 'sg')
@@ -145,7 +125,6 @@ export default function PL() {
   const margin = totalRevenue > 0 ? (netProfit / totalRevenue * 100) : 0
 
   // ── Period options ───────────────────────────────────
-  const currentYear = new Date().getFullYear()
   const months = Array.from({ length: 12 }, (_, i) => {
     const m = String(i + 1).padStart(2, '0')
     return { value: `${currentYear}-${m}`, label: new Date(currentYear, i, 1).toLocaleString('en', { month: 'long', year: 'numeric' }) }
@@ -153,12 +132,9 @@ export default function PL() {
   const quarters = [1, 2, 3, 4].map(q => ({ value: `${currentYear}-Q${q}`, label: `Q${q} ${currentYear}` }))
   const years = [currentYear - 1, currentYear].map(y => ({ value: String(y), label: String(y) }))
 
+  // ── Formatters ───────────────────────────────────────
   const fmt = (n: number) => n === 0 ? '—' : '$' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })
-  const fmtN = (n: number) => {
-    if (n === 0) return '—'
-    return (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })
-  }
-  const fmtSG = (n: number) => n === 0 ? '—' : '$' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })
+  const fmtN = (n: number) => n === 0 ? '—' : (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })
 
   const hasData = entries.length > 0
 
@@ -187,6 +163,7 @@ export default function PL() {
       </nav>
 
       <div style={s.body}>
+        {/* Header */}
         <div style={s.pageHeader}>
           <div>
             <div style={s.pageTitle}>Profit & Loss</div>
@@ -199,7 +176,12 @@ export default function PL() {
               <option value="all">All companies</option>
               {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <select style={s.filterSelect} value={periodType} onChange={e => { setPeriodType(e.target.value as any); setPeriodValue(e.target.value === 'month' ? new Date().toISOString().slice(0, 7) : e.target.value === 'quarter' ? `${currentYear}-Q1` : String(currentYear)) }}>
+            <select style={s.filterSelect} value={periodType}
+              onChange={e => {
+                const t = e.target.value as 'month' | 'quarter' | 'year'
+                setPeriodType(t)
+                setPeriodValue(t === 'month' ? new Date().toISOString().slice(0, 7) : t === 'quarter' ? `${currentYear}-Q1` : String(currentYear))
+              }}>
               <option value="month">Monthly</option>
               <option value="quarter">Quarterly</option>
               <option value="year">Annual</option>
@@ -240,12 +222,9 @@ export default function PL() {
         {/* P&L Table */}
         {(hasData || loading) && (
           <div style={s.tableWrap}>
-            {loading && (
-              <div style={{ padding: '40px', textAlign: 'center', color: '#888', fontSize: '13px' }}>
-                Loading P&L data...
-              </div>
-            )}
-            {!loading && (
+            {loading ? (
+              <div style={{ padding: '40px', textAlign: 'center' as const, color: '#888', fontSize: '13px' }}>Loading P&L data...</div>
+            ) : (
               <table style={s.table}>
                 <thead>
                   <tr style={s.theadRow}>
@@ -256,20 +235,20 @@ export default function PL() {
                   </tr>
                 </thead>
                 <tbody>
-                  {/* REVENUE */}
+
+                  {/* ── REVENUE ── */}
                   <tr style={s.catRow}><td colSpan={4} style={s.catCell}>REVENUE</td></tr>
-                  {Object.keys(revenueByStream).length === 0 ? (
-                    <tr style={s.dataRow}><td style={{ ...s.td, color: '#aaa', fontStyle: 'italic' }} colSpan={4}>No revenue entries for this period</td></tr>
-                  ) : (
-                    Object.entries(revenueByStream).map(([name, r]) => (
+                  {Object.keys(revenueByStream).length === 0
+                    ? <tr style={s.dataRow}><td style={{ ...s.td, color: '#aaa', fontStyle: 'italic' }} colSpan={4}>No revenue entries for this period</td></tr>
+                    : Object.entries(revenueByStream).map(([name, r]) => (
                       <tr key={name} style={s.dataRow}>
                         <td style={s.td}>{name}</td>
-                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtSG(r.sg)}</td>
-                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtSG(r.af)}</td>
-                        <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: r.total > 0 ? '#0F6E56' : '#888' }}>{fmt(r.total)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmt(r.sg)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmt(r.af)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: '#0F6E56' }}>{fmt(r.total)}</td>
                       </tr>
                     ))
-                  )}
+                  }
                   <tr style={s.totalRow}>
                     <td style={s.totalCell}>TOTAL REVENUE</td>
                     <td style={{ ...s.totalCell, textAlign: 'right' as const }}></td>
@@ -277,20 +256,19 @@ export default function PL() {
                     <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#0F6E56' }}>{fmt(totalRevenue)}</td>
                   </tr>
 
-                  {/* REDUCTIONS */}
+                  {/* ── REDUCTIONS ── */}
                   <tr style={s.catRow}><td colSpan={4} style={s.catCell}>REDUCTIONS</td></tr>
-                  {Object.keys(reductionByName).length === 0 ? (
-                    <tr style={s.dataRow}><td style={{ ...s.td, color: '#aaa', fontStyle: 'italic' }} colSpan={4}>No reductions for this period</td></tr>
-                  ) : (
-                    Object.entries(reductionByName).map(([name, r]) => (
+                  {Object.keys(reductionByName).length === 0
+                    ? <tr style={s.dataRow}><td style={{ ...s.td, color: '#aaa', fontStyle: 'italic' }} colSpan={4}>No reductions for this period</td></tr>
+                    : Object.entries(reductionByName).map(([name, r]) => (
                       <tr key={name} style={s.dataRow}>
                         <td style={s.td}>{name}</td>
-                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtSG(r.sg)}</td>
-                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtSG(r.af)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmt(r.sg)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmt(r.af)}</td>
                         <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: '#A32D2D' }}>{fmt(r.total)}</td>
                       </tr>
                     ))
-                  )}
+                  }
                   <tr style={s.totalRow}>
                     <td style={s.totalCell}>TOTAL REDUCTIONS</td>
                     <td style={{ ...s.totalCell, textAlign: 'right' as const }}></td>
@@ -298,7 +276,7 @@ export default function PL() {
                     <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmt(totalReductions)}</td>
                   </tr>
 
-                  {/* GROSS PROFIT */}
+                  {/* ── GROSS PROFIT ── */}
                   <tr style={s.grossRow}>
                     <td style={s.grossCell}>GROSS PROFIT</td>
                     <td style={{ ...s.grossCell, textAlign: 'right' as const }}></td>
@@ -306,31 +284,27 @@ export default function PL() {
                     <td style={{ ...s.grossCell, textAlign: 'right' as const, color: grossProfit >= 0 ? '#085041' : '#A32D2D' }}>{fmtN(grossProfit)}</td>
                   </tr>
 
-                  {/* EXPENSES */}
+                  {/* ── EXPENSES ── */}
                   <tr style={s.catRow}><td colSpan={4} style={s.catCell}>EXPENSES</td></tr>
                   {expenseCategories.map(cat => {
                     const items = getExpensesForCategory(cat.name)
-                    const catTotal = Object.values(items).reduce((s, i) => s + i.total, 0)
-                    if (catTotal === 0 && !hasData) return null
+                    const catTotal = Object.values(items).reduce((sum, i) => sum + i.total, 0)
                     return (
                       <React.Fragment key={cat.id}>
                         <tr style={s.subCatRow}>
                           <td colSpan={4} style={s.subCatCell}>{cat.name}</td>
                         </tr>
-                        {Object.keys(items).length === 0 ? (
-                          <tr style={s.dataRow}>
-                            <td style={{ ...s.td, paddingLeft: '2rem', color: '#aaa', fontStyle: 'italic' }} colSpan={4}>No entries</td>
-                          </tr>
-                        ) : (
-                          Object.entries(items).map(([name, item]) => (
+                        {Object.keys(items).length === 0
+                          ? <tr style={s.dataRow}><td style={{ ...s.td, paddingLeft: '2rem', color: '#aaa', fontStyle: 'italic' }} colSpan={4}>No entries</td></tr>
+                          : Object.entries(items).map(([name, item]) => (
                             <tr key={name} style={s.dataRow}>
                               <td style={{ ...s.td, paddingLeft: '2rem' }}>{name}</td>
-                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtSG(item.sg)}</td>
-                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtSG(item.af)}</td>
+                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmt(item.sg)}</td>
+                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmt(item.af)}</td>
                               <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: item.total > 0 ? '#A32D2D' : '#888' }}>{fmt(item.total)}</td>
                             </tr>
                           ))
-                        )}
+                        }
                         <tr style={s.subTotalRow}>
                           <td style={{ ...s.subTotalCell, paddingLeft: '1rem' }}>Total {cat.name}</td>
                           <td style={{ ...s.subTotalCell, textAlign: 'right' as const }}></td>
@@ -348,12 +322,14 @@ export default function PL() {
                     <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmt(totalExpenses)}</td>
                   </tr>
 
+                  {/* ── NET PROFIT ── */}
                   <tr style={s.netRow}>
                     <td style={s.netCell}>NET PROFIT / LOSS</td>
                     <td style={{ ...s.netCell, textAlign: 'right' as const }}></td>
                     <td style={{ ...s.netCell, textAlign: 'right' as const }}></td>
                     <td style={{ ...s.netCell, textAlign: 'right' as const, color: netProfit >= 0 ? '#5DCAA5' : '#F5A9A9' }}>{fmtN(netProfit)}</td>
                   </tr>
+
                 </tbody>
               </table>
             )}
