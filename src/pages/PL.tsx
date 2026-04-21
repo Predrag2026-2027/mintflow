@@ -1,122 +1,186 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { NavContext } from '../App'
+import { supabase } from '../supabase'
 
 export default function PL() {
   const { user, signOut } = useAuth()
   const { setPage } = React.useContext(NavContext)
-  const [entity, setEntity] = useState('constellation')
-  const [period, setPeriod] = useState('2026-Q1')
 
-  const pageMap: Record<string, any> = {
-    'Dashboard':'dashboard','Transactions':'transactions',
-    'P&L':'pl','Cash Flow':'cashflow','Reports':'reports',
-    'Partners':'partners','Settings':'settings'
+  const [companies, setCompanies] = useState<any[]>([])
+  const [companyId, setCompanyId] = useState('all')
+  const [periodType, setPeriodType] = useState<'month' | 'quarter' | 'year'>('month')
+  const [periodValue, setPeriodValue] = useState(new Date().toISOString().slice(0, 7))
+  const [loading, setLoading] = useState(true)
+  const [entries, setEntries] = useState<any[]>([])
+  const [plCategories, setPlCategories] = useState<any[]>([])
+  const [plSubcategories, setPlSubcategories] = useState<any[]>([])
+
+  const pageMap: Record<string, string> = {
+    'Dashboard': 'dashboard', 'Transactions': 'transactions',
+    'P&L': 'pl', 'Cash Flow': 'cashflow', 'Reports': 'reports',
+    'Partners': 'partners', 'Settings': 'settings',
   }
 
-  const plData = {
-    revenue: [
-      { name:'Income from service provided', sg: 145000, af: 98000, total: 243000 },
-      { name:'Income from sold goods', sg: 0, af: 0, total: 0 },
-      { name:'Interest Received', sg: 120, af: 0, total: 120 },
-      { name:'Other Income', sg: 500, af: 200, total: 700 },
-    ],
-    reductions: [
-      { name:'Refunds', sg: 1200, af: 800, total: 2000 },
-      { name:'Chargebacks', sg: 340, af: 210, total: 550 },
-      { name:'Fees', sg: 2100, af: 1400, total: 3500 },
-    ],
-    expenses: [
-      {
-        category: 'Employee and Labour',
-        items: [
-          { name:'Net Salaries', sg: 18000, af: 12000, total: 30000 },
-          { name:'Tax on salary', sg: 3600, af: 2400, total: 6000 },
-          { name:'Contributions on behalf of employer', sg: 2700, af: 1800, total: 4500 },
-          { name:'Transportation cost', sg: 400, af: 200, total: 600 },
-          { name:'Private Health insurance', sg: 800, af: 400, total: 1200 },
-          { name:'Warm Meal expenses', sg: 300, af: 150, total: 450 },
-        ]
-      },
-      {
-        category: 'Professional and Production Services',
-        items: [
-          { name:'Legal outsourced services', sg: 2000, af: 1000, total: 3000 },
-          { name:'Affiliates Payment', sg: 8000, af: 12000, total: 20000 },
-          { name:'Dev&Product&Design Outsourced services', sg: 5000, af: 8000, total: 13000 },
-          { name:'Customer support services (outsourced)', sg: 6013, af: 0, total: 6013 },
-          { name:'Subscriptions and licences fees', sg: 3200, af: 4100, total: 7300 },
-          { name:'Marketing expenses from abroad', sg: 40225, af: 0, total: 40225 },
-        ]
-      },
-      {
-        category: 'Banking and Finance',
-        items: [
-          { name:'Bank Fees (domestic)', sg: 120, af: 0, total: 120 },
-          { name:'Bank Fees (abroad)', sg: 80, af: 60, total: 140 },
-          { name:'Interest Paid', sg: 1200, af: 0, total: 1200 },
-          { name:'Insurance', sg: 1014, af: 0, total: 1014 },
-        ]
-      },
-      {
-        category: 'General Business',
-        items: [
-          { name:'Rent and Mortgage of business premises', sg: 6584, af: 0, total: 6584 },
-          { name:'Financial Leasing', sg: 1093, af: 0, total: 1093 },
-          { name:'Donation, sponsorships, gifts', sg: 490, af: 0, total: 490 },
-          { name:'Registration fees and taxes', sg: 463, af: 0, total: 463 },
-          { name:'Capital expenditures', sg: 7500, af: 0, total: 7500 },
-        ]
-      },
-      {
-        category: 'Vehicle Expense',
-        items: [
-          { name:'Fuel and gas expenses', sg: 280, af: 0, total: 280 },
-          { name:'Vehicle Insurance', sg: 420, af: 0, total: 420 },
-        ]
-      },
-      {
-        category: 'Taxes',
-        items: [
-          { name:'VAT tax expenses', sg: 1200, af: 0, total: 1200 },
-          { name:'City and ecological taxes', sg: 180, af: 0, total: 180 },
-        ]
-      },
-    ]
+  // ── Load companies + categories ──────────────────────
+  useEffect(() => {
+    const load = async () => {
+      const [{ data: comp }, { data: plCat }, { data: plSub }] = await Promise.all([
+        supabase.from('companies').select('id,name').order('name'),
+        supabase.from('pl_categories').select('id,name,type,sort_order').order('sort_order'),
+        supabase.from('pl_subcategories').select('id,name,category_id,sort_order').order('sort_order'),
+      ])
+      if (comp) setCompanies(comp)
+      if (plCat) setPlCategories(plCat)
+      if (plSub) setPlSubcategories(plSub)
+    }
+    load()
+  }, [])
+
+  // ── Build date range from period ─────────────────────
+  const getDateRange = useCallback(() => {
+    if (periodType === 'month') {
+      const [y, m] = periodValue.split('-')
+      const start = `${y}-${m}-01`
+      const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate()
+      const end = `${y}-${m}-${lastDay}`
+      return { start, end }
+    }
+    if (periodType === 'quarter') {
+      const [y, q] = periodValue.split('-Q')
+      const qNum = parseInt(q)
+      const startMonth = (qNum - 1) * 3 + 1
+      const endMonth = qNum * 3
+      const lastDay = new Date(parseInt(y), endMonth, 0).getDate()
+      return {
+        start: `${y}-${String(startMonth).padStart(2, '0')}-01`,
+        end: `${y}-${String(endMonth).padStart(2, '0')}-${lastDay}`,
+      }
+    }
+    // year
+    return { start: `${periodValue}-01-01`, end: `${periodValue}-12-31` }
+  }, [periodType, periodValue])
+
+  // ── Fetch P&L entries ────────────────────────────────
+  const fetchEntries = useCallback(async () => {
+    setLoading(true)
+    const { start, end } = getDateRange()
+    let query = supabase
+      .from('v_pl_entries')
+      .select('*')
+      .gte('pl_date', start)
+      .lte('pl_date', end)
+
+    if (companyId !== 'all') query = query.eq('company_id', companyId)
+
+    const { data } = await query
+    setEntries(data || [])
+    setLoading(false)
+  }, [companyId, getDateRange])
+
+  useEffect(() => { fetchEntries() }, [fetchEntries])
+
+  // ── Aggregate helpers ────────────────────────────────
+  const sumBy = (list: any[], field: string, filter?: (e: any) => boolean) => {
+    const filtered = filter ? list.filter(filter) : list
+    return filtered.reduce((s, e) => s + (e[field] || 0), 0)
   }
 
-  const totalRevenue = plData.revenue.reduce((s,r) => s+r.total, 0)
-  const totalReductions = plData.reductions.reduce((s,r) => s+r.total, 0)
+  const allocAmount = (e: any, stream: 'sg' | 'af') => {
+    const amt = e.amount_usd || 0
+    if (e.rev_alloc_type === 'sg100') return stream === 'sg' ? amt : 0
+    if (e.rev_alloc_type === 'af100') return stream === 'af' ? amt : 0
+    if (e.rev_alloc_type === 'shared') return amt / 2
+    return amt / 2 // byval — treat as 50/50 for now
+  }
+
+  // ── Revenue ──────────────────────────────────────────
+  const revenueEntries = entries.filter(e => e.tx_type === 'revenue' || e.tx_type === 'invoice_revenue')
+  const revenueByStream: Record<string, { sg: number; af: number; total: number }> = {}
+  revenueEntries.forEach(e => {
+    const key = e.revenue_stream || e.pl_subcategory || 'Other Income'
+    if (!revenueByStream[key]) revenueByStream[key] = { sg: 0, af: 0, total: 0 }
+    revenueByStream[key].sg += allocAmount(e, 'sg')
+    revenueByStream[key].af += allocAmount(e, 'af')
+    revenueByStream[key].total += e.amount_usd || 0
+  })
+
+  // ── Reductions ───────────────────────────────────────
+  const reductionCat = plCategories.find(c => c.name === 'Reductions')
+  const reductionEntries = reductionCat
+    ? entries.filter(e => e.pl_category === reductionCat.name)
+    : []
+  const reductionByName: Record<string, { sg: number; af: number; total: number }> = {}
+  reductionEntries.forEach(e => {
+    const key = e.pl_subcategory || e.expense_description || 'Reductions'
+    if (!reductionByName[key]) reductionByName[key] = { sg: 0, af: 0, total: 0 }
+    reductionByName[key].sg += allocAmount(e, 'sg')
+    reductionByName[key].af += allocAmount(e, 'af')
+    reductionByName[key].total += e.amount_usd || 0
+  })
+
+  // ── Expenses by category ─────────────────────────────
+  const expenseCategories = plCategories.filter(c => c.type === 'expense' && c.name !== 'Reductions')
+  const expenseEntries = entries.filter(e => e.tx_type === 'expense' || e.tx_type === 'invoice_expense')
+
+  const getExpensesForCategory = (catName: string) => {
+    const catEntries = expenseEntries.filter(e => e.pl_category === catName)
+    const bySubcat: Record<string, { sg: number; af: number; total: number }> = {}
+    catEntries.forEach(e => {
+      const key = e.pl_subcategory || e.expense_description || catName
+      if (!bySubcat[key]) bySubcat[key] = { sg: 0, af: 0, total: 0 }
+      bySubcat[key].sg += allocAmount(e, 'sg')
+      bySubcat[key].af += allocAmount(e, 'af')
+      bySubcat[key].total += e.amount_usd || 0
+    })
+    return bySubcat
+  }
+
+  // ── Totals ───────────────────────────────────────────
+  const totalRevenue = Object.values(revenueByStream).reduce((s, r) => s + r.total, 0)
+  const totalReductions = Object.values(reductionByName).reduce((s, r) => s + r.total, 0)
   const grossProfit = totalRevenue - totalReductions
-  const totalExpenses = plData.expenses.reduce((s,cat) => s + cat.items.reduce((ss,i) => ss+i.total, 0), 0)
+  const totalExpenses = expenseEntries.reduce((s, e) => s + (e.amount_usd || 0), 0)
   const netProfit = grossProfit - totalExpenses
-  const margin = totalRevenue > 0 ? (netProfit/totalRevenue*100) : 0
+  const margin = totalRevenue > 0 ? (netProfit / totalRevenue * 100) : 0
 
-  const fmt = (n: number) => n === 0 ? '—' : '$' + n.toLocaleString('en-US', {maximumFractionDigits:0})
+  // ── Period options ───────────────────────────────────
+  const currentYear = new Date().getFullYear()
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const m = String(i + 1).padStart(2, '0')
+    return { value: `${currentYear}-${m}`, label: new Date(currentYear, i, 1).toLocaleString('en', { month: 'long', year: 'numeric' }) }
+  })
+  const quarters = [1, 2, 3, 4].map(q => ({ value: `${currentYear}-Q${q}`, label: `Q${q} ${currentYear}` }))
+  const years = [currentYear - 1, currentYear].map(y => ({ value: String(y), label: String(y) }))
+
+  const fmt = (n: number) => n === 0 ? '—' : '$' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })
   const fmtN = (n: number) => {
     if (n === 0) return '—'
-    return (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('en-US', {maximumFractionDigits:0})
+    return (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })
   }
+  const fmtSG = (n: number) => n === 0 ? '—' : '$' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })
+
+  const hasData = entries.length > 0
 
   return (
     <div style={s.root}>
       <nav style={s.nav}>
         <div style={s.navLogo}>
           <svg width="24" height="24" viewBox="0 0 36 36" fill="none">
-            <polygon points="18,2 34,30 2,30" fill="none" stroke="#1D9E75" strokeWidth="1.5"/>
-            <circle cx="18" cy="2" r="2" fill="#1D9E75"/>
-            <circle cx="34" cy="30" r="2" fill="#5DCAA5"/>
-            <circle cx="2" cy="30" r="2" fill="#9FE1CB"/>
+            <polygon points="18,2 34,30 2,30" fill="none" stroke="#1D9E75" strokeWidth="1.5" />
+            <circle cx="18" cy="2" r="2" fill="#1D9E75" />
+            <circle cx="34" cy="30" r="2" fill="#5DCAA5" />
+            <circle cx="2" cy="30" r="2" fill="#9FE1CB" />
           </svg>
-          <span style={s.navLogoText}>Mint<span style={{color:'#1D9E75'}}>flow</span></span>
+          <span style={s.navLogoText}>Mint<span style={{ color: '#1D9E75' }}>flow</span></span>
         </div>
         <div style={s.navLinks}>
-          {['Dashboard','Transactions','P&L','Cash Flow','Reports','Partners','Settings'].map(l => (
-            <span key={l} style={l==='P&L' ? s.navLinkActive : s.navLink} onClick={() => setPage(pageMap[l])}>{l}</span>
+          {['Dashboard', 'Transactions', 'P&L', 'Cash Flow', 'Reports', 'Partners', 'Settings'].map(l => (
+            <span key={l} style={l === 'P&L' ? s.navLinkActive : s.navLink} onClick={() => setPage(pageMap[l])}>{l}</span>
           ))}
         </div>
         <div style={s.navRight}>
-          <div style={s.navAvatar}>{user?.email?.substring(0,2).toUpperCase()}</div>
+          <div style={s.navAvatar}>{user?.email?.substring(0, 2).toUpperCase()}</div>
           <span style={s.navEmail}>{user?.email}</span>
           <button style={s.navSignout} onClick={signOut}>Sign out</button>
         </div>
@@ -126,184 +190,218 @@ export default function PL() {
         <div style={s.pageHeader}>
           <div>
             <div style={s.pageTitle}>Profit & Loss</div>
-            <div style={s.pageSub}>Monthly P&L report · All amounts in USD</div>
+            <div style={s.pageSub}>
+              {loading ? 'Loading...' : hasData ? `${entries.length} entries · All amounts in USD` : 'No data for selected period'}
+            </div>
           </div>
-          <div style={{display:'flex',gap:'10px',alignItems:'center'}}>
-            <select style={s.filterSelect} value={entity} onChange={e=>setEntity(e.target.value)}>
-              <option value="constel">Constel Group (Consolidated)</option>
-              <option value="sfbc">SFBC</option>
-              <option value="constellation">Constellation LLC</option>
-              <option value="social">Social Growth LLC-FZ</option>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' as const }}>
+            <select style={s.filterSelect} value={companyId} onChange={e => setCompanyId(e.target.value)}>
+              <option value="all">All companies</option>
+              {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <select style={s.filterSelect} value={period} onChange={e=>setPeriod(e.target.value)}>
-              <option value="2026-Q1">Q1 2026</option>
-              <option value="2026-01">January 2026</option>
-              <option value="2026-02">February 2026</option>
-              <option value="2026-03">March 2026</option>
-              <option value="2026-04">April 2026</option>
+            <select style={s.filterSelect} value={periodType} onChange={e => { setPeriodType(e.target.value as any); setPeriodValue(e.target.value === 'month' ? new Date().toISOString().slice(0, 7) : e.target.value === 'quarter' ? `${currentYear}-Q1` : String(currentYear)) }}>
+              <option value="month">Monthly</option>
+              <option value="quarter">Quarterly</option>
+              <option value="year">Annual</option>
             </select>
-            <button style={s.exportBtn}>Export PDF</button>
+            <select style={s.filterSelect} value={periodValue} onChange={e => setPeriodValue(e.target.value)}>
+              {periodType === 'month' && months.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+              {periodType === 'quarter' && quarters.map(q => <option key={q.value} value={q.value}>{q.label}</option>)}
+              {periodType === 'year' && years.map(y => <option key={y.value} value={y.value}>{y.label}</option>)}
+            </select>
           </div>
         </div>
 
+        {/* Summary cards */}
         <div style={s.summaryGrid}>
-          <div style={s.summaryCard}>
-            <div style={s.summaryLabel}>Total Revenue</div>
-            <div style={{...s.summaryValue, color:'#0F6E56'}}>{fmt(totalRevenue)}</div>
-          </div>
-          <div style={s.summaryCard}>
-            <div style={s.summaryLabel}>Gross Profit</div>
-            <div style={{...s.summaryValue, color:'#0F6E56'}}>{fmt(grossProfit)}</div>
-          </div>
-          <div style={s.summaryCard}>
-            <div style={s.summaryLabel}>Total Expenses</div>
-            <div style={{...s.summaryValue, color:'#A32D2D'}}>{fmt(totalExpenses)}</div>
-          </div>
-          <div style={s.summaryCard}>
-            <div style={s.summaryLabel}>Net Profit / Loss</div>
-            <div style={{...s.summaryValue, color: netProfit >= 0 ? '#0F6E56' : '#A32D2D'}}>{fmtN(netProfit)}</div>
-            <div style={{fontSize:'11px', color: netProfit >= 0 ? '#1D9E75' : '#E24B4A', marginTop:'4px'}}>{margin.toFixed(1)}% margin</div>
-          </div>
+          {[
+            { label: 'Total Revenue', value: fmt(totalRevenue), color: '#0F6E56' },
+            { label: 'Gross Profit', value: fmt(grossProfit), color: grossProfit >= 0 ? '#0F6E56' : '#A32D2D' },
+            { label: 'Total Expenses', value: fmt(totalExpenses), color: '#A32D2D' },
+            { label: 'Net Profit / Loss', value: fmtN(netProfit), color: netProfit >= 0 ? '#0F6E56' : '#A32D2D', sub: `${margin.toFixed(1)}% margin` },
+          ].map(card => (
+            <div key={card.label} style={s.summaryCard}>
+              <div style={s.summaryLabel}>{card.label}</div>
+              <div style={{ ...s.summaryValue, color: card.color }}>{card.value}</div>
+              {card.sub && <div style={{ fontSize: '11px', color: card.color, marginTop: '4px', opacity: 0.8 }}>{card.sub}</div>}
+            </div>
+          ))}
         </div>
 
-        <div style={s.tableWrap}>
-          <table style={s.table}>
-            <thead>
-              <tr style={s.theadRow}>
-                <th style={{...s.th, width:'50%'}}>Item</th>
-                <th style={{...s.th, textAlign:'right'}}>Social Growth</th>
-                <th style={{...s.th, textAlign:'right'}}>Aimfox</th>
-                <th style={{...s.th, textAlign:'right', color:'#111'}}>Total USD</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr style={s.catRow}>
-                <td colSpan={4} style={s.catCell}>REVENUE</td>
-              </tr>
-              {plData.revenue.map(r => (
-                <tr key={r.name} style={s.dataRow}>
-                  <td style={s.td}>{r.name}</td>
-                  <td style={{...s.td, textAlign:'right', color:'#666'}}>{fmt(r.sg)}</td>
-                  <td style={{...s.td, textAlign:'right', color:'#666'}}>{fmt(r.af)}</td>
-                  <td style={{...s.td, textAlign:'right', fontWeight:'500', color: r.total > 0 ? '#0F6E56' : '#888'}}>{fmt(r.total)}</td>
-                </tr>
-              ))}
-              <tr style={s.totalRow}>
-                <td style={s.totalCell}>TOTAL REVENUE</td>
-                <td style={{...s.totalCell, textAlign:'right'}}></td>
-                <td style={{...s.totalCell, textAlign:'right'}}></td>
-                <td style={{...s.totalCell, textAlign:'right', color:'#0F6E56'}}>{fmt(totalRevenue)}</td>
-              </tr>
+        {/* Empty state */}
+        {!loading && !hasData && (
+          <div style={s.emptyState}>
+            <div style={{ fontSize: '32px', marginBottom: '12px' }}>📊</div>
+            <div style={{ fontSize: '15px', fontWeight: '500', color: '#111', marginBottom: '6px' }}>No P&L data for this period</div>
+            <div style={{ fontSize: '13px', color: '#888' }}>Post invoices or direct transactions to see real P&L data here.</div>
+          </div>
+        )}
 
-              <tr style={s.catRow}>
-                <td colSpan={4} style={s.catCell}>REDUCTIONS</td>
-              </tr>
-              {plData.reductions.map(r => (
-                <tr key={r.name} style={s.dataRow}>
-                  <td style={s.td}>{r.name}</td>
-                  <td style={{...s.td, textAlign:'right', color:'#666'}}>{fmt(r.sg)}</td>
-                  <td style={{...s.td, textAlign:'right', color:'#666'}}>{fmt(r.af)}</td>
-                  <td style={{...s.td, textAlign:'right', fontWeight:'500', color:'#A32D2D'}}>{fmt(r.total)}</td>
-                </tr>
-              ))}
-              <tr style={s.totalRow}>
-                <td style={s.totalCell}>TOTAL REDUCTIONS</td>
-                <td style={{...s.totalCell, textAlign:'right'}}></td>
-                <td style={{...s.totalCell, textAlign:'right'}}></td>
-                <td style={{...s.totalCell, textAlign:'right', color:'#A32D2D'}}>{fmt(totalReductions)}</td>
-              </tr>
-
-              <tr style={s.grossRow}>
-                <td style={s.grossCell}>GROSS PROFIT</td>
-                <td style={{...s.grossCell, textAlign:'right'}}></td>
-                <td style={{...s.grossCell, textAlign:'right'}}></td>
-                <td style={{...s.grossCell, textAlign:'right', color:'#0F6E56'}}>{fmt(grossProfit)}</td>
-              </tr>
-
-              <tr style={s.catRow}>
-                <td colSpan={4} style={s.catCell}>EXPENSES</td>
-              </tr>
-              {plData.expenses.map(cat => (
-                <React.Fragment key={cat.category}>
-                  <tr style={s.subCatRow}>
-                    <td colSpan={4} style={s.subCatCell}>{cat.category}</td>
+        {/* P&L Table */}
+        {(hasData || loading) && (
+          <div style={s.tableWrap}>
+            {loading && (
+              <div style={{ padding: '40px', textAlign: 'center', color: '#888', fontSize: '13px' }}>
+                Loading P&L data...
+              </div>
+            )}
+            {!loading && (
+              <table style={s.table}>
+                <thead>
+                  <tr style={s.theadRow}>
+                    <th style={{ ...s.th, width: '50%' }}>Item</th>
+                    <th style={{ ...s.th, textAlign: 'right' as const }}>Social Growth</th>
+                    <th style={{ ...s.th, textAlign: 'right' as const }}>Aimfox</th>
+                    <th style={{ ...s.th, textAlign: 'right' as const, color: '#fff' }}>Total USD</th>
                   </tr>
-                  {cat.items.map(item => (
-                    <tr key={item.name} style={s.dataRow}>
-                      <td style={{...s.td, paddingLeft:'2rem'}}>{item.name}</td>
-                      <td style={{...s.td, textAlign:'right', color:'#666'}}>{fmt(item.sg)}</td>
-                      <td style={{...s.td, textAlign:'right', color:'#666'}}>{fmt(item.af)}</td>
-                      <td style={{...s.td, textAlign:'right', fontWeight:'500', color: item.total > 0 ? '#A32D2D' : '#888'}}>{fmt(item.total)}</td>
-                    </tr>
-                  ))}
-                  <tr style={s.subTotalRow}>
-                    <td style={{...s.subTotalCell, paddingLeft:'1rem'}}>Total {cat.category}</td>
-                    <td style={{...s.subTotalCell, textAlign:'right'}}></td>
-                    <td style={{...s.subTotalCell, textAlign:'right'}}></td>
-                    <td style={{...s.subTotalCell, textAlign:'right', color:'#A32D2D'}}>{fmt(cat.items.reduce((s,i)=>s+i.total,0))}</td>
+                </thead>
+                <tbody>
+                  {/* REVENUE */}
+                  <tr style={s.catRow}><td colSpan={4} style={s.catCell}>REVENUE</td></tr>
+                  {Object.keys(revenueByStream).length === 0 ? (
+                    <tr style={s.dataRow}><td style={{ ...s.td, color: '#aaa', fontStyle: 'italic' }} colSpan={4}>No revenue entries for this period</td></tr>
+                  ) : (
+                    Object.entries(revenueByStream).map(([name, r]) => (
+                      <tr key={name} style={s.dataRow}>
+                        <td style={s.td}>{name}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtSG(r.sg)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtSG(r.af)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: r.total > 0 ? '#0F6E56' : '#888' }}>{fmt(r.total)}</td>
+                      </tr>
+                    ))
+                  )}
+                  <tr style={s.totalRow}>
+                    <td style={s.totalCell}>TOTAL REVENUE</td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const }}></td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const }}></td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#0F6E56' }}>{fmt(totalRevenue)}</td>
                   </tr>
-                </React.Fragment>
-              ))}
 
-              <tr style={s.totalRow}>
-                <td style={s.totalCell}>TOTAL EXPENSES</td>
-                <td style={{...s.totalCell, textAlign:'right'}}></td>
-                <td style={{...s.totalCell, textAlign:'right'}}></td>
-                <td style={{...s.totalCell, textAlign:'right', color:'#A32D2D'}}>{fmt(totalExpenses)}</td>
-              </tr>
+                  {/* REDUCTIONS */}
+                  <tr style={s.catRow}><td colSpan={4} style={s.catCell}>REDUCTIONS</td></tr>
+                  {Object.keys(reductionByName).length === 0 ? (
+                    <tr style={s.dataRow}><td style={{ ...s.td, color: '#aaa', fontStyle: 'italic' }} colSpan={4}>No reductions for this period</td></tr>
+                  ) : (
+                    Object.entries(reductionByName).map(([name, r]) => (
+                      <tr key={name} style={s.dataRow}>
+                        <td style={s.td}>{name}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtSG(r.sg)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtSG(r.af)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: '#A32D2D' }}>{fmt(r.total)}</td>
+                      </tr>
+                    ))
+                  )}
+                  <tr style={s.totalRow}>
+                    <td style={s.totalCell}>TOTAL REDUCTIONS</td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const }}></td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const }}></td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmt(totalReductions)}</td>
+                  </tr>
 
-              <tr style={s.netRow}>
-                <td style={s.netCell}>NET PROFIT / LOSS</td>
-                <td style={{...s.netCell, textAlign:'right'}}></td>
-                <td style={{...s.netCell, textAlign:'right'}}></td>
-                <td style={{...s.netCell, textAlign:'right', color: netProfit >= 0 ? '#0F6E56' : '#A32D2D'}}>{fmtN(netProfit)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                  {/* GROSS PROFIT */}
+                  <tr style={s.grossRow}>
+                    <td style={s.grossCell}>GROSS PROFIT</td>
+                    <td style={{ ...s.grossCell, textAlign: 'right' as const }}></td>
+                    <td style={{ ...s.grossCell, textAlign: 'right' as const }}></td>
+                    <td style={{ ...s.grossCell, textAlign: 'right' as const, color: grossProfit >= 0 ? '#085041' : '#A32D2D' }}>{fmtN(grossProfit)}</td>
+                  </tr>
+
+                  {/* EXPENSES */}
+                  <tr style={s.catRow}><td colSpan={4} style={s.catCell}>EXPENSES</td></tr>
+                  {expenseCategories.map(cat => {
+                    const items = getExpensesForCategory(cat.name)
+                    const catTotal = Object.values(items).reduce((s, i) => s + i.total, 0)
+                    if (catTotal === 0 && !hasData) return null
+                    return (
+                      <React.Fragment key={cat.id}>
+                        <tr style={s.subCatRow}>
+                          <td colSpan={4} style={s.subCatCell}>{cat.name}</td>
+                        </tr>
+                        {Object.keys(items).length === 0 ? (
+                          <tr style={s.dataRow}>
+                            <td style={{ ...s.td, paddingLeft: '2rem', color: '#aaa', fontStyle: 'italic' }} colSpan={4}>No entries</td>
+                          </tr>
+                        ) : (
+                          Object.entries(items).map(([name, item]) => (
+                            <tr key={name} style={s.dataRow}>
+                              <td style={{ ...s.td, paddingLeft: '2rem' }}>{name}</td>
+                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtSG(item.sg)}</td>
+                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtSG(item.af)}</td>
+                              <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: item.total > 0 ? '#A32D2D' : '#888' }}>{fmt(item.total)}</td>
+                            </tr>
+                          ))
+                        )}
+                        <tr style={s.subTotalRow}>
+                          <td style={{ ...s.subTotalCell, paddingLeft: '1rem' }}>Total {cat.name}</td>
+                          <td style={{ ...s.subTotalCell, textAlign: 'right' as const }}></td>
+                          <td style={{ ...s.subTotalCell, textAlign: 'right' as const }}></td>
+                          <td style={{ ...s.subTotalCell, textAlign: 'right' as const, color: catTotal > 0 ? '#A32D2D' : '#888' }}>{fmt(catTotal)}</td>
+                        </tr>
+                      </React.Fragment>
+                    )
+                  })}
+
+                  <tr style={s.totalRow}>
+                    <td style={s.totalCell}>TOTAL EXPENSES</td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const }}></td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const }}></td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmt(totalExpenses)}</td>
+                  </tr>
+
+                  <tr style={s.netRow}>
+                    <td style={s.netCell}>NET PROFIT / LOSS</td>
+                    <td style={{ ...s.netCell, textAlign: 'right' as const }}></td>
+                    <td style={{ ...s.netCell, textAlign: 'right' as const }}></td>
+                    <td style={{ ...s.netCell, textAlign: 'right' as const, color: netProfit >= 0 ? '#5DCAA5' : '#F5A9A9' }}>{fmtN(netProfit)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
 const s: Record<string, React.CSSProperties> = {
-  root: { minHeight:'100vh', background:'#f5f5f3', fontFamily:'system-ui,sans-serif' },
-  nav: { background:'#0a1628', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 1.5rem', height:'52px' },
-  navLogo: { display:'flex', alignItems:'center', gap:'8px' },
-  navLogoText: { fontFamily:'Georgia,serif', fontSize:'18px', fontWeight:'500', color:'#fff' },
-  navLinks: { display:'flex', gap:'4px' },
-  navLink: { fontSize:'13px', color:'rgba(255,255,255,0.5)', padding:'6px 12px', borderRadius:'6px', cursor:'pointer' },
-  navLinkActive: { fontSize:'13px', color:'#fff', padding:'6px 12px', borderRadius:'6px', background:'rgba(255,255,255,0.08)', cursor:'pointer' },
-  navRight: { display:'flex', alignItems:'center', gap:'10px' },
-  navAvatar: { width:'30px', height:'30px', borderRadius:'50%', background:'#1D9E75', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11px', fontWeight:'500', color:'#fff' },
-  navEmail: { fontSize:'13px', color:'rgba(255,255,255,0.7)' },
-  navSignout: { background:'none', border:'0.5px solid rgba(255,255,255,0.15)', color:'rgba(255,255,255,0.5)', fontFamily:'system-ui,sans-serif', fontSize:'11px', padding:'5px 12px', borderRadius:'6px', cursor:'pointer' },
-  body: { padding:'2rem 1.5rem' },
-  pageHeader: { display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:'1.5rem' },
-  pageTitle: { fontFamily:'Georgia,serif', fontSize:'24px', fontWeight:'400', color:'#111', marginBottom:'4px' },
-  pageSub: { fontSize:'13px', color:'#888' },
-  filterSelect: { fontFamily:'system-ui,sans-serif', fontSize:'13px', border:'0.5px solid #e5e5e5', borderRadius:'8px', padding:'8px 12px', outline:'none', background:'#fff', color:'#111', cursor:'pointer' },
-  exportBtn: { fontFamily:'system-ui,sans-serif', fontSize:'13px', border:'0.5px solid #e5e5e5', borderRadius:'8px', padding:'8px 16px', background:'#0a1628', color:'#fff', cursor:'pointer' },
-  summaryGrid: { display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px', marginBottom:'1.5rem' },
-  summaryCard: { background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'12px', padding:'1rem 1.25rem' },
-  summaryLabel: { fontSize:'11px', color:'#888', textTransform:'uppercase' as const, letterSpacing:'0.08em', marginBottom:'8px' },
-  summaryValue: { fontSize:'22px', fontWeight:'500' },
-  tableWrap: { background:'#fff', border:'0.5px solid #e5e5e5', borderRadius:'12px', overflow:'hidden' },
-  table: { width:'100%', borderCollapse:'collapse' as const, fontSize:'13px' },
-  theadRow: { background:'#0a1628' },
-  th: { padding:'10px 16px', textAlign:'left' as const, fontSize:'10px', fontWeight:'500', color:'rgba(255,255,255,0.5)', textTransform:'uppercase' as const, letterSpacing:'0.1em' },
-  catRow: { background:'#f0f0ee' },
-  catCell: { padding:'8px 16px', fontSize:'11px', fontWeight:'500', color:'#444', textTransform:'uppercase' as const, letterSpacing:'0.1em' },
-  subCatRow: { background:'#fafaf9' },
-  subCatCell: { padding:'7px 16px', fontSize:'12px', fontWeight:'500', color:'#666', borderTop:'0.5px solid #e5e5e5' },
-  dataRow: { borderBottom:'0.5px solid #f0f0ee' },
-  td: { padding:'8px 16px', color:'#333', fontSize:'13px' },
-  totalRow: { background:'#f5f5f3', borderTop:'1px solid #e5e5e5' },
-  totalCell: { padding:'10px 16px', fontSize:'12px', fontWeight:'500', color:'#111' },
-  subTotalRow: { background:'#fafaf9', borderTop:'0.5px solid #e5e5e5' },
-  subTotalCell: { padding:'7px 16px', fontSize:'11px', fontWeight:'500', color:'#666' },
-  grossRow: { background:'#E1F5EE', borderTop:'2px solid #1D9E75' },
-  grossCell: { padding:'12px 16px', fontSize:'13px', fontWeight:'500', color:'#085041' },
-  netRow: { background:'#0a1628', borderTop:'2px solid #0a1628' },
-  netCell: { padding:'14px 16px', fontSize:'14px', fontWeight:'500', color:'#fff' },
+  root: { minHeight: '100vh', background: '#f5f5f3', fontFamily: 'system-ui,sans-serif' },
+  nav: { background: '#0a1628', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1.5rem', height: '52px' },
+  navLogo: { display: 'flex', alignItems: 'center', gap: '8px' },
+  navLogoText: { fontFamily: 'Georgia,serif', fontSize: '18px', fontWeight: '500', color: '#fff' },
+  navLinks: { display: 'flex', gap: '4px' },
+  navLink: { fontSize: '13px', color: 'rgba(255,255,255,0.5)', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' },
+  navLinkActive: { fontSize: '13px', color: '#fff', padding: '6px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', cursor: 'pointer' },
+  navRight: { display: 'flex', alignItems: 'center', gap: '10px' },
+  navAvatar: { width: '30px', height: '30px', borderRadius: '50%', background: '#1D9E75', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '500', color: '#fff' },
+  navEmail: { fontSize: '13px', color: 'rgba(255,255,255,0.7)' },
+  navSignout: { background: 'none', border: '0.5px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.5)', fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer' },
+  body: { padding: '2rem 1.5rem' },
+  pageHeader: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.5rem' },
+  pageTitle: { fontFamily: 'Georgia,serif', fontSize: '24px', fontWeight: '400', color: '#111', marginBottom: '4px' },
+  pageSub: { fontSize: '13px', color: '#888' },
+  filterSelect: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '0.5px solid #e5e5e5', borderRadius: '8px', padding: '8px 12px', outline: 'none', background: '#fff', color: '#111', cursor: 'pointer' },
+  summaryGrid: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '1.5rem' },
+  summaryCard: { background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '12px', padding: '1rem 1.25rem' },
+  summaryLabel: { fontSize: '11px', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '8px' },
+  summaryValue: { fontSize: '22px', fontWeight: '500' },
+  emptyState: { background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '12px', padding: '60px', textAlign: 'center' as const },
+  tableWrap: { background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '12px', overflow: 'hidden' },
+  table: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '13px' },
+  theadRow: { background: '#0a1628' },
+  th: { padding: '10px 16px', textAlign: 'left' as const, fontSize: '10px', fontWeight: '500', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' as const, letterSpacing: '0.1em' },
+  catRow: { background: '#f0f0ee' },
+  catCell: { padding: '8px 16px', fontSize: '11px', fontWeight: '500', color: '#444', textTransform: 'uppercase' as const, letterSpacing: '0.1em' },
+  subCatRow: { background: '#fafaf9' },
+  subCatCell: { padding: '7px 16px', fontSize: '12px', fontWeight: '500', color: '#666', borderTop: '0.5px solid #e5e5e5' },
+  dataRow: { borderBottom: '0.5px solid #f0f0ee' },
+  td: { padding: '8px 16px', color: '#333', fontSize: '13px' },
+  totalRow: { background: '#f5f5f3', borderTop: '1px solid #e5e5e5' },
+  totalCell: { padding: '10px 16px', fontSize: '12px', fontWeight: '500', color: '#111' },
+  subTotalRow: { background: '#fafaf9', borderTop: '0.5px solid #e5e5e5' },
+  subTotalCell: { padding: '7px 16px', fontSize: '11px', fontWeight: '500', color: '#666' },
+  grossRow: { background: '#E1F5EE', borderTop: '2px solid #1D9E75' },
+  grossCell: { padding: '12px 16px', fontSize: '13px', fontWeight: '500', color: '#085041' },
+  netRow: { background: '#0a1628', borderTop: '2px solid #0a1628' },
+  netCell: { padding: '14px 16px', fontSize: '14px', fontWeight: '500', color: '#fff' },
 }
