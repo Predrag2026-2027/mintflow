@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { supabase } from '../supabase'
 import * as XLSX from 'xlsx'
+import { getRate, convertToUSD } from '../services/currencyService'
 
 interface Props {
   onClose: () => void
@@ -426,12 +427,50 @@ export default function BulkImport({ onClose, onImported }: Props) {
   }
 
   const analyzeWithAI = async () => {
-    if (!company || !bank) return
-    setAnalyzing(true)
-    setAnalyzeError('')
-    setProgress(0)
+  if (!company || !bank) return
+  setAnalyzing(true)
+  setAnalyzeError('')
+  setProgress(0)
 
-    const partnerNames = partners.map(p => p.name).join(', ')
+  // ── Auto-fetch exchange rates for non-USD currencies ──
+  const supabaseUrl = process.env.REACT_APP_SUPABASE_URL
+  const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY
+  const rateCache: Record<string, number> = {} // key: "RSD_2026-04-15"
+
+  const rowsWithRates = await Promise.all(rows.map(async (row) => {
+    const { currency, date, debit, credit } = row.parsed
+    if (currency === 'USD') return row // already USD
+
+    const amount = (debit || 0) > 0 ? (debit || 0) : (credit || 0)
+    if (!amount) return row
+
+    // Format date DD.MM.YYYY -> YYYY-MM-DD for API
+    const parts = date.split('.')
+    const isoDate = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : date
+    const cacheKey = `${currency}_${isoDate}`
+
+    if (!rateCache[cacheKey]) {
+      try {
+        const rateData = await getRate(currency, isoDate)
+        rateCache[cacheKey] = rateData.rate
+      } catch {
+        const fallbacks: Record<string, number> = { RSD: 105.0, EUR: 1.08, AED: 0.272 }
+        rateCache[cacheKey] = fallbacks[currency] || 1
+      }
+    }
+
+    const rate = rateCache[cacheKey]
+    const amountUsd = convertToUSD(amount, currency, rate)
+
+    return {
+      ...row,
+      parsed: { ...row.parsed, amount_usd: amountUsd, exchange_rate: rate }
+    }
+  }))
+
+  setRows(rowsWithRates)
+
+  const partnerNames = partners.map(p => p.name).join(', ')
     const batchSize = 5
     const supabaseUrl = process.env.REACT_APP_SUPABASE_URL
     const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY
@@ -536,7 +575,8 @@ export default function BulkImport({ onClose, onImported }: Props) {
         type: row.override_tx_type, tx_subtype: row.override_tx_subtype,
         payment_method: row.override_payment_method || null,
         currency: p.currency, amount,
-        exchange_rate: null, amount_usd: p.currency === 'USD' ? amount : null,
+        exchange_rate: (p as any).exchange_rate || null,
+amount_usd: (p as any).amount_usd || (p.currency === 'USD' ? amount : null),
         pl_impact: isDirectWithPL,
         pl_category: isDirectWithPL ? (row.override_pl_category_name || null) : null,
         pl_subcategory: isDirectWithPL ? (row.override_pl_subcategory_name || null) : null,
