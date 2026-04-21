@@ -28,7 +28,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
 
   // Form state
   const [companyId, setCompanyId] = useState('')
-  const [companyName, setCompanyName] = useState('')
   const [partnerId, setPartnerId] = useState('')
   const [partnerSearch, setPartnerSearch] = useState('')
   const [newPartnerName, setNewPartnerName] = useState('')
@@ -355,7 +354,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                   <div style={s.field}>
                     <label style={s.lbl}>Company <span style={s.req}>*</span></label>
                     <select style={{ ...s.select, ...(fieldErr('companyId') ? s.inputError : {}) }} value={companyId}
-                      onChange={e => { setCompanyId(e.target.value); setCompanyName(companies.find(c => c.id === e.target.value)?.name || ''); setCurrency(''); touch('companyId') }}
+                      onChange={e => { setCompanyId(e.target.value); setCurrency(''); touch('companyId') }}
                       onBlur={() => touch('companyId')}>
                       <option value="">Select company...</option>
                       {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}

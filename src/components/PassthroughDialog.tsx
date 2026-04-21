@@ -24,8 +24,7 @@ export default function PassthroughDialog({ onClose, passthrough }: Props) {
   const [unpaired, setUnpaired] = useState<any[]>([])
 
   // Step 1
-  const [companyId, setCompanyId] = useState('')
-  const [companyName, setCompanyName] = useState('')
+  const [companyId, setCompanyId] = useState('')  
   const [bankId, setBankId] = useState('')
   const [currency, setCurrency] = useState('')
   const [txDate, setTxDate] = useState(new Date().toISOString().split('T')[0])
@@ -287,7 +286,7 @@ export default function PassthroughDialog({ onClose, passthrough }: Props) {
                   <div style={s.field}>
                     <label style={s.lbl}>Company <span style={s.req}>*</span></label>
                     <select style={{ ...s.select, ...(fieldErr('companyId') ? s.inputError : {}) }} value={companyId}
-                      onChange={e => { setCompanyId(e.target.value); setCompanyName(companies.find(c => c.id === e.target.value)?.name || ''); touch('companyId') }}
+                      onChange={e => { setCompanyId(e.target.value); touch('companyId') }}
                       onBlur={() => touch('companyId')}>
                       <option value="">Select company...</option>
                       {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
