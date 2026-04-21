@@ -310,10 +310,9 @@ export default function PassthroughDialog({ onClose, passthrough }: Props) {
                     <select style={{ ...s.select, ...(fieldErr('currency') ? s.inputError : {}) }} value={currency}
                       onChange={e => { setCurrency(e.target.value); touch('currency') }} onBlur={() => touch('currency')}>
                       <option value="">Select...</option>
-                      {companyName === 'SFBC' && <option>USD</option>}
-                      {companyName === 'Constellation LLC' && <><option>RSD</option><option>USD</option><option>EUR</option></>}
-                      {companyName === 'Social Growth LLC-FZ' && <><option>USD</option><option>AED</option></>}
-                      {!companyName && <><option>USD</option><option>RSD</option><option>EUR</option><option>AED</option></>}
+{(companies.find(c => c.id === companyId)?.currencies || ['USD','RSD','EUR','AED']).map((cur: string) => (
+  <option key={cur}>{cur}</option>
+))}
                     </select>
                     {fieldErr('currency') && <span style={s.errorMsg}>{fieldErr('currency')}</span>}
                   </div>
