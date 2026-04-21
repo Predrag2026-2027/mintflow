@@ -7,50 +7,6 @@ interface Props {
   invoice?: any
 }
 
-const plSubs: Record<string, string[]> = {
-  'Employee and Labour': ['Net Salaries','Tax on salary','Contributions on behalf of the employee','Contributions on behalf of the employer','Transportation cost','Salary Expenses Abroad','Private Health insurance','Health care expenses paid by employer','Warm Meal expenses','FitPass expenses','Employee participation in benefits','Renumeration, allowances and other benefits','Education and training of employees'],
-  'Professional and Production Services': ['Legal outsourced services','Domestic marketing expenses (product oriented)','Marketing expenses from abroad (product oriented)','Affiliates Payment','Linkbuilding and other SEO expenses','Marketing outsourced services','Dev&Product&Design Outsourced services','Customer support services (outsourced)','Subscriptions and licences fees','Cost of databases for sales and production services','Share profit expenses','Other'],
-  'Banking and Finance': ['Bank Fees (domestic)','Bank Fees (abroad)','Interest Paid','PayPal Payment & Payout Fees','Stripe Payout Fees','Insurance','Loan Fees','Other banking, finance and currency differences'],
-  'General Business': ['Rent and Mortgage of business premises','Rent of garage spaces','Office Maintenance and Repairs','Office Supplies','Non production professional services','Utilities','Telecommunication','Advertising, Marketing and Promotions','Domain, Website, Web hosting, cloud server','Financial Leasing','Office cleaning expenses','Subscriptions and licences fees','Penalty, fines and other forced fees','Postage and Shipping','Capital expenditures','Travel expenses','Job ads and hiring','Meals and Entertainment','Safety and protection expenses','Registration fees and taxes','Magazines and books','Donation, sponsorships, gifts','US Setup Fees',"Shareholder's Private & Business expenses",'Other general business expenses'],
-  'Vehicle Expense': ['Fuel and gas expenses','Vehicle Maintenance and Repairs','Vehicle registration','Vehicle Insurance','Other vehicle expenses'],
-  'Taxes': ['VAT tax expenses','City and ecological taxes','Expenses for Financing Disability Funds','Corporate income tax','Other taxes'],
-}
-
-const deptSubs: Record<string, string[]> = {
-  'Marketing Expenses': ['SaaS expenses','Paid Advertising','Outsourcing expenses','Affiliates expenses','Salary expenses abroad','Salary expenses domestic'],
-  'Development Expenses': ['SaaS expenses','Outsourcing services and Associates','Salary expenses abroad'],
-  'Product Expenses': ['SaaS expenses','Outsourcing services and Associates','Salary expenses abroad','Salary expenses domestic'],
-  'Design Expenses': ['SaaS expenses','Outsourcing services and Associates','Salary expenses abroad','Salary expenses domestic'],
-  'Sales Expenses': ['SaaS expenses','Salary expenses domestic','Salary expenses abroad'],
-  'CS Expenses': ['SaaS expenses','Outsourcing services','Salary expenses domestic'],
-  'Office & Administration': ['SaaS expenses','Salary expenses domestic','Salary expenses abroad'],
-  'Shareholder Expenses': ['Private & Business expenses','Salary expenses domestic','Salary expenses abroad'],
-  'General Business Expenses': ['General expenses','SaaS expenses','Labour related expenses','Banking and Finance','Vehicle expenses','Taxes','Professional and production services','Setup Fees'],
-  'Loans / Credit / Dividends': ['Loans','Credit','Dividends'],
-}
-
-const expDescs: Record<string, string[]> = {
-  'SaaS expenses': ['Brevo','Klaviyo','Ahrefs','Figma','Canva','Adobe Creative cloud','Sentry','OpenAI','Amazon Web Services','GitHub','Cursor','Chargebee','Linear','Followiz','Intercom','Churnkey','Zapmail','Close CRM','Calendly','Notion','Odoo','Office licence','Other SaaS'],
-  'Paid Advertising': ['Google Ads','Microsoft Ads','Meta Ads','Twitter Ads','LinkedIn Ads','Reddit Ads'],
-  'Outsourcing expenses': ['Content Creation Services','Fiverr','Upwork','Offpage SEO','Other outsourcing'],
-  'Affiliates expenses': ['Kicksta','Flock','Upleap','Kenji','Nitreo','AimFox'],
-  'Outsourcing services and Associates': ['MGP25 Cyberint Services','Legali Veikla','Account Rental','Ninja Flows','Other'],
-  'Outsourcing services': ['Stuff Up Bro','Phantombuster','HeyReach'],
-  'General expenses': ['Rent and Mortgage','Rent of garage spaces','Maintenance and Repairs','Office Supplies','Utilities','Telecommunication','Advertising and Promotions','Financial Leasing','Office cleaning','Travel expenses','Meals and Entertainment','Safety expenses','Registration fees','Donation and gifts','Domain and website registration','Web hosting and cloud'],
-  'Labour related expenses': ['Transportation cost','Private Health insurance','Warm Meal expenses','FitPass expenses','Renumeration and allowances','Education and training'],
-  'Banking and Finance': ['Bank Fees (domestic)','Bank Fees (abroad)','PayPal Fees','Stripe Fees','Interest Paid','Insurance','Loan Fees'],
-  'Vehicle expenses': ['Fuel and gas expenses','Vehicle Maintenance','Vehicle registration','Vehicle Insurance','Other vehicle expenses'],
-  'Taxes': ['VAT tax','City and ecological taxes','Financing Disability Funds','Corporate income tax','Other taxes'],
-  'Professional and production services': ['Legal outsourced services','Share profit expenses','Other'],
-  'Setup Fees': ['US Setup Fees'],
-  'Private & Business expenses': ['Food & Beverage','Restaurants & Hotels','Entertainment','SaaS software','Avio Tickets','Amex expenses','Fuel Expenses','Other expenses'],
-  'Loans': ['Loan from shareholders','Bank credit','Loans from third parties'],
-  'Credit': ['Bank credit line','Credit facility'],
-  'Dividends': ['Dividends paid to shareholders'],
-  'Salary expenses abroad': ['Tamar Zarandi','Sopo Tobagri','Nikola Grabovica','Yassien','Other salary abroad'],
-  'Salary expenses domestic': ['Net Salary & Contributions','Other domestic salary'],
-}
-
 interface ValidationErrors { [key: string]: string }
 
 export default function InvoiceDialog({ onClose, invoice }: Props) {
@@ -61,9 +17,16 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [showValidationSummary, setShowValidationSummary] = useState(false)
 
+  // Reference data from DB
   const [companies, setCompanies] = useState<any[]>([])
   const [partners, setPartners] = useState<any[]>([])
+  const [plCategories, setPlCategories] = useState<any[]>([])
+  const [plSubcategories, setPlSubcategories] = useState<any[]>([])
+  const [departments, setDepartments] = useState<any[]>([])
+  const [deptSubcategories, setDeptSubcategories] = useState<any[]>([])
+  const [expenseDescriptions, setExpenseDescriptions] = useState<any[]>([])
 
+  // Form state
   const [companyId, setCompanyId] = useState('')
   const [companyName, setCompanyName] = useState('')
   const [partnerId, setPartnerId] = useState('')
@@ -74,11 +37,18 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0])
   const [dueDate, setDueDate] = useState('')
   const [invType, setInvType] = useState<'expense' | 'revenue'>('expense')
-  const [plCat, setPlCat] = useState('')
-  const [plSub, setPlSub] = useState('')
-  const [dept, setDept] = useState('')
-  const [deptSub, setDeptSub] = useState('')
+
+  // P&L classification — stored by ID + name
+  const [plCatId, setPlCatId] = useState('')
+  const [plCatName, setPlCatName] = useState('')
+  const [plSubId, setPlSubId] = useState('')
+  const [plSubName, setPlSubName] = useState('')
+  const [deptId, setDeptId] = useState('')
+  const [deptName, setDeptName] = useState('')
+  const [deptSubId, setDeptSubId] = useState('')
+  const [deptSubName, setDeptSubName] = useState('')
   const [expDesc, setExpDesc] = useState('')
+
   const [revStream, setRevStream] = useState('')
   const [revAlloc, setRevAlloc] = useState('sg100')
   const [deptSplit, setDeptSplit] = useState('none')
@@ -101,6 +71,18 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
     return convertToUSD(a, currency, r)
   })()
 
+  // ── Cascade helpers ────────────────────────────────────
+  const getPlSubs = (catId: string) => plSubcategories.filter(s => s.category_id === catId)
+  const getDeptSubs = (dId: string) => deptSubcategories.filter(s => s.department_id === dId)
+  const getExpDescs = (subId: string) => expenseDescriptions.filter(e => e.dept_subcategory_id === subId)
+
+  // Revenue streams from DB (pl_categories of type 'revenue') or fallback list
+  const revenueStreams = [
+    'Social Growth', 'Aimfox', 'Outsourced Services',
+    'VAT Claimed', 'Interest Received', 'Loans', 'Credit', 'Other',
+  ]
+
+  // ── Validation ────────────────────────────────────────
   const runValidation = () => {
     const e: ValidationErrors = {}
     if (!companyId) e.companyId = 'Company is required'
@@ -110,56 +92,104 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
     if (!amount || parseFloat(amount) <= 0) e.amount = 'Amount must be greater than 0'
     if (currency && currency !== 'USD' && (!exRate || parseFloat(exRate) <= 0)) e.exRate = 'Exchange rate is required'
     if (invType === 'expense') {
-      if (!plCat) e.plCat = 'P&L Category is required'
-      if (!dept) e.dept = 'Department is required'
+      if (!plCatId) e.plCat = 'P&L Category is required'
+      if (!deptId) e.dept = 'Department is required'
     }
     if (invType === 'revenue' && !revStream) e.revStream = 'Revenue stream is required'
     return e
   }
 
-  useEffect(() => { setErrors(runValidation()) }, [companyId, currency, invoiceDate, partnerId, newPartnerName, showNewPartner, invType, plCat, dept, revStream, amount, exRate]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setErrors(runValidation())
+  }, [companyId, currency, invoiceDate, partnerId, newPartnerName, showNewPartner, invType, plCatId, deptId, revStream, amount, exRate]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Load reference data ───────────────────────────────
   useEffect(() => {
     const load = async () => {
-      const [{ data: comp }, { data: part }] = await Promise.all([
+      const [
+        { data: comp }, { data: part },
+        { data: plCat }, { data: plSub },
+        { data: dept }, { data: deptSub },
+        { data: expD },
+      ] = await Promise.all([
         supabase.from('companies').select('*').order('name'),
         supabase.from('partners').select('*').order('name'),
+        supabase.from('pl_categories').select('id,name,type,sort_order').order('sort_order'),
+        supabase.from('pl_subcategories').select('id,name,category_id,sort_order').order('sort_order'),
+        supabase.from('departments').select('id,name,sort_order').order('sort_order'),
+        supabase.from('dept_subcategories').select('id,name,department_id,sort_order').order('sort_order'),
+        supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_order').order('sort_order'),
       ])
       if (comp) setCompanies(comp)
       if (part) setPartners(part)
+      if (plCat) setPlCategories(plCat)
+      if (plSub) setPlSubcategories(plSub)
+      if (dept) setDepartments(dept)
+      if (deptSub) setDeptSubcategories(deptSub)
+      if (expD) setExpenseDescriptions(expD)
     }
     load()
   }, [])
 
+  // ── Populate form when editing ─────────────────────────
   useEffect(() => {
-    if (invoice) {
-      setCompanyId(invoice.company_id || '')
-      setCompanyName(invoice.companies?.name || '')
-      setPartnerId(invoice.partner_id || '')
-      setPartnerSearch(invoice.partners?.name || '')
-      setInvoiceNumber(invoice.invoice_number || '')
-      setInvoiceDate(invoice.invoice_date || '')
-      setDueDate(invoice.due_date || '')
-      setInvType(invoice.type || 'expense')
-      setPlCat(invoice.pl_category || '')
-      setPlSub(invoice.pl_subcategory || '')
-      setDept(invoice.department || '')
-      setDeptSub(invoice.dept_subcategory || '')
-      setExpDesc(invoice.expense_description || '')
-      setRevStream(invoice.revenue_stream || '')
-      setRevAlloc(invoice.rev_alloc_type || 'sg100')
-      setDeptSplit(invoice.dept_split_type || 'none')
-      setNote(invoice.note || '')
-      setTags(invoice.tags || [])
-      setAccNum(invoice.account_number || '')
-      setModel(invoice.model || '')
-      setRefNum(invoice.reference_number || '')
-      setCurrency(invoice.currency || '')
-      setAmount(invoice.amount?.toString() || '')
-      setExRate(invoice.exchange_rate?.toString() || '')
-      setIsIndexed(invoice.is_indexed || false)
-    }
+    if (!invoice) return
+    setCompanyId(invoice.company_id || '')
+    setCompanyName(invoice.companies?.name || '')
+    setPartnerId(invoice.partner_id || '')
+    setPartnerSearch(invoice.partners?.name || '')
+    setInvoiceNumber(invoice.invoice_number || '')
+    setInvoiceDate(invoice.invoice_date || '')
+    setDueDate(invoice.due_date || '')
+    setInvType(invoice.type || 'expense')
+    // P&L — match by name from saved invoice
+    setPlCatName(invoice.pl_category || '')
+    setPlSubName(invoice.pl_subcategory || '')
+    setDeptName(invoice.department || '')
+    setDeptSubName(invoice.dept_subcategory || '')
+    setExpDesc(invoice.expense_description || '')
+    setRevStream(invoice.revenue_stream || '')
+    setRevAlloc(invoice.rev_alloc_type || 'sg100')
+    setDeptSplit(invoice.dept_split_type || 'none')
+    setNote(invoice.note || '')
+    setTags(invoice.tags || [])
+    setAccNum(invoice.account_number || '')
+    setModel(invoice.model || '')
+    setRefNum(invoice.reference_number || '')
+    setCurrency(invoice.currency || '')
+    setAmount(invoice.amount?.toString() || '')
+    setExRate(invoice.exchange_rate?.toString() || '')
+    setIsIndexed(invoice.is_indexed || false)
   }, [invoice])
+
+  // Once categories load, match IDs from names (for edit mode)
+  useEffect(() => {
+    if (invoice && plCategories.length > 0) {
+      const cat = plCategories.find(c => c.name === invoice.pl_category)
+      if (cat) setPlCatId(cat.id)
+    }
+  }, [invoice, plCategories])
+
+  useEffect(() => {
+    if (invoice && plSubcategories.length > 0 && plCatId) {
+      const sub = plSubcategories.find(s => s.name === invoice.pl_subcategory && s.category_id === plCatId)
+      if (sub) setPlSubId(sub.id)
+    }
+  }, [invoice, plSubcategories, plCatId])
+
+  useEffect(() => {
+    if (invoice && departments.length > 0) {
+      const dept = departments.find(d => d.name === invoice.department)
+      if (dept) setDeptId(dept.id)
+    }
+  }, [invoice, departments])
+
+  useEffect(() => {
+    if (invoice && deptSubcategories.length > 0 && deptId) {
+      const sub = deptSubcategories.find(s => s.name === invoice.dept_subcategory && s.department_id === deptId)
+      if (sub) setDeptSubId(sub.id)
+    }
+  }, [invoice, deptSubcategories, deptId])
 
   const filteredPartners = partners.filter(p =>
     !partnerSearch || p.name.toLowerCase().includes(partnerSearch.toLowerCase())
@@ -170,10 +200,19 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
   const totalErrors = Object.keys(errors).length
   const isValid = totalErrors === 0
 
-  const touchStep = (s: number) => {
-    if (s === 1) setTouched(p => ({ ...p, companyId: true, currency: true, invoiceDate: true, partnerId: true }))
-    if (s === 2) setTouched(p => ({ ...p, plCat: true, dept: true, revStream: true }))
-    if (s === 3) setTouched(p => ({ ...p, amount: true, exRate: true }))
+  const touchStep = (n: number) => {
+    if (n === 1) setTouched(p => ({ ...p, companyId: true, currency: true, invoiceDate: true, partnerId: true }))
+    if (n === 2) setTouched(p => ({ ...p, plCat: true, dept: true, revStream: true }))
+    if (n === 3) setTouched(p => ({ ...p, amount: true, exRate: true }))
+  }
+
+  const stepHasError = (n: number) => {
+    const stepFields: Record<number, string[]> = {
+      1: ['companyId', 'currency', 'invoiceDate', 'partnerId'],
+      2: ['plCat', 'dept', 'revStream'],
+      3: ['amount', 'exRate'],
+    }
+    return (stepFields[n] || []).some(f => !!errors[f])
   }
 
   const fetchRate = async () => {
@@ -195,15 +234,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
 
   const stepTitles = ['Basic information', 'Classification & P&L', 'Amount & currency', 'Review & post']
 
-  const stepHasError = (n: number) => {
-    const stepFields: Record<number, string[]> = {
-      1: ['companyId', 'currency', 'invoiceDate', 'partnerId'],
-      2: ['plCat', 'dept', 'revStream'],
-      3: ['amount', 'exRate'],
-    }
-    return (stepFields[n] || []).some(f => !!errors[f])
-  }
-
   const handlePost = async () => {
     setTouched({ companyId: true, currency: true, invoiceDate: true, partnerId: true, plCat: true, dept: true, revStream: true, amount: true, exRate: true })
     const e = runValidation()
@@ -216,18 +246,32 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
         if (newP) finalPartnerId = newP.id
       }
       const payload = {
-        company_id: companyId || null, partner_id: finalPartnerId || null,
-        invoice_number: invoiceNumber || null, invoice_date: invoiceDate,
-        due_date: dueDate || null, type: invType,
-        pl_category: plCat || null, pl_subcategory: plSub || null,
-        department: dept || null, dept_subcategory: deptSub || null,
-        expense_description: expDesc || null, revenue_stream: revStream || null,
-        rev_alloc_type: revAlloc, dept_split_type: deptSplit, currency,
-        amount: parseFloat(amount), exchange_rate: parseFloat(exRate) || null,
-        amount_usd: usdAmount, is_indexed: isIndexed,
-        account_number: accNum || null, model: model || null, reference_number: refNum || null,
-        note: note || null, tags: tags.length > 0 ? tags : null,
-        pl_impact: true, status: 'unpaid',
+        company_id: companyId || null,
+        partner_id: finalPartnerId || null,
+        invoice_number: invoiceNumber || null,
+        invoice_date: invoiceDate,
+        due_date: dueDate || null,
+        type: invType,
+        pl_category: plCatName || null,
+        pl_subcategory: plSubName || null,
+        department: deptName || null,
+        dept_subcategory: deptSubName || null,
+        expense_description: expDesc || null,
+        revenue_stream: revStream || null,
+        rev_alloc_type: revAlloc,
+        dept_split_type: deptSplit,
+        currency,
+        amount: parseFloat(amount),
+        exchange_rate: parseFloat(exRate) || null,
+        amount_usd: usdAmount,
+        is_indexed: isIndexed,
+        account_number: accNum || null,
+        model: model || null,
+        reference_number: refNum || null,
+        note: note || null,
+        tags: tags.length > 0 ? tags : null,
+        pl_impact: true,
+        status: 'unpaid',
       }
       if (invoice?.id) { await supabase.from('invoices').update(payload).eq('id', invoice.id) }
       else { await supabase.from('invoices').insert(payload) }
@@ -248,6 +292,12 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
       </div>
     </div>
   )
+
+  // Expense categories only (filter out revenue type)
+  const expenseCategories = plCategories.filter(c => c.type !== 'revenue')
+  const currentPlSubs = getPlSubs(plCatId)
+  const currentDeptSubs = getDeptSubs(deptId)
+  const currentExpDescs = getExpDescs(deptSubId)
 
   return (
     <div style={s.overlay}>
@@ -295,6 +345,8 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
         )}
 
         <div style={s.body}>
+
+          {/* ── STEP 1 ── */}
           {step === 1 && (
             <>
               <div style={s.section}>
@@ -399,6 +451,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
             </>
           )}
 
+          {/* ── STEP 2 ── */}
           {step === 2 && (
             <>
               {invType === 'expense' && (
@@ -408,47 +461,77 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                     <div style={s.row2}>
                       <div style={s.field}>
                         <label style={s.lbl}>P&L Category <span style={s.req}>*</span></label>
-                        <select style={{ ...s.select, ...(fieldErr('plCat') ? s.inputError : {}) }} value={plCat}
-                          onChange={e => { setPlCat(e.target.value); setPlSub(''); touch('plCat') }} onBlur={() => touch('plCat')}>
+                        <select style={{ ...s.select, ...(fieldErr('plCat') ? s.inputError : {}) }} value={plCatId}
+                          onChange={e => {
+                            const cat = plCategories.find(c => c.id === e.target.value)
+                            setPlCatId(e.target.value)
+                            setPlCatName(cat?.name || '')
+                            setPlSubId(''); setPlSubName('')
+                            touch('plCat')
+                          }} onBlur={() => touch('plCat')}>
                           <option value="">Select P&L category...</option>
-                          {Object.keys(plSubs).map(c => <option key={c}>{c}</option>)}
+                          {expenseCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </select>
                         {fieldErr('plCat') && <span style={s.errorMsg}>{fieldErr('plCat')}</span>}
                       </div>
                       <div style={s.field}>
                         <label style={s.lbl}>P&L Sub-category</label>
-                        <select style={s.select} value={plSub} onChange={e => setPlSub(e.target.value)}>
+                        <select style={s.select} value={plSubId}
+                          onChange={e => {
+                            const sub = plSubcategories.find(s => s.id === e.target.value)
+                            setPlSubId(e.target.value)
+                            setPlSubName(sub?.name || '')
+                          }}
+                          disabled={!plCatId || currentPlSubs.length === 0}>
                           <option value="">Select sub-category...</option>
-                          {(plSubs[plCat] || []).map(sc => <option key={sc}>{sc}</option>)}
+                          {currentPlSubs.map(sub => <option key={sub.id} value={sub.id}>{sub.name}</option>)}
                         </select>
                       </div>
                     </div>
                     <div style={s.row2}>
                       <div style={s.field}>
                         <label style={s.lbl}>Department <span style={s.req}>*</span></label>
-                        <select style={{ ...s.select, ...(fieldErr('dept') ? s.inputError : {}) }} value={dept}
-                          onChange={e => { setDept(e.target.value); setDeptSub(''); setExpDesc(''); touch('dept') }} onBlur={() => touch('dept')}>
+                        <select style={{ ...s.select, ...(fieldErr('dept') ? s.inputError : {}) }} value={deptId}
+                          onChange={e => {
+                            const dept = departments.find(d => d.id === e.target.value)
+                            setDeptId(e.target.value)
+                            setDeptName(dept?.name || '')
+                            setDeptSubId(''); setDeptSubName(''); setExpDesc('')
+                            touch('dept')
+                          }} onBlur={() => touch('dept')}>
                           <option value="">Select department...</option>
-                          {Object.keys(deptSubs).map(d => <option key={d}>{d}</option>)}
+                          {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                         </select>
                         {fieldErr('dept') && <span style={s.errorMsg}>{fieldErr('dept')}</span>}
                       </div>
                       <div style={s.field}>
                         <label style={s.lbl}>Dept. sub-category</label>
-                        <select style={s.select} value={deptSub} onChange={e => { setDeptSub(e.target.value); setExpDesc('') }}>
+                        <select style={s.select} value={deptSubId}
+                          onChange={e => {
+                            const sub = deptSubcategories.find(s => s.id === e.target.value)
+                            setDeptSubId(e.target.value)
+                            setDeptSubName(sub?.name || '')
+                            setExpDesc('')
+                          }}
+                          disabled={!deptId || currentDeptSubs.length === 0}>
                           <option value="">Select sub-category...</option>
-                          {(deptSubs[dept] || []).map(sc => <option key={sc}>{sc}</option>)}
+                          {currentDeptSubs.map(sub => <option key={sub.id} value={sub.id}>{sub.name}</option>)}
                         </select>
                       </div>
                     </div>
                     <div style={s.field}>
                       <label style={s.lbl}>Expense description</label>
-                      <select style={s.select} value={expDesc} onChange={e => setExpDesc(e.target.value)}>
-                        <option value="">Select description...</option>
-                        {(expDescs[deptSub] || []).map(d => <option key={d}>{d}</option>)}
-                      </select>
+                      {currentExpDescs.length > 0 ? (
+                        <select style={s.select} value={expDesc} onChange={e => setExpDesc(e.target.value)}>
+                          <option value="">Select description...</option>
+                          {currentExpDescs.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                        </select>
+                      ) : (
+                        <input style={s.input} value={expDesc} onChange={e => setExpDesc(e.target.value)} placeholder="Enter expense description..." />
+                      )}
                     </div>
                   </div>
+
                   <div style={s.section}>
                     <div style={s.sectionTitle}>Revenue stream allocation</div>
                     <div style={s.allocGrid}>
@@ -462,6 +545,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                   </div>
                 </>
               )}
+
               {invType === 'revenue' && (
                 <div style={s.section}>
                   <div style={s.sectionTitle}>Revenue details</div>
@@ -470,13 +554,13 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                     <select style={{ ...s.select, ...(fieldErr('revStream') ? s.inputError : {}) }} value={revStream}
                       onChange={e => { setRevStream(e.target.value); touch('revStream') }} onBlur={() => touch('revStream')}>
                       <option value="">Select stream...</option>
-                      <option>Social Growth</option><option>Aimfox</option><option>Outsourced Services</option>
-                      <option>VAT Claimed</option><option>Interest Received</option><option>Loans</option><option>Credit</option><option>Other</option>
+                      {revenueStreams.map(r => <option key={r}>{r}</option>)}
                     </select>
                     {fieldErr('revStream') && <span style={s.errorMsg}>{fieldErr('revStream')}</span>}
                   </div>
                 </div>
               )}
+
               <div style={s.section}>
                 <div style={s.sectionTitle}>Tags & note</div>
                 <div style={s.tagRow}>
@@ -492,6 +576,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
             </>
           )}
 
+          {/* ── STEP 3 ── */}
           {step === 3 && (
             <div style={s.section}>
               <div style={s.sectionTitle}>Amount & currency conversion</div>
@@ -533,6 +618,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
             </div>
           )}
 
+          {/* ── STEP 4 ── */}
           {step === 4 && (
             <div style={s.section}>
               <div style={s.sectionTitle}>Review before posting</div>
@@ -554,9 +640,27 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                 </div>
               )}
               {[
-                { title: 'Invoice info', rows: [['Company', companies.find(c => c.id === companyId)?.name || '—'],['Partner', showNewPartner ? newPartnerName : (partners.find(p => p.id === partnerId)?.name || partnerSearch || '—')],['Invoice number', invoiceNumber || '—'],['Invoice date', invoiceDate || '—'],['Due date', dueDate || '—'],['Type', invType]] },
-                { title: 'P&L classification', rows: [['P&L Category', plCat || '—'],['Department', dept || '—'],['Revenue stream', revStream || '—']] },
-                { title: 'Amounts', rows: [['Original amount', amount ? `${parseFloat(amount).toLocaleString()} ${currency}` : '—'],['Exchange rate', exRate ? `${parseFloat(exRate).toFixed(4)} (${rateSource || 'Manual'})` : 'N/A'],['USD equivalent', `$${usdAmount.toFixed(2)}`]] },
+                { title: 'Invoice info', rows: [
+                  ['Company', companies.find(c => c.id === companyId)?.name || '—'],
+                  ['Partner', showNewPartner ? newPartnerName : (partners.find(p => p.id === partnerId)?.name || partnerSearch || '—')],
+                  ['Invoice number', invoiceNumber || '—'],
+                  ['Invoice date', invoiceDate || '—'],
+                  ['Due date', dueDate || '—'],
+                  ['Type', invType],
+                ]},
+                { title: 'P&L classification', rows: [
+                  ['P&L Category', plCatName || '—'],
+                  ['P&L Sub-category', plSubName || '—'],
+                  ['Department', deptName || '—'],
+                  ['Dept. Sub-category', deptSubName || '—'],
+                  ['Expense description', expDesc || '—'],
+                  ['Revenue stream', revStream || '—'],
+                ]},
+                { title: 'Amounts', rows: [
+                  ['Original amount', amount ? `${parseFloat(amount).toLocaleString()} ${currency}` : '—'],
+                  ['Exchange rate', exRate ? `${parseFloat(exRate).toFixed(4)} (${rateSource || 'Manual'})` : 'N/A'],
+                  ['USD equivalent', `$${usdAmount.toFixed(2)}`],
+                ]},
               ].map(sec => (
                 <div key={sec.title} style={s.reviewSection}>
                   <div style={s.reviewTitle}>{sec.title}</div>
