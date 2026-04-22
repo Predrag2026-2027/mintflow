@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { NavContext } from '../App'
 import type { Page } from '../App'
 import { supabase } from '../supabase'
-import { fmtUSD, fmtUSDSigned } from '../utils/formatters'
+import { fmtUSD as fmt, fmtUSDSigned as fmtN } from '../utils/formatters'
 
 export default function Reports() {
   const { user, signOut } = useAuth()

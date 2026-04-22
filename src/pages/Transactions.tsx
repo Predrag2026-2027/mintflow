@@ -8,7 +8,7 @@ import TransactionDialog from '../components/TransactionDialog'
 import PassthroughDialog from '../components/PassthroughDialog'
 import ReconcilePanel from '../components/ReconcilePanel'
 import BulkImport from '../components/BulkImport'
-import { fmtUSD, fmtUSDSigned, fmtAmount } from '../utils/formatters'
+import { fmtUSD, fmtAmount } from '../utils/formatters'
 
 type Tab = 'invoices' | 'transactions' | 'passthrough'
 
