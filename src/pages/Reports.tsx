@@ -5,23 +5,293 @@ import type { Page } from '../App'
 import { supabase } from '../supabase'
 import { fmtUSD as fmt, fmtUSDSigned as fmtN } from '../utils/formatters'
 
+// ── E-banking export helpers ─────────────────────────────
+const exportRaiffeisen = (invoices: any[]) => {
+  const lines = invoices.map(inv => {
+    const amount = (inv.amount || 0).toFixed(2).replace('.', ',')
+    const partner = (inv.partner_name || '').toUpperCase().substring(0, 70)
+    const account = (inv.account_number || '').replace(/\s/g, '')
+    const model = inv.model || '97'
+    const ref = inv.reference_number || inv.invoice_number || ''
+    const purpose = `Placanje po fakturi ${inv.invoice_number || ''}`.substring(0, 70)
+    return ['1', partner, account, model, ref, amount, purpose, inv.currency || 'RSD'].join(';')
+  })
+  const blob = new Blob([lines.join('\r\n')], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `raiffeisen_nalozi_${new Date().toISOString().slice(0, 10)}.txt`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+const exportIntesa = (invoices: any[]) => {
+  const header = 'VRSTA;NAZIV_PRIMAOCA;RACUN_PRIMAOCA;MODEL;POZIV_NA_BROJ;IZNOS;SVRHA;VALUTA\r\n'
+  const lines = invoices.map(inv => {
+    const amount = (inv.amount || 0).toFixed(2).replace('.', ',')
+    const partner = (inv.partner_name || '').toUpperCase().substring(0, 70)
+    const account = (inv.account_number || '').replace(/\s/g, '')
+    const model = inv.model || '97'
+    const ref = inv.reference_number || inv.invoice_number || ''
+    const purpose = `Placanje po fakturi ${inv.invoice_number || ''}`.substring(0, 70)
+    return `NP;${partner};${account};${model};${ref};${amount};${purpose};${inv.currency || 'RSD'}`
+  })
+  const blob = new Blob([header + lines.join('\r\n')], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `intesa_nalozi_${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// ── Unpaid Invoices Panel ────────────────────────────────
+function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
+  const [invoices, setInvoices] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [sortBy, setSortBy] = useState<'due_date' | 'amount' | 'partner'>('due_date')
+  const [filterStatus, setFilterStatus] = useState<'all' | 'overdue' | 'upcoming'>('all')
+  const [search, setSearch] = useState('')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [exportBank, setExportBank] = useState<'raiffeisen' | 'intesa'>('raiffeisen')
+  const today = new Date().toISOString().split('T')[0]
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true)
+      const { data: compData } = await supabase
+        .from('companies').select('id').eq('name', 'Constellation LLC').single()
+      if (!compData) { setLoading(false); return }
+      const { data } = await supabase
+        .from('invoices')
+        .select('*, partners(name)')
+        .eq('company_id', compData.id)
+        .in('status', ['unpaid', 'partial'])
+        .order('due_date', { ascending: true })
+      setInvoices(data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const filtered = invoices
+    .filter(inv => {
+      const partner = inv.partners?.name || ''
+      const matchSearch = !search ||
+        partner.toLowerCase().includes(search.toLowerCase()) ||
+        (inv.invoice_number || '').toLowerCase().includes(search.toLowerCase())
+      const isOverdue = inv.due_date && inv.due_date < today
+      const matchStatus = filterStatus === 'all' ||
+        (filterStatus === 'overdue' && isOverdue) ||
+        (filterStatus === 'upcoming' && !isOverdue)
+      return matchSearch && matchStatus
+    })
+    .sort((a, b) => {
+      if (sortBy === 'amount') return (b.amount_usd || 0) - (a.amount_usd || 0)
+      if (sortBy === 'partner') return (a.partners?.name || '').localeCompare(b.partners?.name || '')
+      return (a.due_date || '9999') < (b.due_date || '9999') ? -1 : 1
+    })
+
+  const totalUnpaid = filtered.reduce((s, i) => s + (i.amount_usd || 0), 0)
+  const overdueCount = filtered.filter(i => i.due_date && i.due_date < today).length
+  const selectedInvoices = filtered.filter(i => selected.has(i.id))
+
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+  const toggleAll = () => {
+    if (selected.size === filtered.length) setSelected(new Set())
+    else setSelected(new Set(filtered.map(i => i.id)))
+  }
+
+  const handleExport = () => {
+    const toExport = (selectedInvoices.length > 0 ? selectedInvoices : filtered)
+      .map(i => ({ ...i, partner_name: i.partners?.name }))
+    if (exportBank === 'raiffeisen') exportRaiffeisen(toExport)
+    else exportIntesa(toExport)
+  }
+
+  const daysUntilDue = (dueDate: string | null) => {
+    if (!dueDate) return null
+    return Math.ceil((new Date(dueDate).getTime() - new Date(today).getTime()) / 86400000)
+  }
+
+  return (
+    <div style={ps.overlay} onClick={onClose}>
+      <div style={ps.panel} onClick={e => e.stopPropagation()}>
+        <div style={ps.header}>
+          <div>
+            <div style={ps.headerTitle}>⚠️ Unpaid Invoices — Constellation LLC</div>
+            <div style={ps.headerSub}>
+              {loading ? 'Loading...' : `${filtered.length} invoices · ${fmt(totalUnpaid)} total · ${overdueCount} overdue`}
+            </div>
+          </div>
+          <button style={ps.closeBtn} onClick={onClose}>×</button>
+        </div>
+
+        <div style={ps.toolbar}>
+          <input style={ps.searchInput} placeholder="Search partner or invoice #..."
+            value={search} onChange={e => setSearch(e.target.value)} />
+          <select style={ps.sel} value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)}>
+            <option value="all">All unpaid</option>
+            <option value="overdue">Overdue only</option>
+            <option value="upcoming">Upcoming</option>
+          </select>
+          <select style={ps.sel} value={sortBy} onChange={e => setSortBy(e.target.value as any)}>
+            <option value="due_date">Sort: Due date</option>
+            <option value="amount">Sort: Amount</option>
+            <option value="partner">Sort: Partner</option>
+          </select>
+        </div>
+
+        <div style={ps.exportBar}>
+          <div style={{ fontSize: '12px', color: '#633806', fontWeight: '500' }}>
+            🏦 E-banking nalog za plaćanje
+            {selected.size > 0 && <span style={{ marginLeft: '8px', color: '#888', fontWeight: '400' }}>({selected.size} selektovano)</span>}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <select style={{ ...ps.sel, fontSize: '11px' }} value={exportBank} onChange={e => setExportBank(e.target.value as any)}>
+              <option value="raiffeisen">Raiffeisen Bank</option>
+              <option value="intesa">Intesa Bank</option>
+            </select>
+            <button style={ps.exportBtn} onClick={handleExport}>
+              📥 Export {selected.size > 0 ? `${selected.size}` : 'all'} naloga
+            </button>
+          </div>
+        </div>
+
+        <div style={ps.tableWrap}>
+          {loading ? (
+            <div style={{ padding: '40px', textAlign: 'center' as const, color: '#888' }}>Loading...</div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: '60px', textAlign: 'center' as const }}>
+              <div style={{ fontSize: '28px', marginBottom: '10px' }}>✅</div>
+              <div style={{ fontSize: '14px', fontWeight: '500', color: '#111' }}>Nema neplaćenih faktura!</div>
+            </div>
+          ) : (
+            <table style={ps.table}>
+              <thead>
+                <tr style={ps.thead}>
+                  <th style={ps.th}>
+                    <input type="checkbox"
+                      checked={selected.size === filtered.length && filtered.length > 0}
+                      onChange={toggleAll} style={{ cursor: 'pointer' }} />
+                  </th>
+                  <th style={ps.th}>Datum dospeća</th>
+                  <th style={ps.th}>Partner</th>
+                  <th style={ps.th}>Broj fakture</th>
+                  <th style={ps.th}>Tip</th>
+                  <th style={{ ...ps.th, textAlign: 'right' as const }}>Iznos</th>
+                  <th style={{ ...ps.th, textAlign: 'right' as const }}>USD</th>
+                  <th style={ps.th}>Status</th>
+                  <th style={ps.th}>Preostalo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((inv, i) => {
+                  const isOverdue = inv.due_date && inv.due_date < today
+                  const days = daysUntilDue(inv.due_date)
+                  const isSelected = selected.has(inv.id)
+                  return (
+                    <tr key={inv.id} style={{
+                      ...ps.tr,
+                      background: isSelected ? '#FFF8E6' : isOverdue ? '#FFF5F5' : i % 2 === 0 ? '#fff' : '#fafaf9'
+                    }}>
+                      <td style={ps.td}>
+                        <input type="checkbox" checked={isSelected}
+                          onChange={() => toggleSelect(inv.id)} style={{ cursor: 'pointer' }} />
+                      </td>
+                      <td style={ps.td}>
+                        <span style={{ fontSize: '12px', fontWeight: isOverdue ? '600' : '400', color: isOverdue ? '#A32D2D' : '#333', whiteSpace: 'nowrap' as const }}>
+                          {inv.due_date || '—'} {isOverdue && '⚠️'}
+                        </span>
+                      </td>
+                      <td style={ps.td}>
+                        <span style={{ fontSize: '13px', fontWeight: '500', color: '#111' }}>{inv.partners?.name || '—'}</span>
+                      </td>
+                      <td style={ps.td}>
+                        <span style={{ fontSize: '11px', fontFamily: 'monospace', background: '#f5f5f3', padding: '2px 6px', borderRadius: '4px', color: '#666' }}>
+                          {inv.invoice_number || '—'}
+                        </span>
+                      </td>
+                      <td style={ps.td}>
+                        <span style={{ fontSize: '10px', fontWeight: '500', padding: '2px 8px', borderRadius: '20px', background: inv.type === 'expense' ? '#FCEBEB' : '#E1F5EE', color: inv.type === 'expense' ? '#A32D2D' : '#085041' }}>
+                          {inv.type}
+                        </span>
+                      </td>
+                      <td style={{ ...ps.td, textAlign: 'right' as const }}>
+                        <span style={{ fontSize: '13px', fontWeight: '500', whiteSpace: 'nowrap' as const }}>
+                          {(inv.amount || 0).toLocaleString('sr-RS')} {inv.currency}
+                        </span>
+                      </td>
+                      <td style={{ ...ps.td, textAlign: 'right' as const }}>
+                        <span style={{ fontSize: '13px', fontWeight: '500', color: '#1D9E75' }}>{fmt(inv.amount_usd || 0)}</span>
+                      </td>
+                      <td style={ps.td}>
+                        <span style={{ fontSize: '10px', fontWeight: '500', padding: '2px 8px', borderRadius: '20px', background: inv.status === 'partial' ? '#FAEEDA' : '#FCEBEB', color: inv.status === 'partial' ? '#633806' : '#A32D2D' }}>
+                          {inv.status}
+                        </span>
+                      </td>
+                      <td style={ps.td}>
+                        {days === null ? (
+                          <span style={{ fontSize: '11px', color: '#aaa' }}>Bez roka</span>
+                        ) : days < 0 ? (
+                          <span style={{ fontSize: '11px', fontWeight: '600', color: '#A32D2D', background: '#FCEBEB', padding: '2px 8px', borderRadius: '20px' }}>
+                            {Math.abs(days)}d kasni
+                          </span>
+                        ) : days === 0 ? (
+                          <span style={{ fontSize: '11px', fontWeight: '600', color: '#BA7517', background: '#FAEEDA', padding: '2px 8px', borderRadius: '20px' }}>
+                            Danas!
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '11px', color: days <= 7 ? '#BA7517' : '#888' }}>
+                            {days}d preostalo
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr style={{ background: '#0a1628' }}>
+                  <td colSpan={5} style={{ padding: '12px 14px', fontSize: '12px', fontWeight: '500', color: '#fff' }}>
+                    UKUPNO ({filtered.length} faktura)
+                  </td>
+                  <td style={{ padding: '12px 14px', textAlign: 'right' as const, color: '#fff' }}></td>
+                  <td style={{ padding: '12px 14px', textAlign: 'right' as const, fontSize: '14px', fontWeight: '600', color: '#5DCAA5' }}>
+                    {fmt(totalUnpaid)}
+                  </td>
+                  <td colSpan={2} style={{ padding: '12px 14px', fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>
+                    {overdueCount > 0 ? `${overdueCount} faktura kasni` : 'Sve na vreme'}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main Reports page ────────────────────────────────────
 export default function Reports() {
   const { user, signOut } = useAuth()
   const { setPage } = React.useContext(NavContext)
   const [activeReport, setActiveReport] = useState('')
+  const [showUnpaidPanel, setShowUnpaidPanel] = useState(false)
   const [companies, setCompanies] = useState<any[]>([])
   const [companyId, setCompanyId] = useState('all')
   const [loading, setLoading] = useState(true)
 
   const [kpis, setKpis] = useState({
-    netProfit: 0,
-    totalRevenue: 0,
-    totalExpenses: 0,
-    expenseRatio: 0,
-    openInvoicesCount: 0,
-    openInvoicesAmount: 0,
-    unmatchedPassthrough: 0,
-    overdueCount: 0,
+    netProfit: 0, totalRevenue: 0, totalExpenses: 0, expenseRatio: 0,
+    openInvoicesCount: 0, openInvoicesAmount: 0, unmatchedPassthrough: 0, overdueCount: 0,
   })
 
   const currentYear = new Date().getFullYear()
@@ -53,10 +323,10 @@ export default function Reports() {
         .in('calculated_status', ['unpaid', 'partial'])
       if (companyId !== 'all') invQuery = invQuery.eq('company_id', companyId)
 
-      let ptQuery = supabase.from('passthrough').select('id', { count: 'exact', head: true }).eq('status', 'unpaired')
+      let ptQuery = supabase.from('passthrough').select('id').eq('status', 'unpaired')
       if (companyId !== 'all') ptQuery = ptQuery.eq('company_id', companyId)
 
-      const [{ data: plData }, { data: invData }, { count: ptCount }] = await Promise.all([
+      const [{ data: plData }, { data: invData }, { data: ptData }] = await Promise.all([
         plQuery, invQuery, ptQuery,
       ])
 
@@ -66,63 +336,33 @@ export default function Reports() {
       const overdue = (invData || []).filter(i => i.due_date && i.due_date < today).length
 
       setKpis({
-        netProfit: revenue - expenses,
-        totalRevenue: revenue,
-        totalExpenses: expenses,
+        netProfit: revenue - expenses, totalRevenue: revenue, totalExpenses: expenses,
         expenseRatio: revenue > 0 ? (expenses / revenue * 100) : 0,
-        openInvoicesCount: (invData || []).length,
-        openInvoicesAmount: openAmt,
-        unmatchedPassthrough: ptCount || 0,
-        overdueCount: overdue,
+        openInvoicesCount: (invData || []).length, openInvoicesAmount: openAmt,
+        unmatchedPassthrough: (ptData || []).length, overdueCount: overdue,
       })
-    } catch (err) {
-      console.error('Reports KPI fetch error:', err)
-    }
+    } catch (err) { console.error('Reports KPI fetch error:', err) }
     setLoading(false)
   }, [companyId, ytdStart, today])
 
   useEffect(() => { fetchKpis() }, [fetchKpis])
 
   const kpiCards = [
-    {
-      label: 'Net Profit (YTD)',
-      value: loading ? '...' : fmtN(kpis.netProfit),
-      sub: `${currentYear} year to date`,
-      up: kpis.netProfit >= 0,
-      trend: loading ? '' : kpis.netProfit >= 0 ? 'Profitable' : 'Loss',
-    },
-    {
-      label: 'Total Revenue (YTD)',
-      value: loading ? '...' : fmt(kpis.totalRevenue),
-      sub: `${currentYear} year to date`,
-      up: true,
-      trend: loading ? '' : `${fmt(kpis.totalExpenses)} expenses`,
-    },
-    {
-      label: 'Expense Ratio',
-      value: loading ? '...' : `${kpis.expenseRatio.toFixed(1)}%`,
-      sub: 'Expenses / Revenue YTD',
-      up: kpis.expenseRatio < 90,
-      trend: loading ? '' : kpis.expenseRatio < 80 ? 'Healthy' : kpis.expenseRatio < 90 ? 'Watch' : 'High',
-    },
-    {
-      label: 'Open Invoices',
-      value: loading ? '...' : kpis.openInvoicesCount > 0 ? `${kpis.openInvoicesCount} · ${fmt(kpis.openInvoicesAmount)}` : 'None',
-      sub: loading ? '' : kpis.overdueCount > 0 ? `${kpis.overdueCount} overdue` : 'All on time',
-      up: kpis.overdueCount === 0,
-      trend: loading ? '' : kpis.overdueCount > 0 ? `${kpis.overdueCount} overdue` : 'On time',
-    },
+    { label: 'Net Profit (YTD)', value: loading ? '...' : fmtN(kpis.netProfit), sub: `${currentYear} year to date`, up: kpis.netProfit >= 0, trend: loading ? '' : kpis.netProfit >= 0 ? 'Profitable' : 'Loss' },
+    { label: 'Total Revenue (YTD)', value: loading ? '...' : fmt(kpis.totalRevenue), sub: `${currentYear} year to date`, up: true, trend: loading ? '' : `${fmt(kpis.totalExpenses)} expenses` },
+    { label: 'Expense Ratio', value: loading ? '...' : `${kpis.expenseRatio.toFixed(1)}%`, sub: 'Expenses / Revenue YTD', up: kpis.expenseRatio < 90, trend: loading ? '' : kpis.expenseRatio < 80 ? 'Healthy' : kpis.expenseRatio < 90 ? 'Watch' : 'High' },
+    { label: 'Open Invoices', value: loading ? '...' : kpis.openInvoicesCount > 0 ? `${kpis.openInvoicesCount} · ${fmt(kpis.openInvoicesAmount)}` : 'None', sub: loading ? '' : kpis.overdueCount > 0 ? `${kpis.overdueCount} overdue` : 'All on time', up: kpis.overdueCount === 0, trend: loading ? '' : kpis.overdueCount > 0 ? `${kpis.overdueCount} overdue` : 'On time' },
   ]
 
   const reports = [
-    { id: 'pl-monthly', title: 'Monthly P&L', desc: 'Profit & Loss by month with revenue stream breakdown', category: 'P&L', icon: '📊', color: '#0F6E56', bg: '#E1F5EE', page: 'pl' },
-    { id: 'pl-by-dept', title: 'P&L by Department', desc: 'Expense breakdown per organizational unit', category: 'P&L', icon: '👥', color: '#0F6E56', bg: '#E1F5EE', page: 'pl' },
-    { id: 'cashflow-monthly', title: 'Monthly Cash Flow', desc: 'Operating and financing activities by period', category: 'Cash Flow', icon: '💰', color: '#0C447C', bg: '#E6F1FB', page: 'cashflow' },
-    { id: 'bank-reconciliation', title: 'Bank Reconciliation', desc: 'Statement vs. recorded transactions per account', category: 'Cash Flow', icon: '🏦', color: '#0C447C', bg: '#E6F1FB', page: 'cashflow' },
-    { id: 'passthrough', title: 'Pass-through Balance', desc: 'Pass-through IN vs. OUT monthly balance', category: 'Compliance', icon: '⚖️', color: '#633806', bg: '#FAEEDA', page: 'cashflow' },
-    { id: 'unmatched', title: 'Unmatched Invoices', desc: 'Open invoices without corresponding payment', category: 'Compliance', icon: '⚠️', color: '#854F0B', bg: '#FAEEDA', page: 'reports' },
-    { id: 'exchange-rates', title: 'Exchange Rate Log', desc: 'Rates used per period and transaction', category: 'Reference', icon: '💱', color: '#444', bg: '#f0f0ee', page: 'reports' },
-    { id: 'partner-summary', title: 'Partner Summary', desc: 'Total transactions per partner across all entities', category: 'Reference', icon: '🤝', color: '#444', bg: '#f0f0ee', page: 'partners' },
+    { id: 'pl-monthly', title: 'Monthly P&L', desc: 'Profit & Loss by month with revenue stream breakdown', category: 'P&L', icon: '📊', color: '#0F6E56', bg: '#E1F5EE', page: 'pl' as Page, action: null },
+    { id: 'pl-by-dept', title: 'P&L by Department', desc: 'Expense breakdown per organizational unit', category: 'P&L', icon: '👥', color: '#0F6E56', bg: '#E1F5EE', page: 'pl' as Page, action: null },
+    { id: 'cashflow-monthly', title: 'Monthly Cash Flow', desc: 'Operating and financing activities by period', category: 'Cash Flow', icon: '💰', color: '#0C447C', bg: '#E6F1FB', page: 'cashflow' as Page, action: null },
+    { id: 'bank-reconciliation', title: 'Bank Reconciliation', desc: 'Statement vs. recorded transactions per account', category: 'Cash Flow', icon: '🏦', color: '#0C447C', bg: '#E6F1FB', page: 'cashflow' as Page, action: null },
+    { id: 'passthrough', title: 'Pass-through Balance', desc: 'Pass-through IN vs. OUT monthly balance', category: 'Compliance', icon: '⚖️', color: '#633806', bg: '#FAEEDA', page: 'cashflow' as Page, action: null },
+    { id: 'unmatched', title: 'Unmatched Invoices', desc: 'Neplaćene fakture · Constellation LLC · E-banking export za Raiffeisen i Intesa', category: 'Compliance', icon: '⚠️', color: '#854F0B', bg: '#FAEEDA', page: 'reports' as Page, action: 'unpaid' },
+    { id: 'exchange-rates', title: 'Exchange Rate Log', desc: 'Rates used per period and transaction', category: 'Reference', icon: '💱', color: '#444', bg: '#f0f0ee', page: 'reports' as Page, action: null },
+    { id: 'partner-summary', title: 'Partner Summary', desc: 'Total transactions per partner across all entities', category: 'Reference', icon: '🤝', color: '#444', bg: '#f0f0ee', page: 'partners' as Page, action: null },
   ]
 
   const categories = ['P&L', 'Cash Flow', 'Compliance', 'Reference']
@@ -147,7 +387,7 @@ export default function Reports() {
         </div>
         <div style={s.navLinks}>
           {['Dashboard', 'Transactions', 'P&L', 'Cash Flow', 'Reports', 'Partners', 'Settings'].map(l => (
-            <span key={l} style={l === 'Reports' ? s.navLinkActive : s.navLink} onClick={() => setPage(pageMap[l] as Page)}>{l}</span>
+            <span key={l} style={l === 'Reports' ? s.navLinkActive : s.navLink} onClick={() => setPage(pageMap[l])}>{l}</span>
           ))}
         </div>
         <div style={s.navRight}>
@@ -171,7 +411,6 @@ export default function Reports() {
           </div>
         </div>
 
-        {/* KPI cards */}
         <div style={s.kpiGrid}>
           {kpiCards.map(k => (
             <div key={k.label} style={s.kpiCard}>
@@ -187,14 +426,19 @@ export default function Reports() {
           ))}
         </div>
 
-        {/* Compliance alerts */}
         {!loading && (kpis.overdueCount > 0 || kpis.unmatchedPassthrough > 0) && (
           <div style={s.alertBox}>
             <div style={{ fontSize: '12px', fontWeight: '500', color: '#633806', marginBottom: '8px' }}>⚠️ Attention required</div>
             {kpis.overdueCount > 0 && (
               <div style={s.alertRow}>
                 <span style={s.alertDot} />
-                <span style={{ fontSize: '12px', color: '#555' }}>{kpis.overdueCount} invoice{kpis.overdueCount > 1 ? 's' : ''} past due date — review Unmatched Invoices report.</span>
+                <span style={{ fontSize: '12px', color: '#555' }}>
+                  {kpis.overdueCount} invoice{kpis.overdueCount > 1 ? 's' : ''} past due date —{' '}
+                  <span style={{ color: '#854F0B', cursor: 'pointer', textDecoration: 'underline' }}
+                    onClick={() => setShowUnpaidPanel(true)}>
+                    open Unmatched Invoices report
+                  </span>.
+                </span>
               </div>
             )}
             {kpis.unmatchedPassthrough > 0 && (
@@ -206,7 +450,6 @@ export default function Reports() {
           </div>
         )}
 
-        {/* Report categories */}
         {categories.map(cat => (
           <div key={cat} style={s.categorySection}>
             <div style={s.categoryHeader}>
@@ -226,8 +469,13 @@ export default function Reports() {
                     <div style={s.reportDesc}>{report.desc}</div>
                   </div>
                   <div style={s.reportActions}>
-                    <button style={{ ...s.reportBtn, color: report.color, borderColor: report.color + '40', background: report.bg }}
-                      onClick={e => { e.stopPropagation(); setPage(report.page as any) }}>
+                    <button
+                      style={{ ...s.reportBtn, color: report.color, borderColor: report.color + '40', background: report.bg }}
+                      onClick={e => {
+                        e.stopPropagation()
+                        if (report.action === 'unpaid') setShowUnpaidPanel(true)
+                        else setPage(report.page)
+                      }}>
                       View
                     </button>
                   </div>
@@ -237,6 +485,8 @@ export default function Reports() {
           </div>
         ))}
       </div>
+
+      {showUnpaidPanel && <UnpaidInvoicesPanel onClose={() => setShowUnpaidPanel(false)} />}
     </div>
   )
 }
@@ -279,4 +529,24 @@ const s: Record<string, React.CSSProperties> = {
   reportDesc: { fontSize: '12px', color: '#888', lineHeight: 1.4 },
   reportActions: { display: 'flex', gap: '6px', flexShrink: 0 },
   reportBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '11px', fontWeight: '500', padding: '5px 12px', borderRadius: '6px', border: '1px solid', cursor: 'pointer' },
+}
+
+const ps: Record<string, React.CSSProperties> = {
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', zIndex: 1000 },
+  panel: { background: '#fff', width: '85vw', maxWidth: '1100px', height: '100vh', display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 24px rgba(0,0,0,0.15)' },
+  header: { background: '#0a1628', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 },
+  headerTitle: { color: '#fff', fontSize: '15px', fontWeight: '500' },
+  headerSub: { color: 'rgba(255,255,255,0.45)', fontSize: '12px', marginTop: '3px' },
+  closeBtn: { background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '24px', cursor: 'pointer', lineHeight: 1, padding: '0 4px' },
+  toolbar: { display: 'flex', gap: '10px', padding: '12px 16px', borderBottom: '0.5px solid #e5e5e5', flexShrink: 0, flexWrap: 'wrap' as const },
+  searchInput: { flex: 1, fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '0.5px solid #e5e5e5', borderRadius: '8px', padding: '7px 12px', outline: 'none', minWidth: '180px' },
+  sel: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '0.5px solid #e5e5e5', borderRadius: '8px', padding: '7px 10px', outline: 'none', background: '#fff', cursor: 'pointer' },
+  exportBar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: '#FAEEDA', borderBottom: '0.5px solid #E5B96A', flexShrink: 0, flexWrap: 'wrap' as const, gap: '8px' },
+  exportBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '12px', fontWeight: '500', padding: '7px 16px', borderRadius: '8px', border: 'none', background: '#633806', color: '#fff', cursor: 'pointer' },
+  tableWrap: { flex: 1, overflowY: 'auto' as const },
+  table: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '13px' },
+  thead: { background: '#f5f5f3', position: 'sticky' as const, top: 0, zIndex: 10 },
+  th: { padding: '10px 14px', textAlign: 'left' as const, fontSize: '10px', fontWeight: '500', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.08em', borderBottom: '0.5px solid #e5e5e5', whiteSpace: 'nowrap' as const },
+  tr: { borderBottom: '0.5px solid #f0f0ee' },
+  td: { padding: '10px 14px', verticalAlign: 'middle' as const },
 }
