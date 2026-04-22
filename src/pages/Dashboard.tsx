@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { NavContext } from '../App'
 import { supabase } from '../supabase'
+import { NavContext } from '../App'
+import type { Page } from '../App'
 
 type Entity = 'constel' | 'sfbc' | 'constellation' | 'social'
 
@@ -17,23 +18,17 @@ export default function Dashboard() {
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0])
   const [activeShortcut, setActiveShortcut] = useState('This month')
 
-  // Real data
   const [companies, setCompanies] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [metrics, setMetrics] = useState({
-    totalRevenue: 0,
-    totalExpenses: 0,
-    netProfit: 0,
-    unpaidInvoices: 0,
-    unpaidInvoicesCount: 0,
-    overdueCount: 0,
-    unmatchedPassthrough: 0,
-    pendingTransactions: 0,
+    totalRevenue: 0, totalExpenses: 0, netProfit: 0,
+    unpaidInvoices: 0, unpaidInvoicesCount: 0,
+    overdueCount: 0, unmatchedPassthrough: 0,
     openInvoicesCount: 0,
   })
   const [alerts, setAlerts] = useState<{ type: 'warn' | 'ok' | 'info'; text: string }[]>([])
 
-  const pageMap: Record<string, string> = {
+  const pageMap: Record<string, Page> = {
     'Dashboard': 'dashboard', 'Transactions': 'transactions',
     'P&L': 'pl', 'Cash Flow': 'cashflow', 'Reports': 'reports',
     'Partners': 'partners', 'Settings': 'settings',
@@ -53,17 +48,16 @@ export default function Dashboard() {
     { label: 'Last month', from: (() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01` })(), to: (() => { const d = new Date(); d.setDate(0); return d.toISOString().split('T')[0] })() },
   ]
 
-  const quickActions = [
-  { label: 'New invoice',      icon: '🧾', page: 'transactions', accent: '#1D9E75' },
-  { label: 'New transaction',  icon: '＋', page: 'transactions', accent: '#1D9E75' },
-  { label: 'Pass-through',     icon: '⇄',  page: 'transactions', accent: '#0C447C' },
-  { label: 'Bulk import',      icon: '📥', page: 'transactions', accent: '#633806' },
-  { label: 'P&L report',       icon: '↗',  page: 'pl',           accent: '#185FA5' },
-  { label: 'Partners',         icon: '🤝', page: 'partners',     accent: '#BA7517' },
-  { label: 'Settings',         icon: '⚙',  page: 'settings',     accent: '#888'    },
-]
+  const quickActions: { label: string; icon: string; page: Page; accent: string }[] = [
+    { label: 'New invoice',     icon: '🧾', page: 'transactions', accent: '#1D9E75' },
+    { label: 'New transaction', icon: '＋', page: 'transactions', accent: '#1D9E75' },
+    { label: 'Pass-through',    icon: '⇄',  page: 'transactions', accent: '#0C447C' },
+    { label: 'Bulk import',     icon: '📥', page: 'transactions', accent: '#633806' },
+    { label: 'P&L report',      icon: '↗',  page: 'pl',           accent: '#185FA5' },
+    { label: 'Partners',        icon: '🤝', page: 'partners',     accent: '#BA7517' },
+    { label: 'Settings',        icon: '⚙',  page: 'settings',     accent: '#888'    },
+  ]
 
-  // Load companies
   useEffect(() => {
     const load = async () => {
       const { data } = await supabase.from('companies').select('id,name').order('name')
@@ -72,7 +66,6 @@ export default function Dashboard() {
     load()
   }, [])
 
-  // Get company ID for selected entity
   const getCompanyId = useCallback(() => {
     if (entity === 'constel') return null
     const nameMap: Record<string, string> = {
@@ -83,14 +76,13 @@ export default function Dashboard() {
     return companies.find(c => c.name === nameMap[entity])?.id || null
   }, [entity, companies])
 
-  // Fetch real metrics
   const fetchMetrics = useCallback(async () => {
     setLoading(true)
     const companyId = getCompanyId()
     const today = new Date().toISOString().split('T')[0]
 
     try {
-      // P&L entries for period
+      // P&L entries
       let plQuery = supabase.from('v_pl_entries').select('tx_type,amount_usd')
         .gte('pl_date', dateFrom).lte('pl_date', dateTo)
       if (companyId) plQuery = plQuery.eq('company_id', companyId)
@@ -112,36 +104,23 @@ export default function Dashboard() {
       const unpaidTotal = (openInvoices || []).reduce((s, i) => s + (i.remaining_usd || 0), 0)
       const overdueCount = (openInvoices || []).filter(i => i.due_date && i.due_date < today).length
 
-      // Unmatched passthrough
+      // Unmatched passthrough — fix: no double select
       let ptQuery = supabase.from('passthrough').select('id').eq('status', 'unpaired')
       if (companyId) ptQuery = ptQuery.eq('company_id', companyId)
-      const { count: ptCount } = await ptQuery.select('id', { count: 'exact', head: true })
+      const { data: ptData } = await ptQuery
+      const ptCount = (ptData || []).length
 
       // Build alerts
       const newAlerts: { type: 'warn' | 'ok' | 'info'; text: string }[] = []
-
-      if (overdueCount > 0) {
-        newAlerts.push({ type: 'warn', text: `${overdueCount} overdue invoice${overdueCount > 1 ? 's' : ''} — payment past due date.` })
-      }
-      if ((openInvoices || []).length > 0) {
-        newAlerts.push({ type: 'warn', text: `${(openInvoices || []).length} open invoice${(openInvoices || []).length > 1 ? 's' : ''} — $${unpaidTotal.toFixed(0)} remaining.` })
-      }
-      if ((ptCount || 0) > 0) {
-        newAlerts.push({ type: 'warn', text: `${ptCount} pass-through entr${ptCount === 1 ? 'y' : 'ies'} waiting for pair.` })
-      }
-      if (newAlerts.length === 0) {
-        newAlerts.push({ type: 'ok', text: 'All clear — no pending alerts for this period.' })
-      }
+      if (overdueCount > 0) newAlerts.push({ type: 'warn', text: `${overdueCount} overdue invoice${overdueCount > 1 ? 's' : ''} — payment past due date.` })
+      if ((openInvoices || []).length > 0) newAlerts.push({ type: 'warn', text: `${(openInvoices || []).length} open invoice${(openInvoices || []).length > 1 ? 's' : ''} — $${unpaidTotal.toFixed(0)} remaining.` })
+      if (ptCount > 0) newAlerts.push({ type: 'warn', text: `${ptCount} pass-through entr${ptCount === 1 ? 'y' : 'ies'} waiting for pair.` })
+      if (newAlerts.length === 0) newAlerts.push({ type: 'ok', text: 'All clear — no pending alerts for this period.' })
 
       setMetrics({
-        totalRevenue: revenue,
-        totalExpenses: expenses,
-        netProfit: revenue - expenses,
-        unpaidInvoices: unpaidTotal,
-        unpaidInvoicesCount: (openInvoices || []).length,
-        overdueCount,
-        unmatchedPassthrough: ptCount || 0,
-        pendingTransactions: 0,
+        totalRevenue: revenue, totalExpenses: expenses, netProfit: revenue - expenses,
+        unpaidInvoices: unpaidTotal, unpaidInvoicesCount: (openInvoices || []).length,
+        overdueCount, unmatchedPassthrough: ptCount,
         openInvoicesCount: (openInvoices || []).length,
       })
       setAlerts(newAlerts)
@@ -163,39 +142,14 @@ export default function Dashboard() {
   const username = user?.email?.split('@')[0] ?? 'admin'
 
   const metricCards = [
-    {
-      label: 'Revenue',
-      value: loading ? '...' : fmt(metrics.totalRevenue),
-      sub: `${dateFrom} – ${dateTo}`,
-      accent: '#1D9E75', accentBg: 'rgba(29,158,117,0.07)', textColor: '#0B5E49',
-    },
-    {
-      label: 'Expenses',
-      value: loading ? '...' : fmt(metrics.totalExpenses),
-      sub: `${dateFrom} – ${dateTo}`,
-      accent: '#A32D2D', accentBg: 'rgba(163,45,45,0.07)', textColor: '#A32D2D',
-    },
-    {
-      label: 'Net Profit / Loss',
-      value: loading ? '...' : fmtN(metrics.netProfit),
-      sub: metrics.netProfit >= 0 ? 'Profitable period' : 'Loss period',
-      accent: metrics.netProfit >= 0 ? '#1D9E75' : '#A32D2D',
-      accentBg: metrics.netProfit >= 0 ? 'rgba(29,158,117,0.07)' : 'rgba(163,45,45,0.07)',
-      textColor: metrics.netProfit >= 0 ? '#0B5E49' : '#A32D2D',
-    },
-    {
-      label: 'Open Invoices',
-      value: loading ? '...' : metrics.openInvoicesCount > 0 ? `${metrics.openInvoicesCount} · ${fmt(metrics.unpaidInvoices)}` : 'None',
-      sub: metrics.overdueCount > 0 ? `${metrics.overdueCount} overdue` : 'All on time',
-      accent: metrics.overdueCount > 0 ? '#BA7517' : '#1D9E75',
-      accentBg: metrics.overdueCount > 0 ? 'rgba(186,117,23,0.07)' : 'rgba(29,158,117,0.07)',
-      textColor: metrics.overdueCount > 0 ? '#5C3205' : '#0B5E49',
-    },
+    { label: 'Revenue', value: loading ? '...' : fmt(metrics.totalRevenue), sub: `${dateFrom} – ${dateTo}`, accent: '#1D9E75', accentBg: 'rgba(29,158,117,0.07)', textColor: '#0B5E49' },
+    { label: 'Expenses', value: loading ? '...' : fmt(metrics.totalExpenses), sub: `${dateFrom} – ${dateTo}`, accent: '#A32D2D', accentBg: 'rgba(163,45,45,0.07)', textColor: '#A32D2D' },
+    { label: 'Net Profit / Loss', value: loading ? '...' : fmtN(metrics.netProfit), sub: metrics.netProfit >= 0 ? 'Profitable period' : 'Loss period', accent: metrics.netProfit >= 0 ? '#1D9E75' : '#A32D2D', accentBg: metrics.netProfit >= 0 ? 'rgba(29,158,117,0.07)' : 'rgba(163,45,45,0.07)', textColor: metrics.netProfit >= 0 ? '#0B5E49' : '#A32D2D' },
+    { label: 'Open Invoices', value: loading ? '...' : metrics.openInvoicesCount > 0 ? `${metrics.openInvoicesCount} · ${fmt(metrics.unpaidInvoices)}` : 'None', sub: metrics.overdueCount > 0 ? `${metrics.overdueCount} overdue` : 'All on time', accent: metrics.overdueCount > 0 ? '#BA7517' : '#1D9E75', accentBg: metrics.overdueCount > 0 ? 'rgba(186,117,23,0.07)' : 'rgba(29,158,117,0.07)', textColor: metrics.overdueCount > 0 ? '#5C3205' : '#0B5E49' },
   ]
 
   return (
     <div style={s.root}>
-      {/* Nav */}
       <nav style={s.nav}>
         <div style={s.navLogo}>
           <svg width="22" height="22" viewBox="0 0 36 36" fill="none">
@@ -208,7 +162,7 @@ export default function Dashboard() {
         </div>
         <div style={s.navLinks}>
           {['Dashboard', 'Transactions', 'P&L', 'Cash Flow', 'Reports', 'Partners', 'Settings'].map(l => (
-            <span key={l} style={l === 'Dashboard' ? s.navLinkActive : s.navLink} onClick={() => setPage(pageMap[l] as any)}>{l}</span>
+            <span key={l} style={l === 'Dashboard' ? s.navLinkActive : s.navLink} onClick={() => setPage(pageMap[l])}>{l}</span>
           ))}
         </div>
         <div style={s.navRight}>
@@ -222,7 +176,6 @@ export default function Dashboard() {
       </nav>
 
       <div style={s.body}>
-        {/* Greeting */}
         <div style={s.greeting}>
           <div style={s.greetingDate}>
             {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).toUpperCase()}
@@ -234,7 +187,6 @@ export default function Dashboard() {
           <p style={s.greetingSub}>Select an entity and period to review financial performance.</p>
         </div>
 
-        {/* Entity selector */}
         <div style={s.sectionLabel}>Select entity</div>
         <div style={s.entityGrid}>
           {entities.map(e => {
@@ -259,7 +211,6 @@ export default function Dashboard() {
           })}
         </div>
 
-        {/* Period bar */}
         <div style={s.periodBar}>
           <div style={s.periodGroup}>
             <span style={s.periodLabel}>From</span>
@@ -286,10 +237,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Main content */}
         <div style={s.contentGrid}>
           <div>
-            {/* Metric cards */}
             <div style={s.metricsGrid}>
               {metricCards.map(m => (
                 <div key={m.label} style={{ ...s.metricCard, borderLeft: `3px solid ${m.accent}`, background: m.accentBg }}>
@@ -300,7 +249,6 @@ export default function Dashboard() {
               ))}
             </div>
 
-            {/* Alerts */}
             <div style={s.alertCard}>
               <div style={s.alertHeader}>
                 <span style={s.alertTitle}>Alerts & notifications</span>
@@ -317,17 +265,14 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Quick actions */}
           <div style={s.quickCard}>
             <div style={s.quickTitle}>Quick actions</div>
             {quickActions.map(action => (
-              <button key={action.label} style={s.quickBtn} onClick={() => setPage(action.page as any)}>
+              <button key={action.label} style={s.quickBtn} onClick={() => setPage(action.page)}>
                 <span style={{ ...s.quickIcon, color: action.accent }}>{action.icon}</span>
                 {action.label}
               </button>
             ))}
-
-            {/* Mini stats */}
             <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '0.5px solid #f0f0ee' }}>
               <div style={{ fontSize: '11px', fontWeight: '600', color: '#bbb', textTransform: 'uppercase' as const, letterSpacing: '0.1em', marginBottom: '10px' }}>At a glance</div>
               {[

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { NavContext } from '../App'
+import type { Page } from '../App'
 import { supabase } from '../supabase'
 
 export default function CashFlow() {
@@ -20,7 +21,7 @@ export default function CashFlow() {
 
   const currentYear = new Date().getFullYear()
 
-  const pageMap: Record<string, string> = {
+  const pageMap: Record<string, Page> = {
     'Dashboard': 'dashboard', 'Transactions': 'transactions',
     'P&L': 'pl', 'Cash Flow': 'cashflow', 'Reports': 'reports',
     'Partners': 'partners', 'Settings': 'settings',
@@ -186,7 +187,7 @@ export default function CashFlow() {
         </div>
         <div style={s.navLinks}>
           {['Dashboard', 'Transactions', 'P&L', 'Cash Flow', 'Reports', 'Partners', 'Settings'].map(l => (
-            <span key={l} style={l === 'Cash Flow' ? s.navLinkActive : s.navLink} onClick={() => setPage(pageMap[l])}>{l}</span>
+            <span key={l} style={l === 'Cash Flow' ? s.navLinkActive : s.navLink} onClick={() => setPage(pageMap[l] as Page)}>{l}</span>
           ))}
         </div>
         <div style={s.navRight}>
