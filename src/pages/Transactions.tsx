@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { NavContext } from '../App'
+import type { Page } from '../App'
 import { supabase } from '../supabase'
 import InvoiceDialog from '../components/InvoiceDialog'
 import TransactionDialog from '../components/TransactionDialog'
@@ -43,10 +44,10 @@ export default function Transactions() {
   const [passthroughs, setPassthroughs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  const pageMap: Record<string, any> = {
+  const pageMap: Record<string, Page> = {
     'Dashboard': 'dashboard', 'Transactions': 'transactions',
     'P&L': 'pl', 'Cash Flow': 'cashflow', 'Reports': 'reports',
-    'Partners': 'partners', 'Settings': 'settings'
+    'Partners': 'partners', 'Settings': 'settings',
   }
 
   const fetchInvoices = async () => {
@@ -63,7 +64,7 @@ export default function Transactions() {
     setLoading(true)
     const { data, error } = await supabase
       .from('transactions')
-      .select(`*, companies!transactions_company_id_fkey(name), banks!transactions_bank_id_fkey(name), partners!transactions_partner_id_fkey(name)`)
+      .select('*, companies!transactions_company_id_fkey(name), banks!transactions_bank_id_fkey(name), partners!transactions_partner_id_fkey(name)')
       .order('transaction_date', { ascending: false })
     if (!error && data) setTransactions(data)
     setLoading(false)
@@ -73,7 +74,7 @@ export default function Transactions() {
     setLoading(true)
     const { data, error } = await supabase
       .from('passthrough')
-      .select(`*, companies(name), banks(name), partners(name)`)
+      .select('*, companies(name), banks(name), partners(name)')
       .order('transaction_date', { ascending: false })
     if (!error && data) setPassthroughs(data)
     setLoading(false)
@@ -90,6 +91,47 @@ export default function Transactions() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // ── Edit handlers — fetch full data from DB ──────────
+  const handleEditInvoice = async (inv: any) => {
+    const { data } = await supabase
+      .from('invoices')
+      .select('*, companies(name,currencies), partners(name)')
+      .eq('id', inv.id)
+      .single()
+    if (data) {
+      setEditInvoice(data)
+      setShowInvoiceDialog(true)
+    }
+    setShowMenu(null)
+  }
+
+  const handleEditTransaction = async (t: any) => {
+    const { data } = await supabase
+      .from('transactions')
+      .select('*, companies(name,currencies), banks(name), partners(name)')
+      .eq('id', t.id)
+      .single()
+    if (data) {
+      setEditTransaction(data)
+      setShowTransactionDialog(true)
+    }
+    setShowMenu(null)
+  }
+
+  const handleEditPassthrough = async (p: any) => {
+    const { data } = await supabase
+      .from('passthrough')
+      .select('*, companies(name,currencies), banks(name), partners(name)')
+      .eq('id', p.id)
+      .single()
+    if (data) {
+      setEditPassthrough(data)
+      setShowPassthroughDialog(true)
+    }
+    setShowMenu(null)
+  }
+
+  // ── Delete handlers ───────────────────────────────────
   const deleteInvoice = async (id: string) => {
     if (!window.confirm('Delete this invoice? This may affect P&L.')) return
     await supabase.from('invoices').delete().eq('id', id)
@@ -152,7 +194,8 @@ export default function Transactions() {
     const matchType = filterType === 'all' || t.type === filterType
     const matchSearch = !search ||
       partner.toLowerCase().includes(search.toLowerCase()) ||
-      (t.note || '').toLowerCase().includes(search.toLowerCase())
+      (t.note || '').toLowerCase().includes(search.toLowerCase()) ||
+      (t.pl_category || '').toLowerCase().includes(search.toLowerCase())
     return matchEntity && matchType && matchSearch
   })
 
@@ -161,7 +204,9 @@ export default function Transactions() {
     const partner = p.partners?.name || ''
     const matchEntity = filterEntity === 'all' || company.toLowerCase().includes(filterEntity)
     const matchStatus = filterStatus === 'all' || p.status === filterStatus
-    const matchSearch = !search || partner.toLowerCase().includes(search.toLowerCase())
+    const matchSearch = !search ||
+      partner.toLowerCase().includes(search.toLowerCase()) ||
+      (p.note || '').toLowerCase().includes(search.toLowerCase())
     return matchEntity && matchStatus && matchSearch
   })
 
@@ -221,18 +266,10 @@ export default function Transactions() {
             <div style={s.pageSub}>Invoices, transactions and pass-throughs across all entities</div>
           </div>
           <div style={s.btnGroup}>
-            <button style={s.btnInvoice} onClick={() => { setEditInvoice(null); setShowInvoiceDialog(true) }}>
-              📄 New invoice
-            </button>
-            <button style={s.btnTransaction} onClick={() => { setEditTransaction(null); setShowTransactionDialog(true) }}>
-              💳 New transaction
-            </button>
-            <button style={s.btnPassthrough} onClick={() => { setEditPassthrough(null); setShowPassthroughDialog(true) }}>
-              ⚡ Pass-through
-            </button>
-            <button style={s.btnBulk} onClick={() => setShowBulkImport(true)}>
-              📥 Bulk import
-            </button>
+            <button style={s.btnInvoice} onClick={() => { setEditInvoice(null); setShowInvoiceDialog(true) }}>📄 New invoice</button>
+            <button style={s.btnTransaction} onClick={() => { setEditTransaction(null); setShowTransactionDialog(true) }}>💳 New transaction</button>
+            <button style={s.btnPassthrough} onClick={() => { setEditPassthrough(null); setShowPassthroughDialog(true) }}>⚡ Pass-through</button>
+            <button style={s.btnBulk} onClick={() => setShowBulkImport(true)}>📥 Bulk import</button>
           </div>
         </div>
 
@@ -283,7 +320,7 @@ export default function Transactions() {
         {/* Filter bar */}
         <div style={s.filterBar}>
           <input type="text"
-            placeholder={activeTab === 'invoices' ? 'Search partner or invoice number...' : 'Search partner or description...'}
+            placeholder={activeTab === 'invoices' ? 'Search partner or invoice number...' : 'Search partner, note or category...'}
             value={search} onChange={e => setSearch(e.target.value)} style={s.searchInput} />
 
           <select value={filterEntity} onChange={e => setFilterEntity(e.target.value)} style={s.filterSelect}>
@@ -367,8 +404,8 @@ export default function Transactions() {
                       <th style={s.th}>Type</th>
                       <th style={s.th}>P&L Category</th>
                       <th style={s.th}>Company</th>
-                      <th style={{ ...s.th, textAlign: 'right' }}>Amount</th>
-                      <th style={{ ...s.th, textAlign: 'right' }}>Remaining</th>
+                      <th style={{ ...s.th, textAlign: 'right' as const }}>Amount</th>
+                      <th style={{ ...s.th, textAlign: 'right' as const }}>Remaining</th>
                       <th style={s.th}>Status</th>
                       <th style={s.th}></th>
                     </tr>
@@ -395,10 +432,10 @@ export default function Transactions() {
                           </td>
                           <td style={s.td}><span style={s.catCell}>{inv.pl_category || inv.revenue_stream || '—'}</span></td>
                           <td style={s.td}><span style={s.compCell}>{inv.company_name || '—'}</span></td>
-                          <td style={{ ...s.td, textAlign: 'right' }}>
+                          <td style={{ ...s.td, textAlign: 'right' as const }}>
                             <span style={s.amtCell}>{(inv.amount || 0).toLocaleString()} {inv.currency}</span>
                           </td>
-                          <td style={{ ...s.td, textAlign: 'right' }}>
+                          <td style={{ ...s.td, textAlign: 'right' as const }}>
                             <span style={{ ...s.amtCell, color: (inv.remaining_usd || 0) > 0.01 ? '#A32D2D' : '#1D9E75' }}>
                               ${(inv.remaining_usd || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}
                             </span>
@@ -413,9 +450,9 @@ export default function Transactions() {
                               <button style={s.editBtn} onClick={() => setShowMenu(showMenu === inv.id ? null : inv.id)}>···</button>
                               {showMenu === inv.id && (
                                 <div style={s.contextMenu}>
-                                  <div style={s.contextItem} onClick={() => { setEditInvoice(inv); setShowMenu(null) }}>Edit</div>
+                                  <div style={s.contextItem} onClick={() => handleEditInvoice(inv)}>✏️ Edit</div>
                                   <div style={s.contextItem} onClick={() => { setReconcileSource({ type: 'invoice', id: inv.id }); setShowMenu(null) }}>🔗 Reconcile</div>
-                                  <div style={{ ...s.contextItem, color: '#A32D2D' }} onClick={() => deleteInvoice(inv.id)}>Delete</div>
+                                  <div style={{ ...s.contextItem, color: '#A32D2D' }} onClick={() => deleteInvoice(inv.id)}>🗑 Delete</div>
                                 </div>
                               )}
                             </div>
@@ -451,8 +488,8 @@ export default function Transactions() {
                     <th style={s.th}>Note</th>
                     <th style={s.th}>Company</th>
                     <th style={s.th}>Bank</th>
-                    <th style={{ ...s.th, textAlign: 'right' }}>Amount</th>
-                    <th style={{ ...s.th, textAlign: 'right' }}>USD</th>
+                    <th style={{ ...s.th, textAlign: 'right' as const }}>Amount</th>
+                    <th style={{ ...s.th, textAlign: 'right' as const }}>USD</th>
                     <th style={s.th}>P&L</th>
                     <th style={s.th}></th>
                   </tr>
@@ -477,10 +514,10 @@ export default function Transactions() {
                       <td style={s.td}><span style={s.descCell}>{t.note || '—'}</span></td>
                       <td style={s.td}><span style={s.compCell}>{t.companies?.name || '—'}</span></td>
                       <td style={s.td}><span style={s.compCell}>{t.banks?.name || '—'}</span></td>
-                      <td style={{ ...s.td, textAlign: 'right' }}>
+                      <td style={{ ...s.td, textAlign: 'right' as const }}>
                         <span style={s.amtCell}>{(t.amount || 0).toLocaleString()} {t.currency}</span>
                       </td>
-                      <td style={{ ...s.td, textAlign: 'right' }}>
+                      <td style={{ ...s.td, textAlign: 'right' as const }}>
                         <span style={s.usdCell}>${(t.amount_usd || 0).toLocaleString()}</span>
                       </td>
                       <td style={s.td}>
@@ -493,11 +530,11 @@ export default function Transactions() {
                           <button style={s.editBtn} onClick={() => setShowMenu(showMenu === t.id ? null : t.id)}>···</button>
                           {showMenu === t.id && (
                             <div style={s.contextMenu}>
-                              <div style={s.contextItem} onClick={() => { setEditTransaction(t); setShowMenu(null) }}>Edit</div>
+                              <div style={s.contextItem} onClick={() => handleEditTransaction(t)}>✏️ Edit</div>
                               {t.type === 'direct' && (
                                 <div style={s.contextItem} onClick={() => { setReconcileSource({ type: 'transaction', id: t.id }); setShowMenu(null) }}>🔗 Reconcile</div>
                               )}
-                              <div style={{ ...s.contextItem, color: '#A32D2D' }} onClick={() => deleteTransaction(t.id)}>Delete</div>
+                              <div style={{ ...s.contextItem, color: '#A32D2D' }} onClick={() => deleteTransaction(t.id)}>🗑 Delete</div>
                             </div>
                           )}
                         </div>
@@ -528,8 +565,8 @@ export default function Transactions() {
                     <th style={s.th}>Company</th>
                     <th style={s.th}>Bank</th>
                     <th style={s.th}>Note</th>
-                    <th style={{ ...s.th, textAlign: 'right' }}>Amount</th>
-                    <th style={{ ...s.th, textAlign: 'right' }}>USD</th>
+                    <th style={{ ...s.th, textAlign: 'right' as const }}>Amount</th>
+                    <th style={{ ...s.th, textAlign: 'right' as const }}>USD</th>
                     <th style={s.th}>Status</th>
                     <th style={s.th}></th>
                   </tr>
@@ -548,10 +585,10 @@ export default function Transactions() {
                       <td style={s.td}><span style={s.compCell}>{p.companies?.name || '—'}</span></td>
                       <td style={s.td}><span style={s.compCell}>{p.banks?.name || '—'}</span></td>
                       <td style={s.td}><span style={s.descCell}>{p.note || '—'}</span></td>
-                      <td style={{ ...s.td, textAlign: 'right' }}>
+                      <td style={{ ...s.td, textAlign: 'right' as const }}>
                         <span style={s.amtCell}>{(p.amount || 0).toLocaleString()} {p.currency}</span>
                       </td>
-                      <td style={{ ...s.td, textAlign: 'right' }}>
+                      <td style={{ ...s.td, textAlign: 'right' as const }}>
                         <span style={s.usdCell}>${(p.amount_usd || 0).toLocaleString()}</span>
                       </td>
                       <td style={s.td}>
@@ -564,8 +601,8 @@ export default function Transactions() {
                           <button style={s.editBtn} onClick={() => setShowMenu(showMenu === p.id ? null : p.id)}>···</button>
                           {showMenu === p.id && (
                             <div style={s.contextMenu}>
-                              <div style={s.contextItem} onClick={() => { setEditPassthrough(p); setShowMenu(null) }}>Edit</div>
-                              <div style={{ ...s.contextItem, color: '#A32D2D' }} onClick={() => deletePassthrough(p.id)}>Delete</div>
+                              <div style={s.contextItem} onClick={() => handleEditPassthrough(p)}>✏️ Edit</div>
+                              <div style={{ ...s.contextItem, color: '#A32D2D' }} onClick={() => deletePassthrough(p.id)}>🗑 Delete</div>
                             </div>
                           )}
                         </div>
