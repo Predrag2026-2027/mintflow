@@ -91,8 +91,6 @@ export default function CashFlow() {
   // ── Aggregations ─────────────────────────────────────
 
   // All inflows (credit/revenue transactions)
-  const inflows = transactions.filter(t => t.tx_subtype === 'revenue' || (t.type === 'invoice_payment' && (t.amount_usd || 0) > 0 && t.tx_subtype !== 'expense'))
-  const outflows = transactions.filter(t => t.tx_subtype === 'expense' || t.tx_subtype === null)
 
   // Group by category for cash flow statement
   const operatingIn = transactions
