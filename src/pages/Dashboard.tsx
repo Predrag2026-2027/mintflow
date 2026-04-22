@@ -54,12 +54,14 @@ export default function Dashboard() {
   ]
 
   const quickActions = [
-    { label: 'New transaction', icon: '＋', page: 'transactions', accent: '#1D9E75' },
-    { label: 'P&L report', icon: '↗', page: 'pl', accent: '#185FA5' },
-    { label: 'Cash flow', icon: '⇄', page: 'cashflow', accent: '#185FA5' },
-    { label: 'Partners', icon: '🤝', page: 'partners', accent: '#BA7517' },
-    { label: 'Settings', icon: '⚙', page: 'settings', accent: '#888' },
-  ]
+  { label: 'New invoice',      icon: '🧾', page: 'transactions', accent: '#1D9E75' },
+  { label: 'New transaction',  icon: '＋', page: 'transactions', accent: '#1D9E75' },
+  { label: 'Pass-through',     icon: '⇄',  page: 'transactions', accent: '#0C447C' },
+  { label: 'Bulk import',      icon: '📥', page: 'transactions', accent: '#633806' },
+  { label: 'P&L report',       icon: '↗',  page: 'pl',           accent: '#185FA5' },
+  { label: 'Partners',         icon: '🤝', page: 'partners',     accent: '#BA7517' },
+  { label: 'Settings',         icon: '⚙',  page: 'settings',     accent: '#888'    },
+]
 
   // Load companies
   useEffect(() => {
