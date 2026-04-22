@@ -185,8 +185,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   // ── Populate form when editing ───────────────────────
   useEffect(() => {
     if (!transaction) return
-    setCompanyId(transaction.company_id || '')
-    setCompanyName(transaction.companies?.name || '')
+    setCompanyId(transaction.company_id || '')    
     setBankId(transaction.bank_id || '')
     setCurrency(transaction.currency || '')
     setStatement(transaction.statement_number || '')
