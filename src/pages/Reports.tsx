@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { NavContext } from '../App'
 import type { Page } from '../App'
 import { supabase } from '../supabase'
+import { fmtUSD, fmtUSDSigned } from '../utils/formatters'
 
 export default function Reports() {
   const { user, signOut } = useAuth()
@@ -81,9 +82,6 @@ export default function Reports() {
   }, [companyId, ytdStart, today])
 
   useEffect(() => { fetchKpis() }, [fetchKpis])
-
-  const fmt = (n: number) => '$' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })
-  const fmtN = (n: number) => (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })
 
   const kpiCards = [
     {

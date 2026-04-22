@@ -8,6 +8,7 @@ import TransactionDialog from '../components/TransactionDialog'
 import PassthroughDialog from '../components/PassthroughDialog'
 import ReconcilePanel from '../components/ReconcilePanel'
 import BulkImport from '../components/BulkImport'
+import { fmtUSD, fmtUSDSigned, fmtAmount } from '../utils/formatters'
 
 type Tab = 'invoices' | 'transactions' | 'passthrough'
 
@@ -277,7 +278,7 @@ export default function Transactions() {
         <div style={s.summaryRow}>
           <div style={s.summaryCard}>
             <div style={s.summaryLabel}>Outstanding invoices</div>
-            <div style={s.summaryVal}>${unpaidTotal.toLocaleString('en-US', { maximumFractionDigits: 0 })}</div>
+            <div style={s.summaryVal}>{fmtUSD(unpaidTotal)}</div>
             <div style={s.summarySub}>{invoices.filter(i => ['unpaid', 'partial'].includes(i.calculated_status)).length} invoices unpaid</div>
           </div>
           <div style={{ ...s.summaryCard, ...(overdueCount > 0 ? s.summaryCardAlert : {}) }}>
@@ -367,10 +368,10 @@ export default function Transactions() {
 
           <div style={s.totalBadge}>
             {activeTab === 'invoices' && (
-              <>{filteredInvoices.length} invoices · <strong>${filteredInvoices.reduce((s, i) => s + (i.amount_usd || 0), 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} USD</strong></>
+              <>{filteredInvoices.length} invoices · <strong>{fmtUSD(filteredInvoices.reduce((s, i) => s + (i.amount_usd || 0), 0))} USD</strong></>
             )}
             {activeTab === 'transactions' && (
-              <>{filteredTransactions.length} entries · <strong>${filteredTransactions.reduce((s, t) => s + (t.amount_usd || 0), 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} USD</strong></>
+              <>{filteredTransactions.length} entries · <strong>{fmtUSD(filteredTransactions.reduce((s, t) => s + (t.amount_usd || 0), 0))} USD</strong></>
             )}
             {activeTab === 'passthrough' && (
               <>{filteredPassthroughs.length} entries</>
@@ -433,11 +434,11 @@ export default function Transactions() {
                           <td style={s.td}><span style={s.catCell}>{inv.pl_category || inv.revenue_stream || '—'}</span></td>
                           <td style={s.td}><span style={s.compCell}>{inv.company_name || '—'}</span></td>
                           <td style={{ ...s.td, textAlign: 'right' as const }}>
-                            <span style={s.amtCell}>{(inv.amount || 0).toLocaleString()} {inv.currency}</span>
+                            <span style={s.amtCell}>{fmtAmount(inv.amount || 0, inv.currency)}</span>
                           </td>
                           <td style={{ ...s.td, textAlign: 'right' as const }}>
                             <span style={{ ...s.amtCell, color: (inv.remaining_usd || 0) > 0.01 ? '#A32D2D' : '#1D9E75' }}>
-                              ${(inv.remaining_usd || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                              {fmtUSD(inv.remaining_usd || 0)}
                             </span>
                           </td>
                           <td style={s.td}>
@@ -518,7 +519,7 @@ export default function Transactions() {
                         <span style={s.amtCell}>{(t.amount || 0).toLocaleString()} {t.currency}</span>
                       </td>
                       <td style={{ ...s.td, textAlign: 'right' as const }}>
-                        <span style={s.usdCell}>${(t.amount_usd || 0).toLocaleString()}</span>
+                        <span style={s.usdCell}>{fmtUSD(t.amount_usd || 0)}</span>
                       </td>
                       <td style={s.td}>
                         {t.pl_impact
