@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { NavContext } from '../App'
 import type { Page } from '../App'
 import { supabase } from '../supabase'
+import { fmtUSD, fmtUSDSigned, fmtAmount } from '../utils/formatters'
 
 export default function CashFlow() {
   const { user, signOut } = useAuth()
@@ -15,7 +16,6 @@ export default function CashFlow() {
   const [periodValue, setPeriodValue] = useState(new Date().toISOString().slice(0, 7))
   const [loading, setLoading] = useState(true)
 
-  // Real data
   const [transactions, setTransactions] = useState<any[]>([])
   const [passthroughs, setPassthroughs] = useState<any[]>([])
 
@@ -69,7 +69,6 @@ export default function CashFlow() {
       .gte('transaction_date', start)
       .lte('transaction_date', end)
       .eq('status', 'posted')
-
     if (companyId !== 'all') txQuery = txQuery.eq('company_id', companyId)
 
     let ptQuery = supabase
@@ -77,11 +76,9 @@ export default function CashFlow() {
       .select('*, partners(name), banks(name,currency,company_id)')
       .gte('transaction_date', start)
       .lte('transaction_date', end)
-
     if (companyId !== 'all') ptQuery = ptQuery.eq('company_id', companyId)
 
     const [{ data: txData }, { data: ptData }] = await Promise.all([txQuery, ptQuery])
-
     setTransactions(txData || [])
     setPassthroughs(ptData || [])
     setLoading(false)
@@ -89,11 +86,6 @@ export default function CashFlow() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  // ── Aggregations ─────────────────────────────────────
-
-  // All inflows (credit/revenue transactions)
-
-  // Group by category for cash flow statement
   const operatingIn = transactions
     .filter(t => t.tx_subtype === 'revenue' || t.type === 'invoice_payment')
     .reduce((s, t) => s + (t.amount_usd || 0), 0)
@@ -117,16 +109,13 @@ export default function CashFlow() {
   const totalOutflows = operatingOut + bankingOut + taxOut + ptOut
   const netCashFlow = totalInflows - totalOutflows
 
-  // ── Bank account summary ──────────────────────────────
   const filteredBanks = companyId === 'all' ? banks : banks.filter(b => b.company_id === companyId)
 
-  // Per bank: sum of inflows and outflows
   const getBankFlow = (bankId: string) => {
     const bankTx = transactions.filter(t => t.bank_id === bankId)
     const income = bankTx.filter(t => t.tx_subtype === 'revenue').reduce((s, t) => s + (t.amount_usd || 0), 0)
     const expense = bankTx.filter(t => t.tx_subtype === 'expense' || t.tx_subtype === null).reduce((s, t) => s + (t.amount_usd || 0), 0)
-    const txCount = bankTx.length
-    return { income, expense, net: income - expense, txCount }
+    return { income, expense, net: income - expense, txCount: bankTx.length }
   }
 
   const months = Array.from({ length: 12 }, (_, i) => {
@@ -136,17 +125,9 @@ export default function CashFlow() {
   const quarters = [1, 2, 3, 4].map(q => ({ value: `${currentYear}-Q${q}`, label: `Q${q} ${currentYear}` }))
   const years = [currentYear - 1, currentYear].map(y => ({ value: String(y), label: String(y) }))
 
-  const fmtAmt = (n: number) => {
-    if (n === 0) return '—'
-    const abs = Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })
-    return (n < 0 ? '-$' : '+$') + abs
-  }
-  const fmt = (n: number) => '$' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })
-
   const cashFlowSections = [
     {
-      section: 'Operating Activities',
-      color: '#0F6E56', bg: '#E1F5EE',
+      section: 'Operating Activities', color: '#0F6E56', bg: '#E1F5EE',
       items: [
         { name: 'Revenue received from customers', amount: operatingIn },
         { name: 'Payments to suppliers & employees', amount: -operatingOut },
@@ -155,8 +136,7 @@ export default function CashFlow() {
       ]
     },
     {
-      section: 'Pass-through Flows',
-      color: '#0C447C', bg: '#E6F1FB',
+      section: 'Pass-through Flows', color: '#0C447C', bg: '#E6F1FB',
       items: [
         { name: 'Pass-through inflows (IN)', amount: ptIn },
         { name: 'Pass-through outflows (OUT)', amount: -ptOut },
@@ -173,6 +153,12 @@ export default function CashFlow() {
     return { bg: '#FBEAF0', color: '#72243E' }
   }
 
+  // fmtAmt: signed USD for cash flow items (+ / -)
+  const fmtAmt = (n: number) => {
+    if (n === 0) return '—'
+    return fmtUSDSigned(n)
+  }
+
   return (
     <div style={s.root}>
       <nav style={s.nav}>
@@ -187,7 +173,7 @@ export default function CashFlow() {
         </div>
         <div style={s.navLinks}>
           {['Dashboard', 'Transactions', 'P&L', 'Cash Flow', 'Reports', 'Partners', 'Settings'].map(l => (
-            <span key={l} style={l === 'Cash Flow' ? s.navLinkActive : s.navLink} onClick={() => setPage(pageMap[l] as Page)}>{l}</span>
+            <span key={l} style={l === 'Cash Flow' ? s.navLinkActive : s.navLink} onClick={() => setPage(pageMap[l])}>{l}</span>
           ))}
         </div>
         <div style={s.navRight}>
@@ -232,27 +218,30 @@ export default function CashFlow() {
         <div style={s.summaryGrid}>
           <div style={s.summaryCard}>
             <div style={s.summaryLabel}>Total inflows</div>
-            <div style={{ ...s.summaryValue, color: '#0F6E56' }}>{loading ? '...' : fmt(totalInflows)}</div>
+            <div style={{ ...s.summaryValue, color: '#0F6E56' }}>{loading ? '...' : fmtUSD(totalInflows)}</div>
             <div style={s.summarySub}>Revenue + pass-through IN</div>
           </div>
           <div style={s.summaryCard}>
             <div style={s.summaryLabel}>Total outflows</div>
-            <div style={{ ...s.summaryValue, color: '#A32D2D' }}>{loading ? '...' : fmt(totalOutflows)}</div>
+            <div style={{ ...s.summaryValue, color: '#A32D2D' }}>{loading ? '...' : fmtUSD(totalOutflows)}</div>
             <div style={s.summarySub}>Expenses + pass-through OUT</div>
           </div>
           <div style={s.summaryCard}>
             <div style={s.summaryLabel}>Net cash flow</div>
-            <div style={{ ...s.summaryValue, color: netCashFlow >= 0 ? '#0F6E56' : '#A32D2D' }}>{loading ? '...' : fmtAmt(netCashFlow)}</div>
+            <div style={{ ...s.summaryValue, color: netCashFlow >= 0 ? '#0F6E56' : '#A32D2D' }}>
+              {loading ? '...' : fmtUSDSigned(netCashFlow)}
+            </div>
             <div style={s.summarySub}>For selected period</div>
           </div>
           <div style={s.summaryCard}>
             <div style={s.summaryLabel}>Pass-through balance</div>
-            <div style={{ ...s.summaryValue, color: Math.abs(ptIn - ptOut) < 1 ? '#0F6E56' : '#BA7517' }}>{loading ? '...' : fmtAmt(ptIn - ptOut)}</div>
+            <div style={{ ...s.summaryValue, color: Math.abs(ptIn - ptOut) < 1 ? '#0F6E56' : '#BA7517' }}>
+              {loading ? '...' : fmtUSDSigned(ptIn - ptOut)}
+            </div>
             <div style={s.summarySub}>{passthroughs.filter(p => p.status === 'unpaired').length} unpaired entries</div>
           </div>
         </div>
 
-        {/* Empty state */}
         {!loading && transactions.length === 0 && passthroughs.length === 0 && (
           <div style={s.emptyState}>
             <div style={{ fontSize: '32px', marginBottom: '12px' }}>💸</div>
@@ -263,7 +252,6 @@ export default function CashFlow() {
 
         {(transactions.length > 0 || passthroughs.length > 0 || loading) && (
           <div style={s.contentGrid}>
-            {/* Cash flow statement */}
             <div>
               <div style={s.sectionLabel}>Cash flow statement</div>
               <div style={s.tableWrap}>
@@ -312,7 +300,6 @@ export default function CashFlow() {
                 )}
               </div>
 
-              {/* Recent transactions */}
               {!loading && transactions.length > 0 && (
                 <div style={{ marginTop: '16px' }}>
                   <div style={s.sectionLabel}>Recent transactions</div>
@@ -342,10 +329,10 @@ export default function CashFlow() {
                                 </span>
                               </td>
                               <td style={{ ...s.td, textAlign: 'right' as const, color: isIn ? '#0F6E56' : '#A32D2D', fontWeight: '500' }}>
-                                {isIn ? '+' : '-'}{(tx.amount || 0).toLocaleString('sr-RS')} {tx.currency}
+                                {isIn ? '+' : '-'}{fmtAmount(tx.amount || 0, tx.currency || 'USD')}
                               </td>
                               <td style={{ ...s.td, textAlign: 'right' as const, color: '#888' }}>
-                                ${(tx.amount_usd || 0).toFixed(0)}
+                                {fmtUSD(tx.amount_usd || 0)}
                               </td>
                             </tr>
                           )
@@ -353,7 +340,7 @@ export default function CashFlow() {
                         {transactions.length > 15 && (
                           <tr style={s.dataRow}>
                             <td colSpan={6} style={{ ...s.td, textAlign: 'center' as const, color: '#aaa', fontStyle: 'italic' }}>
-                              +{transactions.length - 15} more transactions — go to Transactions tab to see all
+                              +{transactions.length - 15} more — go to Transactions tab to see all
                             </td>
                           </tr>
                         )}
@@ -388,15 +375,15 @@ export default function CashFlow() {
                       <div style={s.accountBalances}>
                         <div>
                           <div style={s.balLabel}>Inflows</div>
-                          <div style={{ ...s.balValue, color: '#0F6E56' }}>${flow.income.toFixed(0)}</div>
+                          <div style={{ ...s.balValue, color: '#0F6E56' }}>{fmtUSD(flow.income)}</div>
                         </div>
                         <div style={{ fontSize: '14px', color: '#aaa', alignSelf: 'flex-end', paddingBottom: '2px' }}>→</div>
                         <div>
                           <div style={s.balLabel}>Outflows</div>
-                          <div style={{ ...s.balValue, color: '#A32D2D' }}>${flow.expense.toFixed(0)}</div>
+                          <div style={{ ...s.balValue, color: '#A32D2D' }}>{fmtUSD(flow.expense)}</div>
                         </div>
                         <div style={{ ...s.diffBadge, background: flow.net >= 0 ? '#E1F5EE' : '#FCEBEB', color: flow.net >= 0 ? '#085041' : '#A32D2D' }}>
-                          {flow.net >= 0 ? '+' : ''}${flow.net.toFixed(0)}
+                          {fmtUSDSigned(flow.net)}
                         </div>
                       </div>
                       <div style={{ fontSize: '11px', color: '#aaa', marginTop: '6px' }}>
@@ -407,7 +394,6 @@ export default function CashFlow() {
                 })}
               </div>
 
-              {/* Pass-through summary */}
               {passthroughs.length > 0 && (
                 <div style={{ marginTop: '12px' }}>
                   <div style={s.sectionLabel}>Pass-through entries</div>
@@ -431,7 +417,7 @@ export default function CashFlow() {
                               <span style={{ fontSize: '12px' }}>{pt.direction === 'in' ? '📥' : '📤'}</span>
                             </td>
                             <td style={{ ...s.td, textAlign: 'right' as const, color: pt.direction === 'in' ? '#0F6E56' : '#A32D2D' }}>
-                              {pt.direction === 'in' ? '+' : '-'}${(pt.amount_usd || 0).toFixed(0)}
+                              {pt.direction === 'in' ? '+' : '-'}{fmtUSD(pt.amount_usd || 0)}
                             </td>
                             <td style={s.td}>
                               <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '20px', background: pt.status === 'balanced' ? '#E1F5EE' : pt.status === 'paired' ? '#FAEEDA' : '#FCEBEB', color: pt.status === 'balanced' ? '#085041' : pt.status === 'paired' ? '#633806' : '#A32D2D' }}>

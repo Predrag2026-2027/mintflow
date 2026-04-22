@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../supabase'
 import { NavContext } from '../App'
 import type { Page } from '../App'
+import { fmtUSD, fmtUSDSigned } from '../utils/formatters'
 
 type Entity = 'constel' | 'sfbc' | 'constellation' | 'social'
 
@@ -134,18 +135,15 @@ export default function Dashboard() {
     if (companies.length > 0 || entity === 'constel') fetchMetrics()
   }, [fetchMetrics, companies, entity])
 
-  const fmt = (n: number) => '$' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })
-  const fmtN = (n: number) => (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })
-
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
   const username = user?.email?.split('@')[0] ?? 'admin'
 
   const metricCards = [
-    { label: 'Revenue', value: loading ? '...' : fmt(metrics.totalRevenue), sub: `${dateFrom} – ${dateTo}`, accent: '#1D9E75', accentBg: 'rgba(29,158,117,0.07)', textColor: '#0B5E49' },
-    { label: 'Expenses', value: loading ? '...' : fmt(metrics.totalExpenses), sub: `${dateFrom} – ${dateTo}`, accent: '#A32D2D', accentBg: 'rgba(163,45,45,0.07)', textColor: '#A32D2D' },
-    { label: 'Net Profit / Loss', value: loading ? '...' : fmtN(metrics.netProfit), sub: metrics.netProfit >= 0 ? 'Profitable period' : 'Loss period', accent: metrics.netProfit >= 0 ? '#1D9E75' : '#A32D2D', accentBg: metrics.netProfit >= 0 ? 'rgba(29,158,117,0.07)' : 'rgba(163,45,45,0.07)', textColor: metrics.netProfit >= 0 ? '#0B5E49' : '#A32D2D' },
-    { label: 'Open Invoices', value: loading ? '...' : metrics.openInvoicesCount > 0 ? `${metrics.openInvoicesCount} · ${fmt(metrics.unpaidInvoices)}` : 'None', sub: metrics.overdueCount > 0 ? `${metrics.overdueCount} overdue` : 'All on time', accent: metrics.overdueCount > 0 ? '#BA7517' : '#1D9E75', accentBg: metrics.overdueCount > 0 ? 'rgba(186,117,23,0.07)' : 'rgba(29,158,117,0.07)', textColor: metrics.overdueCount > 0 ? '#5C3205' : '#0B5E49' },
+    { label: 'Revenue', value: loading ? '...' : fmtUSD(metrics.totalRevenue), sub: `${dateFrom} – ${dateTo}`, accent: '#1D9E75', accentBg: 'rgba(29,158,117,0.07)', textColor: '#0B5E49' },
+    { label: 'Expenses', value: loading ? '...' : fmtUSD(metrics.totalExpenses), sub: `${dateFrom} – ${dateTo}`, accent: '#A32D2D', accentBg: 'rgba(163,45,45,0.07)', textColor: '#A32D2D' },
+    { label: 'Net Profit / Loss', value: loading ? '...' : fmtUSDSigned(metrics.netProfit), sub: metrics.netProfit >= 0 ? 'Profitable period' : 'Loss period', accent: metrics.netProfit >= 0 ? '#1D9E75' : '#A32D2D', accentBg: metrics.netProfit >= 0 ? 'rgba(29,158,117,0.07)' : 'rgba(163,45,45,0.07)', textColor: metrics.netProfit >= 0 ? '#0B5E49' : '#A32D2D' },
+    { label: 'Open Invoices', value: loading ? '...' : metrics.openInvoicesCount > 0 ? `${metrics.openInvoicesCount} · ${fmtUSD(metrics.unpaidInvoices)}` : 'None', sub: metrics.overdueCount > 0 ? `${metrics.overdueCount} overdue` : 'All on time', accent: metrics.overdueCount > 0 ? '#BA7517' : '#1D9E75', accentBg: metrics.overdueCount > 0 ? 'rgba(186,117,23,0.07)' : 'rgba(29,158,117,0.07)', textColor: metrics.overdueCount > 0 ? '#5C3205' : '#0B5E49' },
   ]
 
   return (

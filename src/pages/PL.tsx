@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { NavContext } from '../App'
 import type { Page } from '../App'
 import { supabase } from '../supabase'
+import { fmtUSD, fmtUSDSigned } from '../utils/formatters'
 
 export default function PL() {
   const { user, signOut } = useAuth()
@@ -134,8 +135,6 @@ export default function PL() {
   const years = [currentYear - 1, currentYear].map(y => ({ value: String(y), label: String(y) }))
 
   // ── Formatters ───────────────────────────────────────
-  const fmt = (n: number) => n === 0 ? '—' : '$' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })
-  const fmtN = (n: number) => n === 0 ? '—' : (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })
 
   const hasData = entries.length > 0
 
@@ -198,10 +197,10 @@ export default function PL() {
         {/* Summary cards */}
         <div style={s.summaryGrid}>
           {[
-            { label: 'Total Revenue', value: fmt(totalRevenue), color: '#0F6E56' },
-            { label: 'Gross Profit', value: fmt(grossProfit), color: grossProfit >= 0 ? '#0F6E56' : '#A32D2D' },
-            { label: 'Total Expenses', value: fmt(totalExpenses), color: '#A32D2D' },
-            { label: 'Net Profit / Loss', value: fmtN(netProfit), color: netProfit >= 0 ? '#0F6E56' : '#A32D2D', sub: `${margin.toFixed(1)}% margin` },
+            { label: 'Total Revenue', value: fmtUSD(totalRevenue), color: '#0F6E56' },
+            { label: 'Gross Profit', value: fmtUSD(grossProfit), color: grossProfit >= 0 ? '#0F6E56' : '#A32D2D' },
+            { label: 'Total Expenses', value: fmtUSD(totalExpenses), color: '#A32D2D' },
+            { label: 'Net Profit / Loss', value: fmtUSDSigned(netProfit), color: netProfit >= 0 ? '#0F6E56' : '#A32D2D', sub: `${margin.toFixed(1)}% margin` },
           ].map(card => (
             <div key={card.label} style={s.summaryCard}>
               <div style={s.summaryLabel}>{card.label}</div>
@@ -244,9 +243,9 @@ export default function PL() {
                     : Object.entries(revenueByStream).map(([name, r]) => (
                       <tr key={name} style={s.dataRow}>
                         <td style={s.td}>{name}</td>
-                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmt(r.sg)}</td>
-                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmt(r.af)}</td>
-                        <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: '#0F6E56' }}>{fmt(r.total)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(r.sg)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(r.af)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: '#0F6E56' }}>{fmtUSD(r.total)}</td>
                       </tr>
                     ))
                   }
@@ -254,7 +253,7 @@ export default function PL() {
                     <td style={s.totalCell}>TOTAL REVENUE</td>
                     <td style={{ ...s.totalCell, textAlign: 'right' as const }}></td>
                     <td style={{ ...s.totalCell, textAlign: 'right' as const }}></td>
-                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#0F6E56' }}>{fmt(totalRevenue)}</td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#0F6E56' }}>{fmtUSD(totalRevenue)}</td>
                   </tr>
 
                   {/* ── REDUCTIONS ── */}
@@ -264,9 +263,9 @@ export default function PL() {
                     : Object.entries(reductionByName).map(([name, r]) => (
                       <tr key={name} style={s.dataRow}>
                         <td style={s.td}>{name}</td>
-                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmt(r.sg)}</td>
-                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmt(r.af)}</td>
-                        <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: '#A32D2D' }}>{fmt(r.total)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(r.sg)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(r.af)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: '#A32D2D' }}>{fmtUSD(r.total)}</td>
                       </tr>
                     ))
                   }
@@ -274,7 +273,7 @@ export default function PL() {
                     <td style={s.totalCell}>TOTAL REDUCTIONS</td>
                     <td style={{ ...s.totalCell, textAlign: 'right' as const }}></td>
                     <td style={{ ...s.totalCell, textAlign: 'right' as const }}></td>
-                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmt(totalReductions)}</td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmtUSD(totalReductions)}</td>
                   </tr>
 
                   {/* ── GROSS PROFIT ── */}
@@ -282,7 +281,7 @@ export default function PL() {
                     <td style={s.grossCell}>GROSS PROFIT</td>
                     <td style={{ ...s.grossCell, textAlign: 'right' as const }}></td>
                     <td style={{ ...s.grossCell, textAlign: 'right' as const }}></td>
-                    <td style={{ ...s.grossCell, textAlign: 'right' as const, color: grossProfit >= 0 ? '#085041' : '#A32D2D' }}>{fmtN(grossProfit)}</td>
+                    <td style={{ ...s.grossCell, textAlign: 'right' as const, color: grossProfit >= 0 ? '#085041' : '#A32D2D' }}>{fmtUSDSigned(grossProfit)}</td>
                   </tr>
 
                   {/* ── EXPENSES ── */}
@@ -300,9 +299,9 @@ export default function PL() {
                           : Object.entries(items).map(([name, item]) => (
                             <tr key={name} style={s.dataRow}>
                               <td style={{ ...s.td, paddingLeft: '2rem' }}>{name}</td>
-                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmt(item.sg)}</td>
-                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmt(item.af)}</td>
-                              <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: item.total > 0 ? '#A32D2D' : '#888' }}>{fmt(item.total)}</td>
+                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(item.sg)}</td>
+                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(item.af)}</td>
+                              <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: item.total > 0 ? '#A32D2D' : '#888' }}>{fmtUSD(item.total)}</td>
                             </tr>
                           ))
                         }
@@ -310,7 +309,7 @@ export default function PL() {
                           <td style={{ ...s.subTotalCell, paddingLeft: '1rem' }}>Total {cat.name}</td>
                           <td style={{ ...s.subTotalCell, textAlign: 'right' as const }}></td>
                           <td style={{ ...s.subTotalCell, textAlign: 'right' as const }}></td>
-                          <td style={{ ...s.subTotalCell, textAlign: 'right' as const, color: catTotal > 0 ? '#A32D2D' : '#888' }}>{fmt(catTotal)}</td>
+                          <td style={{ ...s.subTotalCell, textAlign: 'right' as const, color: catTotal > 0 ? '#A32D2D' : '#888' }}>{fmtUSD(catTotal)}</td>
                         </tr>
                       </React.Fragment>
                     )
@@ -320,7 +319,7 @@ export default function PL() {
                     <td style={s.totalCell}>TOTAL EXPENSES</td>
                     <td style={{ ...s.totalCell, textAlign: 'right' as const }}></td>
                     <td style={{ ...s.totalCell, textAlign: 'right' as const }}></td>
-                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmt(totalExpenses)}</td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmtUSD(totalExpenses)}</td>
                   </tr>
 
                   {/* ── NET PROFIT ── */}
@@ -328,7 +327,7 @@ export default function PL() {
                     <td style={s.netCell}>NET PROFIT / LOSS</td>
                     <td style={{ ...s.netCell, textAlign: 'right' as const }}></td>
                     <td style={{ ...s.netCell, textAlign: 'right' as const }}></td>
-                    <td style={{ ...s.netCell, textAlign: 'right' as const, color: netProfit >= 0 ? '#5DCAA5' : '#F5A9A9' }}>{fmtN(netProfit)}</td>
+                    <td style={{ ...s.netCell, textAlign: 'right' as const, color: netProfit >= 0 ? '#5DCAA5' : '#F5A9A9' }}>{fmtUSDSigned(netProfit)}</td>
                   </tr>
 
                 </tbody>
