@@ -6,38 +6,12 @@ import { supabase } from '../supabase'
 import { fmtUSD as fmt, fmtUSDSigned as fmtN } from '../utils/formatters'
 
 // ── Halcom TKDIS format generator ────────────────────────
-// Verifikovano na osnovu realnog izvoza iz Hal E-Bank v26.0.2.20
-// Red 1: 180 chars | Red 2: 180 chars | Red 3: 217 chars
-// Encoding: latin-1, line endings: \r\n, EOF: \x1a
-
-const SIFRE_PLACANJA = [
-  { value: '21', label: '21 – Promet robe i usluga (finalna potrošnja)' },
-  { value: '20', label: '20 – Promet robe i usluga (međufazna potrošnja)' },
-  { value: '22', label: '22 – Usluge javnih preduzeća' },
-  { value: '23', label: '23 – Investicije u objekte i opremu' },
-  { value: '24', label: '24 – Investicije – ostalo' },
-  { value: '25', label: '25 – Zakupnine (državna svojina)' },
-  { value: '26', label: '26 – Zakupnine (oporezive)' },
-  { value: '40', label: '40 – Zarade i druga primanja zaposlenih' },
-  { value: '41', label: '41 – Neoporeziva primanja zaposlenih' },
-  { value: '44', label: '44 – Isplate preko studentskih zadruga' },
-  { value: '53', label: '53 – Uplata javnih prihoda' },
-  { value: '54', label: '54 – Uplata poreza i doprinosa po odbitku' },
-  { value: '60', label: '60 – Premije osiguranja i nadoknada štete' },
-  { value: '63', label: '63 – Ostali transferi' },
-  { value: '70', label: '70 – Kratkoročni krediti' },
-  { value: '71', label: '71 – Dugoročni krediti' },
-  { value: '87', label: '87 – Donacije i sponzorstva' },
-]
-
 function padR(s: string, n: number): string {
   return (s || '').substring(0, n).padEnd(n, ' ')
 }
-
 function cleanAccount(acc: string): string {
   return (acc || '').replace(/[-\s]/g, '')
 }
-
 function fmtDatumDDMMYY(date: Date): string {
   const d = String(date.getDate()).padStart(2, '0')
   const m = String(date.getMonth() + 1).padStart(2, '0')
@@ -45,13 +19,15 @@ function fmtDatumDDMMYY(date: Date): string {
   return `${d}${m}${y}`
 }
 
-function exportHalcom(
-  invoices: any[],
-  companyBankAccount: any,
-  sifraPlacanja: string,
-) {
+function exportHalcom(invoices: any[], companyBankAccount: any) {
   if (!companyBankAccount) {
     alert('Nije pronađen bankovni račun kompanije. Dodajte ga u Settings → Company profiles → Bank accounts.')
+    return
+  }
+  // Proveri da li sve fakture imaju račun primaoca
+  const missing = invoices.filter(i => !i.selected_account_number)
+  if (missing.length > 0) {
+    alert(`${missing.length} faktura nema račun primaoca. Odaberite račun za svaku fakturu.`)
     return
   }
 
@@ -64,20 +40,18 @@ function exportHalcom(
 
   const lines: string[] = []
 
-  // ── Red 1: Header (180 chars) ─────────────────────────
-  // racun(18) + ime(35) + grad(10) + datum(6) + spaces(98) + 'MULTI E-BANK0'(13)
-  const line1 =
+  // Red 1: header (180 chars)
+  lines.push(
     padR(racunPlatilac, 18) +
     padR(imeFirma, 35) +
     padR(gradFirma, 10) +
     datum +
     ' '.repeat(98) +
     'MULTI E-BANK0'
-  lines.push(line1)
+  )
 
-  // ── Red 2: Kontrolni (180 chars) ──────────────────────
-  // racun(18) + ime(35) + grad(10) + iznos_para(15) + '0000'(4) + br_naloga(1) + spaces(96) + '9'(1)
-  const line2 =
+  // Red 2: kontrolni (180 chars)
+  lines.push(
     padR(racunPlatilac, 18) +
     padR(imeFirma, 35) +
     padR(gradFirma, 10) +
@@ -86,46 +60,39 @@ function exportHalcom(
     String(brNaloga) +
     ' '.repeat(96) +
     '9'
-  lines.push(line2)
+  )
 
-  // ── Red 3+: Stavke (217 chars svaka) ──────────────────
-  // racun_primaoca(18) + ime_primaoca(35) + adresa(35) + grad(10) + '0'(1) +
-  // svrha_zona(61) + '00000 '(6) + sifra(3) + '  '(2) + iznos_para(13) + '  '(2) +
-  // poziv(23) + datum(6) + '01'(2)
+  // Red 3+: stavke (217 chars)
   invoices.forEach(inv => {
     const iznos = Math.round((inv.amount || 0) * 100)
     const svrhaText = `UPLATA PO FAKTURI ${inv.invoice_number || ''}`.toUpperCase().substring(0, 34)
-    // Svrha zona: 25 spaces + svrha left-aligned u 36 chars = 61 total
     const svrhaZona = (' '.repeat(25) + svrhaText).padEnd(61, ' ')
-    const racunPrimaoca = cleanAccount(inv.account_number || '')
-    const pozivNaBroj = padR(inv.reference_number || inv.invoice_number || '', 23)
+    const racunPrimaoca = cleanAccount(inv.selected_account_number || '')
+    // Model: iz invoice-a, ili iz odabranog računa partnera, ili '97'
+    const model = padR(inv.selected_model || inv.model || '97', 3)
+    const poziv = padR(inv.reference_number || inv.invoice_number || '', 23)
 
-    const line3 =
+    lines.push(
       padR(racunPrimaoca, 18) +
       padR((inv.partner_name || '').toUpperCase(), 35) +
-      padR('', 35) +   // adresa primaoca
-      padR('', 10) +   // grad primaoca
+      padR('', 35) +
+      padR('', 10) +
       '0' +
       svrhaZona +
       '00000 ' +
-      padR(sifraPlacanja, 3) +
+      model +
       '  ' +
       String(iznos).padStart(13, '0') +
       '  ' +
-      pozivNaBroj +
+      poziv +
       datum +
       '01'
-    lines.push(line3)
+    )
   })
 
   const content = lines.join('\r\n') + '\r\n\x1a'
-
-  // Encode as latin-1 (Windows-1252 compatible)
   const bytes = new Uint8Array(content.length)
-  for (let i = 0; i < content.length; i++) {
-    bytes[i] = content.charCodeAt(i) & 0xff
-  }
-
+  for (let i = 0; i < content.length; i++) bytes[i] = content.charCodeAt(i) & 0xff
   const blob = new Blob([bytes], { type: 'application/octet-stream' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -143,9 +110,12 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
   const [filterStatus, setFilterStatus] = useState<'all' | 'overdue' | 'upcoming'>('all')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [sifraPlacanja, setSifraPlacanja] = useState('21')
   const [bankAccounts, setBankAccounts] = useState<any[]>([])
   const [selectedBankId, setSelectedBankId] = useState('')
+  // Map: invoice_id → { account_number, model } — odabrani račun po fakturi
+  const [invoiceAccountMap, setInvoiceAccountMap] = useState<Record<string, { account_number: string; model: string; bank_name: string }>>({})
+  // Map: partner_id → lista računa
+  const [partnerAccountsMap, setPartnerAccountsMap] = useState<Record<string, any[]>>({})
   const today = new Date().toISOString().split('T')[0]
 
   useEffect(() => {
@@ -155,26 +125,74 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
         .from('companies').select('id').eq('name', 'Constellation LLC').single()
       if (!compData) { setLoading(false); return }
 
-      // Učitaj sve RSD račune kompanije
+      // Bankovni računi kompanije
       const { data: bankData } = await supabase
         .from('company_bank_accounts')
-        .select('*')
-        .eq('company_id', compData.id)
-        .eq('currency', 'RSD')
+        .select('*').eq('company_id', compData.id).eq('currency', 'RSD')
         .order('is_primary', { ascending: false })
       if (bankData && bankData.length > 0) {
         setBankAccounts(bankData)
-        const primary = bankData.find(b => b.is_primary) || bankData[0]
-        setSelectedBankId(primary.id)
+        setSelectedBankId((bankData.find(b => b.is_primary) || bankData[0]).id)
       }
 
-      const { data } = await supabase
+      // Fakture
+      const { data: invData } = await supabase
         .from('invoices')
-        .select('*, partners(name)')
+        .select('*, partners(id, name)')
         .eq('company_id', compData.id)
         .in('status', ['unpaid', 'partial'])
         .order('due_date', { ascending: true })
-      setInvoices(data || [])
+
+      if (invData && invData.length > 0) {
+        setInvoices(invData)
+
+        // Povuci sve partner račune odjednom
+        const partnerIds = [...new Set(invData.map(i => i.partner_id).filter(Boolean))]
+        if (partnerIds.length > 0) {
+          const { data: pAccounts } = await supabase
+            .from('partner_accounts')
+            .select('*')
+            .in('partner_id', partnerIds)
+            .eq('currency', 'RSD')
+            .order('is_primary', { ascending: false })
+
+          if (pAccounts) {
+            // Grupiši po partner_id
+            const paMap: Record<string, any[]> = {}
+            pAccounts.forEach(pa => {
+              if (!paMap[pa.partner_id]) paMap[pa.partner_id] = []
+              paMap[pa.partner_id].push(pa)
+            })
+            setPartnerAccountsMap(paMap)
+
+            // Auto-selektuj primarni račun za svaku fakturu
+            const accMap: Record<string, { account_number: string; model: string; bank_name: string }> = {}
+            invData.forEach(inv => {
+              if (!inv.partner_id) return
+              const accounts = paMap[inv.partner_id] || []
+              // Faktura već ima account_number (ručno unet) — prioritet
+              if (inv.account_number) {
+                accMap[inv.id] = {
+                  account_number: inv.account_number,
+                  model: inv.model || '97',
+                  bank_name: 'Iz fakture',
+                }
+                return
+              }
+              // Inače uzmi primarni račun
+              const primary = accounts.find(a => a.is_primary) || accounts[0]
+              if (primary) {
+                accMap[inv.id] = {
+                  account_number: primary.account_number,
+                  model: primary.model || inv.model || '97',
+                  bank_name: primary.bank_name || '',
+                }
+              }
+            })
+            setInvoiceAccountMap(accMap)
+          }
+        }
+      }
       setLoading(false)
     }
     load()
@@ -204,27 +222,40 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
   const selectedBank = bankAccounts.find(b => b.id === selectedBankId)
 
   const toggleSelect = (id: string) => {
-    setSelected(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
+    setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
   const toggleAll = () => {
     if (selected.size === filtered.length) setSelected(new Set())
     else setSelected(new Set(filtered.map(i => i.id)))
   }
 
+  const handleAccountSelect = (invId: string, accountId: string, partnerId: string) => {
+    const accounts = partnerAccountsMap[partnerId] || []
+    const acc = accounts.find(a => a.id === accountId)
+    if (acc) {
+      setInvoiceAccountMap(prev => ({
+        ...prev,
+        [invId]: { account_number: acc.account_number, model: acc.model || '97', bank_name: acc.bank_name || '' }
+      }))
+    }
+  }
+
   const handleExport = () => {
-    const toExport = (selectedInvoices.length > 0 ? selectedInvoices : filtered)
-      .map(i => ({ ...i, partner_name: i.partners?.name }))
-    exportHalcom(toExport, selectedBank, sifraPlacanja)
+    const toExport = (selectedInvoices.length > 0 ? selectedInvoices : filtered).map(i => ({
+      ...i,
+      partner_name: i.partners?.name,
+      selected_account_number: invoiceAccountMap[i.id]?.account_number || i.account_number || '',
+      selected_model: invoiceAccountMap[i.id]?.model || i.model || '97',
+    }))
+    exportHalcom(toExport, selectedBank)
   }
 
   const daysUntilDue = (dueDate: string | null) => {
     if (!dueDate) return null
     return Math.ceil((new Date(dueDate).getTime() - new Date(today).getTime()) / 86400000)
   }
+
+  const missingAccountCount = filtered.filter(i => !invoiceAccountMap[i.id]?.account_number && !i.account_number).length
 
   return (
     <div style={ps.overlay} onClick={onClose}>
@@ -254,7 +285,7 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
           </select>
         </div>
 
-        {/* ── E-banking export bar ── */}
+        {/* Export bar */}
         <div style={ps.exportBar}>
           <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '4px' }}>
             <div style={{ fontSize: '12px', color: '#633806', fontWeight: '500' }}>
@@ -262,45 +293,30 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
               {selected.size > 0 && <span style={{ marginLeft: '8px', color: '#888', fontWeight: '400' }}>({selected.size} selektovano)</span>}
             </div>
             {bankAccounts.length === 0 ? (
-              <div style={{ fontSize: '11px', color: '#A32D2D' }}>
-                ⚠️ Nije pronađen RSD račun — dodajte ga u Settings → Company profiles
-              </div>
+              <div style={{ fontSize: '11px', color: '#A32D2D' }}>⚠️ Nije pronađen RSD račun kompanije</div>
             ) : (
               <div style={{ fontSize: '11px', color: '#854F0B' }}>
                 Platilac: {selectedBank?.bank_name} · {selectedBank?.account_number}
+                {missingAccountCount > 0 && (
+                  <span style={{ marginLeft: '8px', color: '#A32D2D', fontWeight: '500' }}>
+                    ⚠️ {missingAccountCount} faktura bez računa primaoca
+                  </span>
+                )}
               </div>
             )}
           </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' as const }}>
-            {/* Izbor banke */}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {bankAccounts.length > 1 && (
-              <select
-                style={{ ...ps.sel, fontSize: '11px' }}
-                value={selectedBankId}
-                onChange={e => setSelectedBankId(e.target.value)}
-              >
+              <select style={{ ...ps.sel, fontSize: '11px' }} value={selectedBankId}
+                onChange={e => setSelectedBankId(e.target.value)}>
                 {bankAccounts.map(b => (
-                  <option key={b.id} value={b.id}>
-                    {b.bank_name}{b.is_primary ? ' ★' : ''}
-                  </option>
+                  <option key={b.id} value={b.id}>{b.bank_name}{b.is_primary ? ' ★' : ''}</option>
                 ))}
               </select>
             )}
-            {/* Šifra plaćanja */}
-            <select
-              style={{ ...ps.sel, fontSize: '11px', maxWidth: '280px' }}
-              value={sifraPlacanja}
-              onChange={e => setSifraPlacanja(e.target.value)}
-            >
-              {SIFRE_PLACANJA.map(s => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
-            </select>
             <button
               style={{ ...ps.exportBtn, opacity: bankAccounts.length === 0 ? 0.5 : 1 }}
-              onClick={handleExport}
-              disabled={bankAccounts.length === 0}
-            >
+              onClick={handleExport} disabled={bankAccounts.length === 0}>
               📥 Export {selected.size > 0 ? `${selected.size}` : 'all'} naloga
             </button>
           </div>
@@ -329,7 +345,7 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
                   <th style={ps.th}>Tip</th>
                   <th style={{ ...ps.th, textAlign: 'right' as const }}>Iznos</th>
                   <th style={{ ...ps.th, textAlign: 'right' as const }}>USD</th>
-                  <th style={ps.th}>Status</th>
+                  <th style={ps.th}>Račun primaoca</th>
                   <th style={ps.th}>Preostalo</th>
                 </tr>
               </thead>
@@ -338,6 +354,11 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
                   const isOverdue = inv.due_date && inv.due_date < today
                   const days = daysUntilDue(inv.due_date)
                   const isSelected = selected.has(inv.id)
+                  const partnerId = inv.partner_id
+                  const partnerAccounts = partnerAccountsMap[partnerId] || []
+                  const selectedAcc = invoiceAccountMap[inv.id]
+                  const hasAccount = !!(selectedAcc?.account_number || inv.account_number)
+
                   return (
                     <tr key={inv.id} style={{
                       ...ps.tr,
@@ -373,10 +394,39 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
                       <td style={{ ...ps.td, textAlign: 'right' as const }}>
                         <span style={{ fontSize: '13px', fontWeight: '500', color: '#1D9E75' }}>{fmt(inv.amount_usd || 0)}</span>
                       </td>
+                      {/* Račun primaoca — dropdown ako ima više računa */}
                       <td style={ps.td}>
-                        <span style={{ fontSize: '10px', fontWeight: '500', padding: '2px 8px', borderRadius: '20px', background: inv.status === 'partial' ? '#FAEEDA' : '#FCEBEB', color: inv.status === 'partial' ? '#633806' : '#A32D2D' }}>
-                          {inv.status}
-                        </span>
+                        {partnerAccounts.length > 1 ? (
+                          <select
+                            style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '4px 6px', border: `0.5px solid ${hasAccount ? '#e5e5e5' : '#E24B4A'}`, borderRadius: '6px', background: '#fff', color: '#111', maxWidth: '200px', cursor: 'pointer' }}
+                            value={partnerAccounts.find(a => a.account_number === selectedAcc?.account_number)?.id || ''}
+                            onChange={e => handleAccountSelect(inv.id, e.target.value, partnerId)}
+                          >
+                            <option value="">Odaberi račun...</option>
+                            {partnerAccounts.map(pa => (
+                              <option key={pa.id} value={pa.id}>
+                                {pa.account_number}{pa.is_primary ? ' ★' : ''}{pa.bank_name ? ` — ${pa.bank_name.substring(0, 20)}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div>
+                            {hasAccount ? (
+                              <div>
+                                <div style={{ fontSize: '11px', fontFamily: 'monospace', color: '#111' }}>
+                                  {selectedAcc?.account_number || inv.account_number}
+                                </div>
+                                {selectedAcc?.bank_name && (
+                                  <div style={{ fontSize: '10px', color: '#888', marginTop: '1px' }}>
+                                    {selectedAcc.bank_name.substring(0, 30)}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '11px', color: '#A32D2D' }}>⚠️ Nema računa</span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td style={ps.td}>
                         {days === null ? (
@@ -460,23 +510,17 @@ export default function Reports() {
       let plQuery = supabase.from('v_pl_entries').select('tx_type,amount_usd')
         .gte('pl_date', ytdStart).lte('pl_date', today)
       if (companyId !== 'all') plQuery = plQuery.eq('company_id', companyId)
-
       let invQuery = supabase.from('v_invoice_status').select('calculated_status,remaining_usd,due_date')
         .in('calculated_status', ['unpaid', 'partial'])
       if (companyId !== 'all') invQuery = invQuery.eq('company_id', companyId)
-
       let ptQuery = supabase.from('passthrough').select('id').eq('status', 'unpaired')
       if (companyId !== 'all') ptQuery = ptQuery.eq('company_id', companyId)
 
-      const [{ data: plData }, { data: invData }, { data: ptData }] = await Promise.all([
-        plQuery, invQuery, ptQuery,
-      ])
-
+      const [{ data: plData }, { data: invData }, { data: ptData }] = await Promise.all([plQuery, invQuery, ptQuery])
       const revenue = (plData || []).filter(e => e.tx_type === 'revenue' || e.tx_type === 'invoice_revenue').reduce((s, e) => s + (e.amount_usd || 0), 0)
       const expenses = (plData || []).filter(e => e.tx_type === 'expense' || e.tx_type === 'invoice_expense').reduce((s, e) => s + (e.amount_usd || 0), 0)
       const openAmt = (invData || []).reduce((s, i) => s + (i.remaining_usd || 0), 0)
       const overdue = (invData || []).filter(i => i.due_date && i.due_date < today).length
-
       setKpis({
         netProfit: revenue - expenses, totalRevenue: revenue, totalExpenses: expenses,
         expenseRatio: revenue > 0 ? (expenses / revenue * 100) : 0,
@@ -545,12 +589,10 @@ export default function Reports() {
             <div style={s.pageTitle}>Reports</div>
             <div style={s.pageSub}>Financial reports and analytics · YTD {currentYear}</div>
           </div>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <select style={s.filterSelect} value={companyId} onChange={e => setCompanyId(e.target.value)}>
-              <option value="all">All companies</option>
-              {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
+          <select style={s.filterSelect} value={companyId} onChange={e => setCompanyId(e.target.value)}>
+            <option value="all">All companies</option>
+            {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
         </div>
 
         <div style={s.kpiGrid}>
@@ -576,8 +618,7 @@ export default function Reports() {
                 <span style={s.alertDot} />
                 <span style={{ fontSize: '12px', color: '#555' }}>
                   {kpis.overdueCount} invoice{kpis.overdueCount > 1 ? 's' : ''} past due date —{' '}
-                  <span style={{ color: '#854F0B', cursor: 'pointer', textDecoration: 'underline' }}
-                    onClick={() => setShowUnpaidPanel(true)}>
+                  <span style={{ color: '#854F0B', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setShowUnpaidPanel(true)}>
                     open Unmatched Invoices report
                   </span>.
                 </span>
@@ -675,7 +716,7 @@ const s: Record<string, React.CSSProperties> = {
 
 const ps: Record<string, React.CSSProperties> = {
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', zIndex: 1000 },
-  panel: { background: '#fff', width: '85vw', maxWidth: '1100px', height: '100vh', display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 24px rgba(0,0,0,0.15)' },
+  panel: { background: '#fff', width: '90vw', maxWidth: '1200px', height: '100vh', display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 24px rgba(0,0,0,0.15)' },
   header: { background: '#0a1628', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 },
   headerTitle: { color: '#fff', fontSize: '15px', fontWeight: '500' },
   headerSub: { color: 'rgba(255,255,255,0.45)', fontSize: '12px', marginTop: '3px' },
