@@ -17,7 +17,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [showValidationSummary, setShowValidationSummary] = useState(false)
 
-  // Reference data
   const [companies, setCompanies] = useState<any[]>([])
   const [partners, setPartners] = useState<any[]>([])
   const [plCategories, setPlCategories] = useState<any[]>([])
@@ -26,17 +25,14 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
   const [deptSubcategories, setDeptSubcategories] = useState<any[]>([])
   const [expenseDescriptions, setExpenseDescriptions] = useState<any[]>([])
 
-  // Direct transactions for linking (Step 1)
   const [directTransactions, setDirectTransactions] = useState<any[]>([])
   const [linkedTxId, setLinkedTxId] = useState('')
   const [reconcileSearch, setReconcileSearch] = useState('')
   const [plImpact, setPlImpact] = useState(true)
 
-  // Partner accounts
   const [partnerAccounts, setPartnerAccounts] = useState<any[]>([])
   const [selectedAccountId, setSelectedAccountId] = useState('')
 
-  // Form state
   const [companyId, setCompanyId] = useState('')
   const [partnerId, setPartnerId] = useState('')
   const [partnerSearch, setPartnerSearch] = useState('')
@@ -47,7 +43,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
   const [dueDate, setDueDate] = useState('')
   const [invType, setInvType] = useState<'expense' | 'revenue'>('expense')
 
-  // P&L
   const [plCatId, setPlCatId] = useState('')
   const [plCatName, setPlCatName] = useState('')
   const [plSubId, setPlSubId] = useState('')
@@ -84,7 +79,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
 
   const revenueStreams = ['Social Growth', 'Aimfox', 'Outsourced Services', 'VAT Claimed', 'Interest Received', 'Loans', 'Credit', 'Other']
 
-  // ── Validation ────────────────────────────────────────
   const runValidation = () => {
     const e: ValidationErrors = {}
     if (!companyId) e.companyId = 'Company is required'
@@ -105,7 +99,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
     setErrors(runValidation())
   }, [companyId, currency, invoiceDate, partnerId, newPartnerName, showNewPartner, invType, plCatId, deptId, revStream, amount, exRate, plImpact, linkedTxId]) // eslint-disable-line
 
-  // ── Load reference data ───────────────────────────────
   useEffect(() => {
     const load = async () => {
       const [
@@ -136,20 +129,20 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
   useEffect(() => {
     if (!companyId) return
     const load = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('transactions')
-        .select('id, transaction_date, amount, amount_usd, currency, pl_category, pl_subcategory, department, dept_subcategory, expense_description, revenue_stream, exchange_rate, is_indexed, banks(id,name), partners(id,name)')
+        .select('id, transaction_date, amount, amount_usd, currency, pl_category, pl_subcategory, department, dept_subcategory, expense_description, revenue_stream, rev_alloc_type, dept_split_type, tags, note, exchange_rate, is_indexed, banks(id,name), partners(id,name)')
         .eq('company_id', companyId)
         .eq('type', 'direct')
         .eq('status', 'posted')
         .order('transaction_date', { ascending: false })
         .limit(150)
+      if (error) console.error('transactions load error:', error)
       if (data) setDirectTransactions(data)
     }
     load()
   }, [companyId])
 
-  // ── Load partner accounts when partner changes ────────
   useEffect(() => {
     if (!partnerId) { setPartnerAccounts([]); setSelectedAccountId(''); return }
     const load = async () => {
@@ -165,10 +158,8 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
         setSelectedAccountId(primary.id)
         setAccNum(primary.account_number || '')
         setModel(primary.model || '')
-        // Only set ref if not already set from invoice number
         if (!refNum) setRefNum(primary.reference_number || '')
       } else {
-        // Fallback to partner.account_number
         const partner = partners.find(p => p.id === partnerId)
         if (partner?.account_number) setAccNum(partner.account_number)
         if (partner?.model) setModel(partner.model)
@@ -177,12 +168,10 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
     load()
   }, [partnerId]) // eslint-disable-line
 
-  // ── Auto-set refNum from invoiceNumber ────────────────
   useEffect(() => {
     if (invoiceNumber && !linkedTxId) setRefNum(invoiceNumber)
   }, [invoiceNumber]) // eslint-disable-line
 
-  // ── When account is selected from dropdown ────────────
   const handleAccountSelect = (accountId: string) => {
     setSelectedAccountId(accountId)
     const acc = partnerAccounts.find(a => a.id === accountId)
@@ -197,13 +186,11 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
     setLinkedTxId(tx.id)
     setPlImpact(false)
 
-    // Auto-fill partner
     if (tx.partners) {
       setPartnerId(tx.partners.id || '')
       setPartnerSearch(tx.partners.name || '')
     }
 
-    // Auto-fill P&L classification
     if (tx.pl_category) {
       const cat = plCategories.find(c => c.name === tx.pl_category)
       if (cat) { setPlCatId(cat.id); setPlCatName(cat.name) }
@@ -225,29 +212,25 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
     if (tx.expense_description) setExpDesc(tx.expense_description)
     if (tx.revenue_stream) setRevStream(tx.revenue_stream)
 
-    // Auto-fill amount & currency from transaction
+    // Auto-fill rev alloc, dept split, tags, note
+    if (tx.rev_alloc_type) setRevAlloc(tx.rev_alloc_type)
+    if (tx.dept_split_type) setDeptSplit(tx.dept_split_type)
+    if (tx.tags) setTags(tx.tags)
+    if (tx.note) setNote(tx.note)
+
     if (tx.amount) setAmount(tx.amount.toString())
     if (tx.currency) setCurrency(tx.currency)
     if (tx.exchange_rate) { setExRate(tx.exchange_rate.toString()); setRateSource('From transaction') }
     if (tx.is_indexed !== undefined) setIsIndexed(tx.is_indexed)
 
-    // Auto-fill bank account based on which bank paid
-    if (tx.banks) {
-      // Use bank name to find company bank account for sender
-      // For recipient (partner) — load from partner_accounts
-    }
-
-    // Auto-fill ref = invoice number
     if (invoiceNumber) setRefNum(invoiceNumber)
   }
 
   const handleUnlink = () => {
     setLinkedTxId('')
     setPlImpact(true)
-    // Keep filled data — user may want to keep P&L classification
   }
 
-  // ── Edit mode populate ────────────────────────────────
   useEffect(() => {
     if (!invoice) return
     setCompanyId(invoice.company_id || '')
@@ -359,7 +342,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
 
   const stepTitles = ['Basic information', 'Classification & P&L', 'Amount & currency', 'Review & post']
 
-  // ── Post / Save ───────────────────────────────────────
   const handlePost = async () => {
     setTouched({ companyId: true, currency: true, invoiceDate: true, partnerId: true, plCat: true, dept: true, revStream: true, amount: true, exRate: true })
     const e = runValidation()
@@ -408,8 +390,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
       if (invoice?.id) {
         await supabase.from('invoices').update(payload).eq('id', invoice.id)
         invoiceId = invoice.id
-
-        // Sync linked transaction P&L fields if changed
         if (linkedTxId && plCatName) {
           await supabase.from('transactions').update({
             pl_category: plCatName || null,
@@ -423,8 +403,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
       } else {
         const { data: newInv } = await supabase.from('invoices').insert(payload).select().single()
         invoiceId = newInv?.id
-
-        // Sync linked transaction P&L fields on new invoice
         if (linkedTxId && plCatName) {
           await supabase.from('transactions').update({
             pl_category: plCatName || null,
@@ -436,9 +414,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
         }
       }
 
-      // Create link record
       if (linkedTxId && invoiceId) {
-        // Remove existing links first (upsert pattern)
         await supabase.from('invoice_transaction_links').delete().eq('invoice_id', invoiceId)
         await supabase.from('invoice_transaction_links').insert({
           invoice_id: invoiceId,
@@ -491,7 +467,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
           </div>
         </div>
 
-        {/* Steps bar */}
         <div style={s.stepsBar}>
           {stepTitles.map((t, i) => {
             const hasErr = step > i + 1 && stepHasError(i + 1)
@@ -522,10 +497,8 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
 
         <div style={s.body}>
 
-          {/* ── STEP 1 ── */}
           {step === 1 && (
             <>
-              {/* 🔗 Link to Direct Transaction — TOP of step 1 */}
               {companyId && (
                 <div style={{ ...s.reconcileBox, marginBottom: '20px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
@@ -684,8 +657,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                   </div>
                 </div>
 
-                {/* Payment details — always visible, auto-filled */}
-                <div style={s.sectionTitle} >Payment details</div>
+                <div style={s.sectionTitle}>Payment details</div>
                 <div style={s.row3}>
                   <div style={s.field}>
                     <label style={s.lbl}>Account number (RSD)</label>
@@ -724,7 +696,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
             </>
           )}
 
-          {/* ── STEP 2 ── */}
           {step === 2 && (
             <>
               {linkedTxId && (
@@ -832,7 +803,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
             </>
           )}
 
-          {/* ── STEP 3 ── */}
           {step === 3 && (
             <div style={s.section}>
               <div style={s.sectionTitle}>Amount & currency conversion</div>
@@ -879,11 +849,9 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
             </div>
           )}
 
-          {/* ── STEP 4 ── */}
           {step === 4 && (
             <div style={s.section}>
               <div style={s.sectionTitle}>Review before posting</div>
-
               {isValid ? (
                 <div style={{ ...s.infoBox, marginBottom: '16px', display: 'flex', gap: '10px', alignItems: 'center' }}>
                   <span>✅</span>
@@ -905,7 +873,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                   </div>
                 </div>
               )}
-
               {[
                 {
                   title: 'Invoice info', rows: [
