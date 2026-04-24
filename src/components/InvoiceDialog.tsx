@@ -17,7 +17,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [showValidationSummary, setShowValidationSummary] = useState(false)
 
-  // Reference data from DB
+  // Reference data
   const [companies, setCompanies] = useState<any[]>([])
   const [partners, setPartners] = useState<any[]>([])
   const [plCategories, setPlCategories] = useState<any[]>([])
@@ -26,11 +26,15 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
   const [deptSubcategories, setDeptSubcategories] = useState<any[]>([])
   const [expenseDescriptions, setExpenseDescriptions] = useState<any[]>([])
 
-  // Reconcile — Direct transactions to link
+  // Direct transactions for linking (Step 1)
   const [directTransactions, setDirectTransactions] = useState<any[]>([])
   const [linkedTxId, setLinkedTxId] = useState('')
   const [reconcileSearch, setReconcileSearch] = useState('')
-  const [plImpact, setPlImpact] = useState(true) // false = already booked via Direct tx
+  const [plImpact, setPlImpact] = useState(true)
+
+  // Partner accounts
+  const [partnerAccounts, setPartnerAccounts] = useState<any[]>([])
+  const [selectedAccountId, setSelectedAccountId] = useState('')
 
   // Form state
   const [companyId, setCompanyId] = useState('')
@@ -43,7 +47,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
   const [dueDate, setDueDate] = useState('')
   const [invType, setInvType] = useState<'expense' | 'revenue'>('expense')
 
-  // P&L classification
+  // P&L
   const [plCatId, setPlCatId] = useState('')
   const [plCatName, setPlCatName] = useState('')
   const [plSubId, setPlSubId] = useState('')
@@ -61,7 +65,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
   const [accNum, setAccNum] = useState('')
   const [model, setModel] = useState('')
   const [refNum, setRefNum] = useState('')
-  const [showPaymentDetails, setShowPaymentDetails] = useState(false)
   const [currency, setCurrency] = useState('')
   const [amount, setAmount] = useState('')
   const [exRate, setExRate] = useState('')
@@ -81,6 +84,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
 
   const revenueStreams = ['Social Growth', 'Aimfox', 'Outsourced Services', 'VAT Claimed', 'Interest Received', 'Loans', 'Credit', 'Other']
 
+  // ── Validation ────────────────────────────────────────
   const runValidation = () => {
     const e: ValidationErrors = {}
     if (!companyId) e.companyId = 'Company is required'
@@ -89,7 +93,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
     if (!partnerId && !(showNewPartner && newPartnerName.trim())) e.partnerId = 'Partner is required'
     if (!amount || parseFloat(amount) <= 0) e.amount = 'Amount must be greater than 0'
     if (currency && currency !== 'USD' && (!exRate || parseFloat(exRate) <= 0)) e.exRate = 'Exchange rate is required'
-    if (invType === 'expense' && plImpact) {
+    if (invType === 'expense' && plImpact && !linkedTxId) {
       if (!plCatId) e.plCat = 'P&L Category is required'
       if (!deptId) e.dept = 'Department is required'
     }
@@ -99,9 +103,9 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
 
   useEffect(() => {
     setErrors(runValidation())
-  }, [companyId, currency, invoiceDate, partnerId, newPartnerName, showNewPartner, invType, plCatId, deptId, revStream, amount, exRate, plImpact]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [companyId, currency, invoiceDate, partnerId, newPartnerName, showNewPartner, invType, plCatId, deptId, revStream, amount, exRate, plImpact, linkedTxId]) // eslint-disable-line
 
-  // Load reference data
+  // ── Load reference data ───────────────────────────────
   useEffect(() => {
     const load = async () => {
       const [
@@ -128,24 +132,122 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
     load()
   }, [])
 
-  // Load direct transactions when company changes
+  // ── Load direct transactions when company changes ─────
   useEffect(() => {
     if (!companyId) return
-    const loadDirectTx = async () => {
+    const load = async () => {
       const { data } = await supabase
         .from('transactions')
-        .select('id, transaction_date, amount, amount_usd, currency, pl_category, department, partners(name), banks(name)')
+        .select('id, transaction_date, amount, amount_usd, currency, pl_category, pl_subcategory, department, dept_subcategory, expense_description, revenue_stream, exchange_rate, is_indexed, banks(id,name,currency), partners(id,name,account_number,model,reference_number)')
         .eq('company_id', companyId)
         .eq('type', 'direct')
         .eq('status', 'posted')
         .order('transaction_date', { ascending: false })
-        .limit(100)
+        .limit(150)
       if (data) setDirectTransactions(data)
     }
-    loadDirectTx()
+    load()
   }, [companyId])
 
-  // Edit mode populate
+  // ── Load partner accounts when partner changes ────────
+  useEffect(() => {
+    if (!partnerId) { setPartnerAccounts([]); setSelectedAccountId(''); return }
+    const load = async () => {
+      const { data } = await supabase
+        .from('partner_accounts')
+        .select('*')
+        .eq('partner_id', partnerId)
+        .eq('currency', 'RSD')
+        .order('is_primary', { ascending: false })
+      if (data && data.length > 0) {
+        setPartnerAccounts(data)
+        const primary = data.find(a => a.is_primary) || data[0]
+        setSelectedAccountId(primary.id)
+        setAccNum(primary.account_number || '')
+        setModel(primary.model || '')
+        // Only set ref if not already set from invoice number
+        if (!refNum) setRefNum(primary.reference_number || '')
+      } else {
+        // Fallback to partner.account_number
+        const partner = partners.find(p => p.id === partnerId)
+        if (partner?.account_number) setAccNum(partner.account_number)
+        if (partner?.model) setModel(partner.model)
+      }
+    }
+    load()
+  }, [partnerId]) // eslint-disable-line
+
+  // ── Auto-set refNum from invoiceNumber ────────────────
+  useEffect(() => {
+    if (invoiceNumber && !linkedTxId) setRefNum(invoiceNumber)
+  }, [invoiceNumber]) // eslint-disable-line
+
+  // ── When account is selected from dropdown ────────────
+  const handleAccountSelect = (accountId: string) => {
+    setSelectedAccountId(accountId)
+    const acc = partnerAccounts.find(a => a.id === accountId)
+    if (acc) {
+      setAccNum(acc.account_number || '')
+      setModel(acc.model || '')
+    }
+  }
+
+  // ── Link to Direct transaction — auto-fill ALL fields ─
+  const handleLinkTransaction = (tx: any) => {
+    setLinkedTxId(tx.id)
+    setPlImpact(false)
+
+    // Auto-fill partner
+    if (tx.partners) {
+      setPartnerId(tx.partners.id || '')
+      setPartnerSearch(tx.partners.name || '')
+    }
+
+    // Auto-fill P&L classification
+    if (tx.pl_category) {
+      const cat = plCategories.find(c => c.name === tx.pl_category)
+      if (cat) { setPlCatId(cat.id); setPlCatName(cat.name) }
+    }
+    if (tx.pl_subcategory) {
+      setPlSubName(tx.pl_subcategory)
+      const sub = plSubcategories.find(s => s.name === tx.pl_subcategory)
+      if (sub) setPlSubId(sub.id)
+    }
+    if (tx.department) {
+      const dept = departments.find(d => d.name === tx.department)
+      if (dept) { setDeptId(dept.id); setDeptName(dept.name) }
+    }
+    if (tx.dept_subcategory) {
+      setDeptSubName(tx.dept_subcategory)
+      const sub = deptSubcategories.find(s => s.name === tx.dept_subcategory)
+      if (sub) setDeptSubId(sub.id)
+    }
+    if (tx.expense_description) setExpDesc(tx.expense_description)
+    if (tx.revenue_stream) setRevStream(tx.revenue_stream)
+
+    // Auto-fill amount & currency from transaction
+    if (tx.amount) setAmount(tx.amount.toString())
+    if (tx.currency) setCurrency(tx.currency)
+    if (tx.exchange_rate) { setExRate(tx.exchange_rate.toString()); setRateSource('From transaction') }
+    if (tx.is_indexed !== undefined) setIsIndexed(tx.is_indexed)
+
+    // Auto-fill bank account based on which bank paid
+    if (tx.banks) {
+      // Use bank name to find company bank account for sender
+      // For recipient (partner) — load from partner_accounts
+    }
+
+    // Auto-fill ref = invoice number
+    if (invoiceNumber) setRefNum(invoiceNumber)
+  }
+
+  const handleUnlink = () => {
+    setLinkedTxId('')
+    setPlImpact(true)
+    // Keep filled data — user may want to keep P&L classification
+  }
+
+  // ── Edit mode populate ────────────────────────────────
   useEffect(() => {
     if (!invoice) return
     setCompanyId(invoice.company_id || '')
@@ -209,11 +311,11 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
 
   const filteredDirectTx = directTransactions.filter(tx => {
     if (!reconcileSearch) return true
-    const partnerName = tx.partners?.name || ''
+    const pn = tx.partners?.name || ''
     const cat = tx.pl_category || ''
-    return partnerName.toLowerCase().includes(reconcileSearch.toLowerCase()) ||
+    return pn.toLowerCase().includes(reconcileSearch.toLowerCase()) ||
       cat.toLowerCase().includes(reconcileSearch.toLowerCase()) ||
-      tx.transaction_date?.includes(reconcileSearch)
+      (tx.transaction_date || '').includes(reconcileSearch)
   })
 
   const linkedTx = directTransactions.find(t => t.id === linkedTxId)
@@ -257,6 +359,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
 
   const stepTitles = ['Basic information', 'Classification & P&L', 'Amount & currency', 'Review & post']
 
+  // ── Post / Save ───────────────────────────────────────
   const handlePost = async () => {
     setTouched({ companyId: true, currency: true, invoiceDate: true, partnerId: true, plCat: true, dept: true, revStream: true, amount: true, exRate: true })
     const e = runValidation()
@@ -269,7 +372,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
         if (newP) finalPartnerId = newP.id
       }
 
-      // If linked to Direct tx → no P&L impact, mark as paid
       const effectivePlImpact = linkedTxId ? false : plImpact
       const effectiveStatus = linkedTxId ? 'paid' : 'unpaid'
 
@@ -280,11 +382,11 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
         invoice_date: invoiceDate,
         due_date: dueDate || null,
         type: invType,
-        pl_category: effectivePlImpact ? (plCatName || null) : null,
-        pl_subcategory: effectivePlImpact ? (plSubName || null) : null,
-        department: effectivePlImpact ? (deptName || null) : null,
-        dept_subcategory: effectivePlImpact ? (deptSubName || null) : null,
-        expense_description: effectivePlImpact ? (expDesc || null) : null,
+        pl_category: plCatName || null,
+        pl_subcategory: plSubName || null,
+        department: deptName || null,
+        dept_subcategory: deptSubName || null,
+        expense_description: expDesc || null,
         revenue_stream: invType === 'revenue' ? (revStream || null) : null,
         rev_alloc_type: revAlloc,
         dept_split_type: deptSplit,
@@ -306,13 +408,38 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
       if (invoice?.id) {
         await supabase.from('invoices').update(payload).eq('id', invoice.id)
         invoiceId = invoice.id
+
+        // Sync linked transaction P&L fields if changed
+        if (linkedTxId && plCatName) {
+          await supabase.from('transactions').update({
+            pl_category: plCatName || null,
+            pl_subcategory: plSubName || null,
+            department: deptName || null,
+            dept_subcategory: deptSubName || null,
+            expense_description: expDesc || null,
+            revenue_stream: revStream || null,
+          }).eq('id', linkedTxId)
+        }
       } else {
         const { data: newInv } = await supabase.from('invoices').insert(payload).select().single()
         invoiceId = newInv?.id
+
+        // Sync linked transaction P&L fields on new invoice
+        if (linkedTxId && plCatName) {
+          await supabase.from('transactions').update({
+            pl_category: plCatName || null,
+            pl_subcategory: plSubName || null,
+            department: deptName || null,
+            dept_subcategory: deptSubName || null,
+            expense_description: expDesc || null,
+          }).eq('id', linkedTxId)
+        }
       }
 
-      // Link to Direct transaction if selected
+      // Create link record
       if (linkedTxId && invoiceId) {
+        // Remove existing links first (upsert pattern)
+        await supabase.from('invoice_transaction_links').delete().eq('invoice_id', invoiceId)
         await supabase.from('invoice_transaction_links').insert({
           invoice_id: invoiceId,
           transaction_id: linkedTxId,
@@ -336,7 +463,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
         </div>
         <div style={{ fontFamily: 'Georgia,serif', fontSize: '20px', color: '#111' }}>{invoice ? 'Invoice updated!' : 'Invoice posted!'}</div>
         <div style={{ fontSize: '13px', color: '#888' }}>
-          {linkedTxId ? 'Reconciled with Direct transaction — no duplicate P&L impact.' : 'Saved to P&L successfully.'}
+          {linkedTxId ? 'Reconciled — P&L synced with Direct transaction.' : 'Saved to P&L successfully.'}
         </div>
       </div>
     </div>
@@ -398,13 +525,84 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
           {/* ── STEP 1 ── */}
           {step === 1 && (
             <>
+              {/* 🔗 Link to Direct Transaction — TOP of step 1 */}
+              {companyId && (
+                <div style={{ ...s.reconcileBox, marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: '500', color: '#0C447C' }}>🔗 Link to existing Direct transaction</div>
+                      <div style={{ fontSize: '11px', color: '#7FB8EE', marginTop: '2px' }}>
+                        Select a Direct tx to auto-fill all fields. Invoice will be marked paid with no duplicate P&L.
+                      </div>
+                    </div>
+                    {linkedTxId && (
+                      <button style={s.unlinkBtn} onClick={handleUnlink}>✕ Unlink</button>
+                    )}
+                  </div>
+
+                  {linkedTx ? (
+                    <div style={s.linkedTxCard}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '16px' }}>✅</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '13px', fontWeight: '500', color: '#085041' }}>
+                            {linkedTx.partners?.name || '—'}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#1D9E75' }}>
+                            {linkedTx.transaction_date} · {linkedTx.pl_category || '—'} · {linkedTx.banks?.name || '—'} · ${(linkedTx.amount_usd || 0).toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ ...s.infoBox, marginTop: '10px', background: '#E6F1FB', borderColor: '#7FB8EE', color: '#0C447C', fontSize: '11px' }}>
+                        ℹ️ Fields auto-filled from transaction. You can still edit them below. P&L will be synced on post.
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <input style={{ ...s.input, marginBottom: '8px', width: '100%', boxSizing: 'border-box' as const }}
+                        value={reconcileSearch} onChange={e => setReconcileSearch(e.target.value)}
+                        placeholder="Search by partner, category or date..." />
+                      {directTransactions.length === 0 ? (
+                        <div style={{ fontSize: '12px', color: '#aaa', padding: '8px', textAlign: 'center' as const }}>
+                          No Direct transactions for this company yet.
+                        </div>
+                      ) : (
+                        <div style={s.txList}>
+                          {filteredDirectTx.slice(0, 8).map(tx => (
+                            <div key={tx.id} style={s.txRow} onClick={() => handleLinkTransaction(tx)}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: '12px', fontWeight: '500', color: '#111' }}>{tx.partners?.name || '—'}</div>
+                                <div style={{ fontSize: '11px', color: '#888' }}>
+                                  {tx.transaction_date} · {tx.pl_category || '—'} · {tx.banks?.name || '—'}
+                                </div>
+                              </div>
+                              <div style={{ textAlign: 'right' as const, flexShrink: 0 }}>
+                                <div style={{ fontSize: '12px', fontWeight: '500', color: '#A32D2D' }}>
+                                  {(tx.amount || 0).toLocaleString('sr-RS')} {tx.currency}
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#888' }}>${(tx.amount_usd || 0).toFixed(2)}</div>
+                              </div>
+                            </div>
+                          ))}
+                          {filteredDirectTx.length === 0 && reconcileSearch && (
+                            <div style={{ fontSize: '12px', color: '#aaa', padding: '8px', textAlign: 'center' as const }}>
+                              No results for "{reconcileSearch}"
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
               <div style={s.section}>
                 <div style={s.sectionTitle}>Company & invoice info</div>
                 <div style={s.row2}>
                   <div style={s.field}>
                     <label style={s.lbl}>Company <span style={s.req}>*</span></label>
                     <select style={{ ...s.select, ...(fieldErr('companyId') ? s.inputError : {}) }} value={companyId}
-                      onChange={e => { setCompanyId(e.target.value); setCurrency(''); touch('companyId') }}
+                      onChange={e => { setCompanyId(e.target.value); setCurrency(''); setLinkedTxId(''); touch('companyId') }}
                       onBlur={() => touch('companyId')}>
                       <option value="">Select company...</option>
                       {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -426,7 +624,9 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                 <div style={s.row3}>
                   <div style={s.field}>
                     <label style={s.lbl}>Invoice number</label>
-                    <input style={s.input} value={invoiceNumber} onChange={e => setInvoiceNumber(e.target.value)} placeholder="e.g. INV-001/2026" />
+                    <input style={s.input} value={invoiceNumber}
+                      onChange={e => { setInvoiceNumber(e.target.value); setRefNum(e.target.value) }}
+                      placeholder="e.g. INV-001/2026" />
                   </div>
                   <div style={s.field}>
                     <label style={s.lbl}>Invoice date <span style={s.req}>*</span></label>
@@ -453,10 +653,17 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                           onBlur={() => touch('partnerId')} placeholder="Search partner..." />
                         {partnerSearch && !partnerId && (
                           <div style={s.dropdown}>
-                            {filteredPartners.slice(0, 6).map(p => (
-                              <div key={p.id} style={s.dropdownItem} onClick={() => { setPartnerId(p.id); setPartnerSearch(p.name) }}>{p.name}</div>
+                            {filteredPartners.slice(0, 8).map(p => (
+                              <div key={p.id} style={s.dropdownItem}
+                                onClick={() => { setPartnerId(p.id); setPartnerSearch(p.name) }}>
+                                <div>{p.name}</div>
+                                {p.account_number && <div style={{ fontSize: '11px', color: '#aaa' }}>{p.account_number}</div>}
+                              </div>
                             ))}
-                            <div style={{ ...s.dropdownItem, color: '#1D9E75' }} onClick={() => { setShowNewPartner(true); setPartnerSearch('') }}>+ Add new partner</div>
+                            <div style={{ ...s.dropdownItem, color: '#1D9E75' }}
+                              onClick={() => { setShowNewPartner(true); setPartnerSearch('') }}>
+                              + Add new partner
+                            </div>
                           </div>
                         )}
                         {fieldErr('partnerId') && <span style={s.errorMsg}>{fieldErr('partnerId')}</span>}
@@ -476,17 +683,43 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                     </div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '12px', marginBottom: '8px' }}>
-                  <span style={s.sectionTitle}>Payment details</span>
-                  <button style={s.linkBtn} onClick={() => setShowPaymentDetails(!showPaymentDetails)}>{showPaymentDetails ? '− Hide' : '+ Show'}</button>
-                </div>
-                {showPaymentDetails && (
-                  <div style={s.row3}>
-                    <div style={s.field}><label style={s.lbl}>Account number</label><input style={s.input} value={accNum} onChange={e => setAccNum(e.target.value)} placeholder="Partner bank account" /></div>
-                    <div style={s.field}><label style={s.lbl}>Model</label><input style={s.input} value={model} onChange={e => setModel(e.target.value)} placeholder="e.g. 97" /></div>
-                    <div style={s.field}><label style={s.lbl}>Reference number</label><input style={s.input} value={refNum} onChange={e => setRefNum(e.target.value)} placeholder="Poziv na broj" /></div>
+
+                {/* Payment details — always visible, auto-filled */}
+                <div style={s.sectionTitle} >Payment details</div>
+                <div style={s.row3}>
+                  <div style={s.field}>
+                    <label style={s.lbl}>Account number (RSD)</label>
+                    {partnerAccounts.length > 1 ? (
+                      <select style={s.select} value={selectedAccountId} onChange={e => handleAccountSelect(e.target.value)}>
+                        {partnerAccounts.map(acc => (
+                          <option key={acc.id} value={acc.id}>
+                            {acc.account_number}{acc.bank_name ? ` — ${acc.bank_name}` : ''}{acc.is_primary ? ' ★' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input style={s.input} value={accNum} onChange={e => setAccNum(e.target.value)}
+                        placeholder="Partner bank account" />
+                    )}
+                    {partnerAccounts.length > 0 && (
+                      <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '2px' }}>
+                        {partnerAccounts.length} račun{partnerAccounts.length > 1 ? 'a' : ''} pronađeno
+                      </div>
+                    )}
                   </div>
-                )}
+                  <div style={s.field}>
+                    <label style={s.lbl}>Model</label>
+                    <input style={s.input} value={model} onChange={e => setModel(e.target.value)} placeholder="e.g. 97" />
+                  </div>
+                  <div style={s.field}>
+                    <label style={s.lbl}>Poziv na broj</label>
+                    <input style={s.input} value={refNum} onChange={e => setRefNum(e.target.value)}
+                      placeholder="Auto = broj fakture" />
+                    {invoiceNumber && refNum === invoiceNumber && (
+                      <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '2px' }}>Auto iz broja fakture</div>
+                    )}
+                  </div>
+                </div>
               </div>
             </>
           )}
@@ -494,13 +727,18 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
           {/* ── STEP 2 ── */}
           {step === 2 && (
             <>
+              {linkedTxId && (
+                <div style={{ ...s.infoBox, marginBottom: '16px', background: '#E6F1FB', borderColor: '#7FB8EE', color: '#0C447C' }}>
+                  🔗 Linked to Direct transaction — P&L fields auto-filled. You can edit them and changes will sync to the transaction on post.
+                </div>
+              )}
               {invType === 'expense' && (
                 <>
                   <div style={s.section}>
                     <div style={s.sectionTitle}>P&L classification</div>
                     <div style={s.row2}>
                       <div style={s.field}>
-                        <label style={s.lbl}>P&L Category <span style={s.req}>*</span></label>
+                        <label style={s.lbl}>P&L Category {!linkedTxId && <span style={s.req}>*</span>}</label>
                         <select style={{ ...s.select, ...(fieldErr('plCat') ? s.inputError : {}) }} value={plCatId}
                           onChange={e => { const cat = plCategories.find(c => c.id === e.target.value); setPlCatId(e.target.value); setPlCatName(cat?.name || ''); setPlSubId(''); setPlSubName(''); touch('plCat') }}
                           onBlur={() => touch('plCat')}>
@@ -521,7 +759,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                     </div>
                     <div style={s.row2}>
                       <div style={s.field}>
-                        <label style={s.lbl}>Department <span style={s.req}>*</span></label>
+                        <label style={s.lbl}>Department {!linkedTxId && <span style={s.req}>*</span>}</label>
                         <select style={{ ...s.select, ...(fieldErr('dept') ? s.inputError : {}) }} value={deptId}
                           onChange={e => { const dept = departments.find(d => d.id === e.target.value); setDeptId(e.target.value); setDeptName(dept?.name || ''); setDeptSubId(''); setDeptSubName(''); setExpDesc(''); touch('dept') }}
                           onBlur={() => touch('dept')}>
@@ -605,6 +843,11 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                   <span style={{ ...s.toggleSlider, background: isIndexed ? '#1D9E75' : '#ddd' }} />
                 </label>
               </div>
+              {linkedTxId && (
+                <div style={{ ...s.infoBox, marginBottom: '10px', background: '#E6F1FB', borderColor: '#7FB8EE', color: '#0C447C', fontSize: '11px' }}>
+                  🔗 Amount auto-filled from Direct transaction. Edit if invoice amount differs.
+                </div>
+              )}
               <div style={{ ...s.infoBox, margin: '10px 0' }}>
                 {currency === 'USD' ? 'No conversion needed — amount is already in USD.' : 'Rate fetched on invoice date.'}
               </div>
@@ -628,7 +871,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                 </div>
               </div>
               <div style={s.convRow}>
-                <div><div style={s.convLabel}>Invoice amount</div><div style={s.convVal}>{amount ? `${parseFloat(amount).toLocaleString()} ${currency}` : '—'}</div></div>
+                <div><div style={s.convLabel}>Invoice amount</div><div style={s.convVal}>{amount ? `${parseFloat(amount).toLocaleString('sr-RS')} ${currency}` : '—'}</div></div>
                 <div style={{ fontSize: '20px', color: '#aaa', alignSelf: 'flex-end', paddingBottom: '4px' }}>→</div>
                 <div><div style={s.convLabel}>USD equivalent</div><div style={{ ...s.convVal, color: '#1D9E75' }}>${usdAmount > 0 ? usdAmount.toFixed(2) : '0.00'}</div></div>
               </div>
@@ -641,68 +884,15 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
             <div style={s.section}>
               <div style={s.sectionTitle}>Review before posting</div>
 
-              {/* Reconcile section */}
-              <div style={{ ...s.reconcileBox, marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                  <div>
-                    <div style={{ fontSize: '13px', fontWeight: '500', color: '#0C447C' }}>🔗 Link to existing Direct transaction</div>
-                    <div style={{ fontSize: '11px', color: '#7FB8EE', marginTop: '2px' }}>If this invoice was already paid via a Direct transaction, link them to avoid duplicate P&L impact.</div>
-                  </div>
-                  {linkedTxId && (
-                    <button style={s.unlinkBtn} onClick={() => { setLinkedTxId(''); setPlImpact(true) }}>✕ Unlink</button>
-                  )}
-                </div>
-
-                {linkedTx ? (
-                  <div style={s.linkedTxCard}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '16px' }}>✅</span>
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: '500', color: '#085041' }}>Linked: {linkedTx.partners?.name || '—'}</div>
-                        <div style={{ fontSize: '11px', color: '#1D9E75' }}>{linkedTx.transaction_date} · {linkedTx.pl_category || '—'} · ${(linkedTx.amount_usd || 0).toFixed(2)}</div>
-                      </div>
-                    </div>
-                    <div style={{ ...s.infoBox, marginTop: '10px', background: '#E6F1FB', borderColor: '#7FB8EE', color: '#0C447C', fontSize: '11px' }}>
-                      ℹ️ Invoice will be marked as <strong>paid</strong> with <strong>no P&L impact</strong> — P&L was already booked via the Direct transaction.
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <input style={{ ...s.input, marginBottom: '8px', width: '100%', boxSizing: 'border-box' as const }}
-                      value={reconcileSearch} onChange={e => setReconcileSearch(e.target.value)}
-                      placeholder="Search by partner, category or date..." />
-                    {directTransactions.length === 0 ? (
-                      <div style={{ fontSize: '12px', color: '#aaa', padding: '10px', textAlign: 'center' as const }}>No Direct transactions found for this company.</div>
-                    ) : (
-                      <div style={s.txList}>
-                        {filteredDirectTx.slice(0, 6).map(tx => (
-                          <div key={tx.id} style={s.txRow} onClick={() => { setLinkedTxId(tx.id); setPlImpact(false) }}>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: '12px', fontWeight: '500', color: '#111' }}>{tx.partners?.name || '—'}</div>
-                              <div style={{ fontSize: '11px', color: '#888' }}>{tx.transaction_date} · {tx.pl_category || '—'} · {tx.banks?.name || '—'}</div>
-                            </div>
-                            <div style={{ textAlign: 'right' as const }}>
-                              <div style={{ fontSize: '12px', fontWeight: '500', color: '#A32D2D' }}>{(tx.amount || 0).toLocaleString()} {tx.currency}</div>
-                              <div style={{ fontSize: '11px', color: '#888' }}>${(tx.amount_usd || 0).toFixed(2)}</div>
-                            </div>
-                          </div>
-                        ))}
-                        {filteredDirectTx.length === 0 && reconcileSearch && (
-                          <div style={{ fontSize: '12px', color: '#aaa', padding: '10px', textAlign: 'center' as const }}>No results for "{reconcileSearch}"</div>
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-
               {isValid ? (
                 <div style={{ ...s.infoBox, marginBottom: '16px', display: 'flex', gap: '10px', alignItems: 'center' }}>
                   <span>✅</span>
                   <div>
                     <div style={{ fontWeight: '500', marginBottom: '2px' }}>All fields valid — ready to post</div>
                     <div style={{ fontSize: '11px', opacity: 0.85 }}>
-                      {linkedTxId ? 'Invoice will be reconciled with Direct transaction — no new P&L impact.' : `Invoice will impact P&L on date ${invoiceDate}.`}
+                      {linkedTxId
+                        ? 'Invoice will be reconciled. P&L fields synced to Direct transaction.'
+                        : `Invoice will impact P&L on date ${invoiceDate}.`}
                     </div>
                   </div>
                 </div>
@@ -717,9 +907,36 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
               )}
 
               {[
-                { title: 'Invoice info', rows: [['Company', companies.find(c => c.id === companyId)?.name || '—'], ['Partner', showNewPartner ? newPartnerName : (partners.find(p => p.id === partnerId)?.name || partnerSearch || '—')], ['Invoice number', invoiceNumber || '—'], ['Invoice date', invoiceDate || '—'], ['Due date', dueDate || '—'], ['Type', invType], ['P&L Impact', linkedTxId ? '❌ None (reconciled)' : '✅ Yes']] },
-                { title: 'P&L classification', rows: [['P&L Category', plCatName || '—'], ['P&L Sub-category', plSubName || '—'], ['Department', deptName || '—'], ['Expense description', expDesc || '—'], ['Revenue stream', revStream || '—']] },
-                { title: 'Amounts', rows: [['Original amount', amount ? `${parseFloat(amount).toLocaleString()} ${currency}` : '—'], ['Exchange rate', exRate ? `${parseFloat(exRate).toFixed(4)} (${rateSource || 'Manual'})` : 'N/A'], ['USD equivalent', `$${usdAmount.toFixed(2)}`]] },
+                {
+                  title: 'Invoice info', rows: [
+                    ['Company', companies.find(c => c.id === companyId)?.name || '—'],
+                    ['Partner', showNewPartner ? newPartnerName : (partners.find(p => p.id === partnerId)?.name || partnerSearch || '—')],
+                    ['Invoice number', invoiceNumber || '—'],
+                    ['Invoice date', invoiceDate || '—'],
+                    ['Due date', dueDate || '—'],
+                    ['Type', invType],
+                    ['P&L Impact', linkedTxId ? '❌ None — reconciled with Direct tx' : '✅ Yes'],
+                    ['Account number', accNum || '—'],
+                    ['Model / Poziv', model ? `${model} / ${refNum}` : refNum || '—'],
+                  ]
+                },
+                {
+                  title: 'P&L classification', rows: [
+                    ['P&L Category', plCatName || '—'],
+                    ['P&L Sub-category', plSubName || '—'],
+                    ['Department', deptName || '—'],
+                    ['Dept. sub-category', deptSubName || '—'],
+                    ['Expense description', expDesc || '—'],
+                    ['Revenue stream', revStream || '—'],
+                  ]
+                },
+                {
+                  title: 'Amounts', rows: [
+                    ['Original amount', amount ? `${parseFloat(amount).toLocaleString('sr-RS')} ${currency}` : '—'],
+                    ['Exchange rate', exRate ? `${parseFloat(exRate).toFixed(4)} (${rateSource || 'Manual'})` : 'N/A'],
+                    ['USD equivalent', `$${usdAmount.toFixed(2)}`],
+                  ]
+                },
               ].map(sec => (
                 <div key={sec.title} style={s.reviewSection}>
                   <div style={s.reviewTitle}>{sec.title}</div>
@@ -790,7 +1007,7 @@ const s: Record<string, React.CSSProperties> = {
   inputError: { border: '1.5px solid #E24B4A', background: '#FFF8F8' },
   errorMsg: { fontSize: '11px', color: '#E24B4A', marginTop: '2px' },
   textarea: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 10px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#fff', color: '#111', outline: 'none', resize: 'vertical' as const, minHeight: '60px' },
-  dropdown: { position: 'absolute' as const, top: '100%', left: 0, right: 0, background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '8px', zIndex: 100, boxShadow: '0 4px 12px rgba(0,0,0,0.08)', marginTop: '2px' },
+  dropdown: { position: 'absolute' as const, top: '100%', left: 0, right: 0, background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '8px', zIndex: 100, boxShadow: '0 4px 12px rgba(0,0,0,0.08)', marginTop: '2px', maxHeight: '200px', overflowY: 'auto' as const },
   dropdownItem: { padding: '8px 12px', fontSize: '13px', color: '#111', cursor: 'pointer', borderBottom: '0.5px solid #f0f0ee' },
   linkBtn: { background: 'none', border: 'none', color: '#1D9E75', fontSize: '12px', cursor: 'pointer', padding: '4px 0', fontFamily: 'system-ui,sans-serif' },
   typeRow: { display: 'flex', gap: '8px' },
@@ -818,8 +1035,8 @@ const s: Record<string, React.CSSProperties> = {
   reviewTitle: { fontSize: '11px', fontWeight: '500', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.07em', marginBottom: '8px' },
   reconcileBox: { background: '#E6F1FB', border: '0.5px solid #7FB8EE', borderRadius: '10px', padding: '14px 16px' },
   linkedTxCard: { background: '#E1F5EE', border: '0.5px solid #5DCAA5', borderRadius: '8px', padding: '10px 12px' },
-  unlinkBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '4px 10px', border: '0.5px solid #E24B4A', borderRadius: '6px', background: 'transparent', color: '#A32D2D', cursor: 'pointer' },
-  txList: { display: 'flex', flexDirection: 'column' as const, gap: '4px', maxHeight: '200px', overflowY: 'auto' as const },
+  unlinkBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '4px 10px', border: '0.5px solid #E24B4A', borderRadius: '6px', background: 'transparent', color: '#A32D2D', cursor: 'pointer', whiteSpace: 'nowrap' as const },
+  txList: { display: 'flex', flexDirection: 'column' as const, gap: '4px', maxHeight: '220px', overflowY: 'auto' as const },
   txRow: { display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 10px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#fff', cursor: 'pointer' },
   btnGhost: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 16px', borderRadius: '8px', border: '0.5px solid #e5e5e5', background: 'transparent', color: '#666', cursor: 'pointer' },
   btnPrimary: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 16px', borderRadius: '8px', border: 'none', background: '#1D9E75', color: '#fff', cursor: 'pointer', fontWeight: '500' },
