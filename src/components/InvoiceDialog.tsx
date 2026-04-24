@@ -138,7 +138,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
     const load = async () => {
       const { data } = await supabase
         .from('transactions')
-        .select('id, transaction_date, amount, amount_usd, currency, pl_category, pl_subcategory, department, dept_subcategory, expense_description, revenue_stream, exchange_rate, is_indexed, banks(id,name,currency), partners(id,name)')
+        .select('id, transaction_date, amount, amount_usd, currency, pl_category, pl_subcategory, department, dept_subcategory, expense_description, revenue_stream, exchange_rate, is_indexed, banks(id,name,currency), partners(id,name,account_number,model,reference_number)')
         .eq('company_id', companyId)
         .eq('type', 'direct')
         .eq('status', 'posted')
