@@ -5,11 +5,10 @@ import type { Page } from '../App'
 import { supabase } from '../supabase'
 import { fmtUSD as fmt, fmtUSDSigned as fmtN } from '../utils/formatters'
 
-// ── NBS bezgotovinski format za e-banking import ─────────
-// Format po NBS standardu (Prilog 2a - šifre plaćanja)
-// Red 1: header (platilac)
-// Red 2: kontrolni red (ukupan iznos)
-// Red 3+: stavke plaćanja
+// ── Halcom TKDIS format generator ────────────────────────
+// Verifikovano na osnovu realnog izvoza iz Hal E-Bank v26.0.2.20
+// Red 1: 180 chars | Red 2: 180 chars | Red 3: 217 chars
+// Encoding: latin-1, line endings: \r\n, EOF: \x1a
 
 const SIFRE_PLACANJA = [
   { value: '21', label: '21 – Promet robe i usluga (finalna potrošnja)' },
@@ -21,8 +20,8 @@ const SIFRE_PLACANJA = [
   { value: '26', label: '26 – Zakupnine (oporezive)' },
   { value: '40', label: '40 – Zarade i druga primanja zaposlenih' },
   { value: '41', label: '41 – Neoporeziva primanja zaposlenih' },
-  { value: '44', label: '44 – Isplate preko omladinskih i studentskih zadruga' },
-  { value: '53', label: '53 – Uplata javnih prihoda (izuzev poreza po odbitku)' },
+  { value: '44', label: '44 – Isplate preko studentskih zadruga' },
+  { value: '53', label: '53 – Uplata javnih prihoda' },
   { value: '54', label: '54 – Uplata poreza i doprinosa po odbitku' },
   { value: '60', label: '60 – Premije osiguranja i nadoknada štete' },
   { value: '63', label: '63 – Ostali transferi' },
@@ -31,109 +30,107 @@ const SIFRE_PLACANJA = [
   { value: '87', label: '87 – Donacije i sponzorstva' },
 ]
 
-// Formatira račun: uklanja crtice i razmake → čist broj
-const cleanAccount = (acc: string) => (acc || '').replace(/[-\s]/g, '')
-
-// Formatira iznos: 20 cifara bez decimala, padded zerima
-// npr. 5000.00 RSD → "00000000000000500000" (u paraima)
-const fmtIznos20 = (amount: number) => {
-  const pare = Math.round(amount * 100)
-  return String(pare).padStart(20, '0')
+function padR(s: string, n: number): string {
+  return (s || '').substring(0, n).padEnd(n, ' ')
 }
 
-// Formatira iznos za stavku: 13 cifara u paraima
-const fmtIznos13 = (amount: number) => {
-  const pare = Math.round(amount * 100)
-  return String(pare).padStart(13, '0')
+function cleanAccount(acc: string): string {
+  return (acc || '').replace(/[-\s]/g, '')
 }
 
-// Datum u formatu DDMMYY
-const fmtDatum = (date: Date) => {
+function fmtDatumDDMMYY(date: Date): string {
   const d = String(date.getDate()).padStart(2, '0')
   const m = String(date.getMonth() + 1).padStart(2, '0')
   const y = String(date.getFullYear()).slice(-2)
   return `${d}${m}${y}`
 }
 
-// Pad desno na dužinu n
-const padR = (str: string, n: number) => (str || '').substring(0, n).padEnd(n, ' ')
-
-const exportNBS = (
+function exportHalcom(
   invoices: any[],
   companyBankAccount: any,
   sifraPlacanja: string,
-) => {
+) {
   if (!companyBankAccount) {
-    alert('Nije pronađen bankovni račun kompanije. Dodajte ga u Settings.')
+    alert('Nije pronađen bankovni račun kompanije. Dodajte ga u Settings → Company profiles → Bank accounts.')
     return
   }
 
-  const racunPlatioca = cleanAccount(companyBankAccount.account_number)
-  const datum = fmtDatum(new Date())
-
-  // Platilac iz bank account podataka (koristimo bank_name kao info)
-  const imePlatilaca = 'CONSTELLATION D.O.O., Resavska 23/1'
-  const gradPlatilaca = 'Beograd'
-
-  const ukupanIznos = invoices.reduce((s, i) => s + (i.amount || 0), 0)
+  const racunPlatilac = cleanAccount(companyBankAccount.account_number)
+  const imeFirma = 'CONSTELLATION D.O.O.'
+  const gradFirma = 'BEOGRAD-VR'
+  const datum = fmtDatumDDMMYY(new Date())
+  const brNaloga = invoices.length
+  const ukupanIznosPare = invoices.reduce((s, i) => s + Math.round((i.amount || 0) * 100), 0)
 
   const lines: string[] = []
 
-  // ── Red 1: Header ────────────────────────────────────
-  // FORMAT: račun_platilac(18) + ime_adresa(35) + grad(9) + datum(6) + spaces(34) + 'MULTI E-BANK0'
-  lines.push(
-    racunPlatioca +
-    padR(imePlatilaca, 35) +
-    padR(gradPlatilaca, 9) +
+  // ── Red 1: Header (180 chars) ─────────────────────────
+  // racun(18) + ime(35) + grad(10) + datum(6) + spaces(98) + 'MULTI E-BANK0'(13)
+  const line1 =
+    padR(racunPlatilac, 18) +
+    padR(imeFirma, 35) +
+    padR(gradFirma, 10) +
     datum +
-    ' '.repeat(34) +
+    ' '.repeat(98) +
     'MULTI E-BANK0'
-  )
+  lines.push(line1)
 
-  // ── Red 2: Kontrolni ─────────────────────────────────
-  // FORMAT: račun_platilac(18) + iznos(20) + '9'
-  lines.push(
-    racunPlatioca +
-    fmtIznos20(ukupanIznos) +
+  // ── Red 2: Kontrolni (180 chars) ──────────────────────
+  // racun(18) + ime(35) + grad(10) + iznos_para(15) + '0000'(4) + br_naloga(1) + spaces(96) + '9'(1)
+  const line2 =
+    padR(racunPlatilac, 18) +
+    padR(imeFirma, 35) +
+    padR(gradFirma, 10) +
+    String(ukupanIznosPare).padStart(15, '0') +
+    '0000' +
+    String(brNaloga) +
+    ' '.repeat(96) +
     '9'
-  )
+  lines.push(line2)
 
-  // ── Red 3+: Stavke ───────────────────────────────────
-  // FORMAT: račun_primaoca(18) + ime_primaoca(35) + adresa(35) + grad(9) + '0' +
-  //         svrha(35) + '00000 ' + sifra(3) + '  ' + iznos(13) + '  ' + poziv(20) + '  ' + datum(6) + '01'
+  // ── Red 3+: Stavke (217 chars svaka) ──────────────────
+  // racun_primaoca(18) + ime_primaoca(35) + adresa(35) + grad(10) + '0'(1) +
+  // svrha_zona(61) + '00000 '(6) + sifra(3) + '  '(2) + iznos_para(13) + '  '(2) +
+  // poziv(23) + datum(6) + '01'(2)
   invoices.forEach(inv => {
+    const iznos = Math.round((inv.amount || 0) * 100)
+    const svrhaText = `UPLATA PO FAKTURI ${inv.invoice_number || ''}`.toUpperCase().substring(0, 34)
+    // Svrha zona: 25 spaces + svrha left-aligned u 36 chars = 61 total
+    const svrhaZona = (' '.repeat(25) + svrhaText).padEnd(61, ' ')
     const racunPrimaoca = cleanAccount(inv.account_number || '')
-    const imePrimaoca = (inv.partner_name || '').toUpperCase()
-    const svrha = `Uplata po racunu br. ${inv.invoice_number || ''}`.substring(0, 35)
-    const model = inv.model ? String(inv.model).padStart(3, ' ') : '   '
-    const poziv = padR(inv.reference_number || inv.invoice_number || '', 20)
-    const iznos = fmtIznos13(inv.amount || 0)
+    const pozivNaBroj = padR(inv.reference_number || inv.invoice_number || '', 23)
 
-    lines.push(
+    const line3 =
       padR(racunPrimaoca, 18) +
-      padR(imePrimaoca, 35) +
-      padR('', 35) +        // adresa primaoca (prazno)
-      padR('', 9) +         // grad primaoca (prazno)
+      padR((inv.partner_name || '').toUpperCase(), 35) +
+      padR('', 35) +   // adresa primaoca
+      padR('', 10) +   // grad primaoca
       '0' +
-      padR(svrha, 35) +
+      svrhaZona +
       '00000 ' +
-      model +
+      padR(sifraPlacanja, 3) +
       '  ' +
-      iznos +
+      String(iznos).padStart(13, '0') +
       '  ' +
-      poziv +
-      '  ' +
+      pozivNaBroj +
       datum +
       '01'
-    )
+    lines.push(line3)
   })
 
-  const content = lines.join('\r\n')
-  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+  const content = lines.join('\r\n') + '\r\n\x1a'
+
+  // Encode as latin-1 (Windows-1252 compatible)
+  const bytes = new Uint8Array(content.length)
+  for (let i = 0; i < content.length; i++) {
+    bytes[i] = content.charCodeAt(i) & 0xff
+  }
+
+  const blob = new Blob([bytes], { type: 'application/octet-stream' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `nalozi_prenos_${datum}.txt`
+  a.download = `nalozi_${datum}.txt`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -147,7 +144,8 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [sifraPlacanja, setSifraPlacanja] = useState('21')
-  const [companyBankAccount, setCompanyBankAccount] = useState<any>(null)
+  const [bankAccounts, setBankAccounts] = useState<any[]>([])
+  const [selectedBankId, setSelectedBankId] = useState('')
   const today = new Date().toISOString().split('T')[0]
 
   useEffect(() => {
@@ -157,16 +155,18 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
         .from('companies').select('id').eq('name', 'Constellation LLC').single()
       if (!compData) { setLoading(false); return }
 
-      // Učitaj primarni bankovni račun kompanije
+      // Učitaj sve RSD račune kompanije
       const { data: bankData } = await supabase
         .from('company_bank_accounts')
         .select('*')
         .eq('company_id', compData.id)
         .eq('currency', 'RSD')
         .order('is_primary', { ascending: false })
-        .limit(1)
-        .single()
-      if (bankData) setCompanyBankAccount(bankData)
+      if (bankData && bankData.length > 0) {
+        setBankAccounts(bankData)
+        const primary = bankData.find(b => b.is_primary) || bankData[0]
+        setSelectedBankId(primary.id)
+      }
 
       const { data } = await supabase
         .from('invoices')
@@ -201,6 +201,7 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
   const totalUnpaid = filtered.reduce((s, i) => s + (i.amount_usd || 0), 0)
   const overdueCount = filtered.filter(i => i.due_date && i.due_date < today).length
   const selectedInvoices = filtered.filter(i => selected.has(i.id))
+  const selectedBank = bankAccounts.find(b => b.id === selectedBankId)
 
   const toggleSelect = (id: string) => {
     setSelected(prev => {
@@ -217,7 +218,7 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
   const handleExport = () => {
     const toExport = (selectedInvoices.length > 0 ? selectedInvoices : filtered)
       .map(i => ({ ...i, partner_name: i.partners?.name }))
-    exportNBS(toExport, companyBankAccount, sifraPlacanja)
+    exportHalcom(toExport, selectedBank, sifraPlacanja)
   }
 
   const daysUntilDue = (dueDate: string | null) => {
@@ -257,22 +258,37 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
         <div style={ps.exportBar}>
           <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '4px' }}>
             <div style={{ fontSize: '12px', color: '#633806', fontWeight: '500' }}>
-              🏦 E-banking nalog za plaćanje (NBS format)
+              🏦 Hal E-Bank — nalog za prenos (TKDIS format)
               {selected.size > 0 && <span style={{ marginLeft: '8px', color: '#888', fontWeight: '400' }}>({selected.size} selektovano)</span>}
             </div>
-            {companyBankAccount ? (
-              <div style={{ fontSize: '11px', color: '#854F0B' }}>
-                Platilac: {companyBankAccount.bank_name} · {companyBankAccount.account_number}
+            {bankAccounts.length === 0 ? (
+              <div style={{ fontSize: '11px', color: '#A32D2D' }}>
+                ⚠️ Nije pronađen RSD račun — dodajte ga u Settings → Company profiles
               </div>
             ) : (
-              <div style={{ fontSize: '11px', color: '#A32D2D' }}>
-                ⚠️ Nije pronađen RSD račun kompanije — dodajte ga u Settings
+              <div style={{ fontSize: '11px', color: '#854F0B' }}>
+                Platilac: {selectedBank?.bank_name} · {selectedBank?.account_number}
               </div>
             )}
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' as const }}>
+            {/* Izbor banke */}
+            {bankAccounts.length > 1 && (
+              <select
+                style={{ ...ps.sel, fontSize: '11px' }}
+                value={selectedBankId}
+                onChange={e => setSelectedBankId(e.target.value)}
+              >
+                {bankAccounts.map(b => (
+                  <option key={b.id} value={b.id}>
+                    {b.bank_name}{b.is_primary ? ' ★' : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+            {/* Šifra plaćanja */}
             <select
-              style={{ ...ps.sel, fontSize: '11px', maxWidth: '300px' }}
+              style={{ ...ps.sel, fontSize: '11px', maxWidth: '280px' }}
               value={sifraPlacanja}
               onChange={e => setSifraPlacanja(e.target.value)}
             >
@@ -280,7 +296,11 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
                 <option key={s.value} value={s.value}>{s.label}</option>
               ))}
             </select>
-            <button style={ps.exportBtn} onClick={handleExport} disabled={!companyBankAccount}>
+            <button
+              style={{ ...ps.exportBtn, opacity: bankAccounts.length === 0 ? 0.5 : 1 }}
+              onClick={handleExport}
+              disabled={bankAccounts.length === 0}
+            >
               📥 Export {selected.size > 0 ? `${selected.size}` : 'all'} naloga
             </button>
           </div>
@@ -482,7 +502,7 @@ export default function Reports() {
     { id: 'cashflow-monthly', title: 'Monthly Cash Flow', desc: 'Operating and financing activities by period', category: 'Cash Flow', icon: '💰', color: '#0C447C', bg: '#E6F1FB', page: 'cashflow' as Page, action: null },
     { id: 'bank-reconciliation', title: 'Bank Reconciliation', desc: 'Statement vs. recorded transactions per account', category: 'Cash Flow', icon: '🏦', color: '#0C447C', bg: '#E6F1FB', page: 'cashflow' as Page, action: null },
     { id: 'passthrough', title: 'Pass-through Balance', desc: 'Pass-through IN vs. OUT monthly balance', category: 'Compliance', icon: '⚖️', color: '#633806', bg: '#FAEEDA', page: 'cashflow' as Page, action: null },
-    { id: 'unmatched', title: 'Unmatched Invoices', desc: 'Neplaćene fakture · Constellation LLC · NBS e-banking export (bezgotovinsko plaćanje)', category: 'Compliance', icon: '⚠️', color: '#854F0B', bg: '#FAEEDA', page: 'reports' as Page, action: 'unpaid' },
+    { id: 'unmatched', title: 'Unmatched Invoices', desc: 'Neplaćene fakture · Constellation LLC · Hal E-Bank TKDIS export', category: 'Compliance', icon: '⚠️', color: '#854F0B', bg: '#FAEEDA', page: 'reports' as Page, action: 'unpaid' },
     { id: 'exchange-rates', title: 'Exchange Rate Log', desc: 'Rates used per period and transaction', category: 'Reference', icon: '💱', color: '#444', bg: '#f0f0ee', page: 'reports' as Page, action: null },
     { id: 'partner-summary', title: 'Partner Summary', desc: 'Total transactions per partner across all entities', category: 'Reference', icon: '🤝', color: '#444', bg: '#f0f0ee', page: 'partners' as Page, action: null },
   ]
