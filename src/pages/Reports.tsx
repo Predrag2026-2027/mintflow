@@ -6,6 +6,17 @@ import { supabase } from '../supabase'
 import { fmtUSD as fmt, fmtUSDSigned as fmtN } from '../utils/formatters'
 
 // ── Halcom TKDIS format generator ────────────────────────
+// Halcom kombinovane šifre platnog prometa (polje [166:169] u red 3)
+const HALCOM_SIFRE = [
+  { value: '221', label: '221 – Bezgotovinsko (robe i usluge)' },
+  { value: '240', label: '240 – Zarade' },
+  { value: '253', label: '253 – Javni prihodi' },
+  { value: '260', label: '260 – Premije osiguranja' },
+  { value: '263', label: '263 – Ostali transferi' },
+  { value: '270', label: '270 – Kratkoročni krediti' },
+  { value: '271', label: '271 – Dugoročni krediti' },
+]
+
 function padR(s: string, n: number): string {
   return (s || '').substring(0, n).padEnd(n, ' ')
 }
@@ -19,7 +30,7 @@ function fmtDatumDDMMYY(date: Date): string {
   return `${d}${m}${y}`
 }
 
-function exportHalcom(invoices: any[], companyBankAccount: any) {
+function exportHalcom(invoices: any[], companyBankAccount: any, halcomSifra: string = '221') {
   if (!companyBankAccount) {
     alert('Nije pronađen bankovni račun kompanije. Dodajte ga u Settings → Company profiles → Bank accounts.')
     return
@@ -68,8 +79,7 @@ function exportHalcom(invoices: any[], companyBankAccount: any) {
     const svrhaText = `UPLATA PO FAKTURI ${inv.invoice_number || ''}`.toUpperCase().substring(0, 34)
     const svrhaZona = (' '.repeat(25) + svrhaText).padEnd(61, ' ')
     const racunPrimaoca = cleanAccount(inv.selected_account_number || '')
-    // Model: iz invoice-a, ili iz odabranog računa partnera, ili '97'
-    const model = padR(inv.selected_model || inv.model || '97', 3)
+    // Halcom šifra platnog prometa (polje [166:169]) — NE model plaćanja
     const poziv = padR(inv.reference_number || inv.invoice_number || '', 23)
 
     lines.push(
@@ -80,7 +90,7 @@ function exportHalcom(invoices: any[], companyBankAccount: any) {
       '0' +
       svrhaZona +
       '00000 ' +
-      model +
+      padR(halcomSifra, 3) +
       '  ' +
       String(iznos).padStart(13, '0') +
       '  ' +
@@ -112,6 +122,7 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bankAccounts, setBankAccounts] = useState<any[]>([])
   const [selectedBankId, setSelectedBankId] = useState('')
+  const [halcomSifra, setHalcomSifra] = useState('221')
   // Map: invoice_id → { account_number, model } — odabrani račun po fakturi
   const [invoiceAccountMap, setInvoiceAccountMap] = useState<Record<string, { account_number: string; model: string; bank_name: string }>>({})
   // Map: partner_id → lista računa
@@ -247,7 +258,7 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
       selected_account_number: invoiceAccountMap[i.id]?.account_number || i.account_number || '',
       selected_model: invoiceAccountMap[i.id]?.model || i.model || '97',
     }))
-    exportHalcom(toExport, selectedBank)
+    exportHalcom(toExport, selectedBank, halcomSifra)
   }
 
   const daysUntilDue = (dueDate: string | null) => {
@@ -314,6 +325,15 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
                 ))}
               </select>
             )}
+            <select
+              style={{ ...ps.sel, fontSize: '11px' }}
+              value={halcomSifra}
+              onChange={e => setHalcomSifra(e.target.value)}
+            >
+              {HALCOM_SIFRE.map(s => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
             <button
               style={{ ...ps.exportBtn, opacity: bankAccounts.length === 0 ? 0.5 : 1 }}
               onClick={handleExport} disabled={bankAccounts.length === 0}>
