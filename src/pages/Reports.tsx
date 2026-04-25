@@ -31,12 +31,11 @@ function fmtDatumDDMMYY(date: Date): string {
   return `${d}${m}${y}`
 }
 
-function exportHalcom(invoices: any[], companyBankAccount: any, halcomSifra: string = '221') {
+function exportHalcom(invoices: any[], companyBankAccount: any, companyProfile: any, halcomSifra: string = '221') {
   if (!companyBankAccount) {
     alert('Nije pronađen bankovni račun kompanije. Dodajte ga u Settings → Company profiles → Bank accounts.')
     return
   }
-  // Proveri da li sve fakture imaju račun primaoca
   const missing = invoices.filter(i => !i.selected_account_number)
   if (missing.length > 0) {
     alert(`${missing.length} faktura nema račun primaoca. Odaberite račun za svaku fakturu.`)
@@ -44,8 +43,9 @@ function exportHalcom(invoices: any[], companyBankAccount: any, halcomSifra: str
   }
 
   const racunPlatilac = cleanAccount(companyBankAccount.account_number)
-  const imeFirma = 'CONSTELLATION D.O.O.'
-  const gradFirma = 'BEOGRAD-VR'
+  // Ime i grad iz company_profiles, fallback na hardkodovane vrednosti
+  const imeFirma = (companyProfile?.full_legal_name || 'CONSTELLATION D.O.O.').toUpperCase()
+  const gradFirma = (companyProfile?.city || 'BEOGRAD').toUpperCase()
   const datum = fmtDatumDDMMYY(new Date())
   const brNaloga = invoices.length
   const ukupanIznosPare = invoices.reduce((s, i) => s + Math.round((i.amount || 0) * 100), 0)
@@ -124,6 +124,7 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
   const [bankAccounts, setBankAccounts] = useState<any[]>([])
   const [selectedBankId, setSelectedBankId] = useState('')
   const [halcomSifra, setHalcomSifra] = useState('221')
+  const [companyProfile, setCompanyProfile] = useState<any>(null)
   // Map: invoice_id → { account_number, model } — odabrani račun po fakturi
   const [invoiceAccountMap, setInvoiceAccountMap] = useState<Record<string, { account_number: string; model: string; bank_name: string }>>({})
   // Map: partner_id → lista računa
@@ -146,6 +147,14 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
         setBankAccounts(bankData)
         setSelectedBankId((bankData.find(b => b.is_primary) || bankData[0]).id)
       }
+
+      // Profil kompanije (ime, grad za TKDIS header)
+      const { data: profData } = await supabase
+        .from('company_profiles')
+        .select('full_legal_name, city, address')
+        .eq('company_id', compData.id)
+        .single()
+      if (profData) setCompanyProfile(profData)
 
       // Fakture
       const { data: invData } = await supabase
@@ -261,7 +270,7 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
       selected_account_number: invoiceAccountMap[i.id]?.account_number || i.account_number || '',
       selected_model: invoiceAccountMap[i.id]?.model || i.model || '97',
     }))
-    exportHalcom(toExport, selectedBank, halcomSifra)
+    exportHalcom(toExport, selectedBank, companyProfile, halcomSifra)
   }
 
   const daysUntilDue = (dueDate: string | null) => {
