@@ -48,7 +48,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   const [expenseDescriptions, setExpenseDescriptions] = useState<any[]>([])
 
   // Step 1
-  const [companyId, setCompanyId] = useState('')  
+  const [companyId, setCompanyId] = useState('')
   const [bankId, setBankId] = useState('')
   const [currency, setCurrency] = useState('')
   const [txDate, setTxDate] = useState(new Date().toISOString().split('T')[0])
@@ -68,7 +68,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   const [linkedInvoices, setLinkedInvoices] = useState<LinkedInvoice[]>([])
   const [invoiceSearch, setInvoiceSearch] = useState('')
 
-  // P&L — stored by ID + name
+  // P&L
   const [plCatId, setPlCatId] = useState('')
   const [plCatName, setPlCatName] = useState('')
   const [plSubId, setPlSubId] = useState('')
@@ -83,6 +83,10 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   const [deptSplit, setDeptSplit] = useState('none')
   const [note, setNote] = useState('')
   const [tags, setTags] = useState<string[]>([])
+
+  // ── By value split state ──────────────────────────────
+  const [aimfoxVal, setAimfoxVal] = useState('')
+  const [sgVal, setSgVal] = useState('')
 
   // Step 3
   const [amount, setAmount] = useState('')
@@ -99,6 +103,44 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
 
   const totalAllocated = linkedInvoices.reduce((s, i) => s + (i.allocated_usd || 0), 0)
   const unallocated = usdAmount - totalAllocated
+
+  // ── Auto-compute opposite split value ────────────────
+  const handleAimfoxChange = (val: string) => {
+    setAimfoxVal(val)
+    const aimfox = parseFloat(val) || 0
+    const total = parseFloat(amount) || 0
+    if (total > 0 && aimfox >= 0 && aimfox <= total) {
+      setSgVal((total - aimfox).toFixed(2))
+    } else {
+      setSgVal('')
+    }
+  }
+
+  const handleSgChange = (val: string) => {
+    setSgVal(val)
+    const sg = parseFloat(val) || 0
+    const total = parseFloat(amount) || 0
+    if (total > 0 && sg >= 0 && sg <= total) {
+      setAimfoxVal((total - sg).toFixed(2))
+    } else {
+      setAimfoxVal('')
+    }
+  }
+
+  // Reset split values when amount changes
+  useEffect(() => {
+    if (revAlloc === 'byval') {
+      setAimfoxVal('')
+      setSgVal('')
+    }
+  }, [amount]) // eslint-disable-line
+
+  // ── Split validation ─────────────────────────────────
+  const splitTotal = (parseFloat(aimfoxVal) || 0) + (parseFloat(sgVal) || 0)
+  const splitOk = revAlloc !== 'byval' || Math.abs(splitTotal - (parseFloat(amount) || 0)) < 0.01
+  const splitPct = parseFloat(amount) > 0
+    ? { af: ((parseFloat(aimfoxVal) || 0) / parseFloat(amount) * 100).toFixed(1), sg: ((parseFloat(sgVal) || 0) / parseFloat(amount) * 100).toFixed(1) }
+    : { af: '0', sg: '0' }
 
   // ── Cascade helpers ──────────────────────────────────
   const expenseCategories = plCategories.filter(c => c.type !== 'revenue')
@@ -124,6 +166,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
       if (directSubtype === 'expense') {
         if (!plCatId) e.plCat = 'P&L Category is required'
         if (!deptId) e.dept = 'Department is required'
+        if (revAlloc === 'byval' && !splitOk) e.split = 'Split values must sum to total amount'
       }
       if (directSubtype === 'revenue' && !revStream) e.revStream = 'Revenue stream is required'
     }
@@ -132,7 +175,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
 
   useEffect(() => {
     setErrors(runValidation())
-  }, [companyId, bankId, currency, txDate, amount, exRate, txType, linkedInvoices, directSubtype, plCatId, deptId, revStream]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [companyId, bankId, currency, txDate, amount, exRate, txType, linkedInvoices, directSubtype, plCatId, deptId, revStream, revAlloc, aimfoxVal, sgVal]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load reference data ──────────────────────────────
   useEffect(() => {
@@ -185,7 +228,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   // ── Populate form when editing ───────────────────────
   useEffect(() => {
     if (!transaction) return
-    setCompanyId(transaction.company_id || '')    
+    setCompanyId(transaction.company_id || '')
     setBankId(transaction.bank_id || '')
     setCurrency(transaction.currency || '')
     setStatement(transaction.statement_number || '')
@@ -212,7 +255,6 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
     setRefNum(transaction.reference_number || '')
   }, [transaction])
 
-  // Match IDs from names after categories load (edit mode)
   useEffect(() => {
     if (transaction && plCategories.length > 0) {
       const cat = plCategories.find(c => c.name === transaction.pl_category)
@@ -265,7 +307,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   const stepHasError = (n: number) => {
     const stepFields: Record<number, string[]> = {
       1: ['companyId', 'bankId', 'currency', 'txDate'],
-      2: ['linkedInvoices', 'plCat', 'dept', 'revStream'],
+      2: ['linkedInvoices', 'plCat', 'dept', 'revStream', 'split'],
       3: ['amount', 'exRate'],
     }
     return (stepFields[n] || []).some(f => !!errors[f])
@@ -324,8 +366,21 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
     return map[status] || { background: '#f0f0ee', color: '#888' }
   }
 
+  // ── Rev alloc label for review ───────────────────────
+  const revAllocLabel = () => {
+    if (revAlloc === 'sg100') return '100% Social Growth'
+    if (revAlloc === 'af100') return '100% Aimfox'
+    if (revAlloc === 'shared') return 'Shared 50/50'
+    if (revAlloc === 'byval') {
+      const af = parseFloat(aimfoxVal) || 0
+      const sg = parseFloat(sgVal) || 0
+      return `By value — Aimfox: ${amount ? currency : 'USD'} ${af.toFixed(2)} / Social Growth: ${amount ? currency : 'USD'} ${sg.toFixed(2)}`
+    }
+    return '—'
+  }
+
   const handlePost = async () => {
-    setTouched({ companyId: true, bankId: true, currency: true, txDate: true, linkedInvoices: true, plCat: true, dept: true, revStream: true, amount: true, exRate: true })
+    setTouched({ companyId: true, bankId: true, currency: true, txDate: true, linkedInvoices: true, plCat: true, dept: true, revStream: true, amount: true, exRate: true, split: true })
     const e = runValidation()
     if (Object.keys(e).length > 0) { setShowValidationSummary(true); return }
 
@@ -338,6 +393,11 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
       }
 
       const isDirectWithPL = txType === 'direct'
+
+      // Compute split amounts for byval
+      const aimfoxAmount = revAlloc === 'byval' ? (parseFloat(aimfoxVal) || 0) : null
+      const sgAmount = revAlloc === 'byval' ? (parseFloat(sgVal) || 0) : null
+
       const payload = {
         company_id: companyId || null,
         bank_id: bankId || null,
@@ -360,6 +420,9 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
         revenue_stream: isDirectWithPL ? (revStream || null) : null,
         rev_alloc_type: revAlloc,
         dept_split_type: deptSplit,
+        // Store byval split amounts
+        rev_alloc_aimfox: aimfoxAmount,
+        rev_alloc_sg: sgAmount,
         account_number: accNum || null,
         model: model || null,
         reference_number: refNum || null,
@@ -424,7 +487,6 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
           </div>
         </div>
 
-        {/* Steps bar */}
         <div style={s.stepsBar}>
           {stepTitles.map((t, i) => {
             const hasErr = step > i + 1 && stepHasError(i + 1)
@@ -442,7 +504,6 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
           })}
         </div>
 
-        {/* Validation banner */}
         {showValidationSummary && !isValid && (
           <div style={s.validationBanner}>
             <span>⚠️</span>
@@ -465,8 +526,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                   <div style={s.field}>
                     <label style={s.lbl}>Company <span style={s.req}>*</span></label>
                     <select style={{ ...s.select, ...(fieldErr('companyId') ? s.inputError : {}) }} value={companyId}
-                      onChange={e => { setCompanyId(e.target.value); touch('companyId') }}
-                      onBlur={() => touch('companyId')}>
+                      onChange={e => { setCompanyId(e.target.value); touch('companyId') }} onBlur={() => touch('companyId')}>
                       <option value="">Select company...</option>
                       {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
@@ -488,9 +548,9 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                     <select style={{ ...s.select, ...(fieldErr('currency') ? s.inputError : {}) }} value={currency}
                       onChange={e => { setCurrency(e.target.value); touch('currency') }} onBlur={() => touch('currency')}>
                       <option value="">Select...</option>
-{(companies.find(c => c.id === companyId)?.currencies || ['USD','RSD','EUR','AED']).map((cur: string) => (
-  <option key={cur}>{cur}</option>
-))}
+                      {(companies.find(c => c.id === companyId)?.currencies || ['USD', 'RSD', 'EUR', 'AED']).map((cur: string) => (
+                        <option key={cur}>{cur}</option>
+                      ))}
                     </select>
                     {fieldErr('currency') && <span style={s.errorMsg}>{fieldErr('currency')}</span>}
                   </div>
@@ -572,7 +632,6 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                 </div>
               </div>
 
-              {/* Invoice payment */}
               {txType === 'invoice_payment' && (
                 <div style={s.section}>
                   <div style={{ ...s.infoBox, marginBottom: '12px' }}>
@@ -587,7 +646,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                     value={invoiceSearch} onChange={e => setInvoiceSearch(e.target.value)}
                     placeholder="Search by partner or invoice number..." />
                   {filteredOpenInvoices.length === 0 ? (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#aaa', fontSize: '13px', background: '#f5f5f3', borderRadius: '8px' }}>
+                    <div style={{ padding: '20px', textAlign: 'center' as const, color: '#aaa', fontSize: '13px', background: '#f5f5f3', borderRadius: '8px' }}>
                       No open invoices found for this company.
                     </div>
                   ) : (
@@ -607,7 +666,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                                 <span style={{ color: (inv.remaining_usd || 0) > 0 ? '#A32D2D' : '#1D9E75' }}> · Remaining: ${(inv.remaining_usd || 0).toFixed(2)}</span>
                               </div>
                             </div>
-                            <div style={{ fontSize: '13px', fontWeight: '500', color: '#111', whiteSpace: 'nowrap', marginRight: '10px' }}>
+                            <div style={{ fontSize: '13px', fontWeight: '500', color: '#111', whiteSpace: 'nowrap' as const, marginRight: '10px' }}>
                               {(inv.amount || 0).toLocaleString()} {inv.currency}
                             </div>
                             {!linked
@@ -630,7 +689,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ fontSize: '12px', color: '#888' }}>USD</span>
-                            <input type="number" style={{ ...s.input, width: '110px', textAlign: 'right' }}
+                            <input type="number" style={{ ...s.input, width: '110px', textAlign: 'right' as const }}
                               value={link.allocated_usd} onChange={e => updateAllocated(link.invoice_id, parseFloat(e.target.value) || 0)} />
                           </div>
                         </div>
@@ -650,7 +709,6 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                 </div>
               )}
 
-              {/* Direct */}
               {txType === 'direct' && (
                 <>
                   <div style={s.section}>
@@ -672,13 +730,8 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                           <div style={s.field}>
                             <label style={s.lbl}>P&L Category <span style={s.req}>*</span></label>
                             <select style={{ ...s.select, ...(fieldErr('plCat') ? s.inputError : {}) }} value={plCatId}
-                              onChange={e => {
-                                const cat = plCategories.find(c => c.id === e.target.value)
-                                setPlCatId(e.target.value)
-                                setPlCatName(cat?.name || '')
-                                setPlSubId(''); setPlSubName('')
-                                touch('plCat')
-                              }} onBlur={() => touch('plCat')}>
+                              onChange={e => { const cat = plCategories.find(c => c.id === e.target.value); setPlCatId(e.target.value); setPlCatName(cat?.name || ''); setPlSubId(''); setPlSubName(''); touch('plCat') }}
+                              onBlur={() => touch('plCat')}>
                               <option value="">Select P&L category...</option>
                               {expenseCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
@@ -687,11 +740,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                           <div style={s.field}>
                             <label style={s.lbl}>P&L Sub-category</label>
                             <select style={s.select} value={plSubId}
-                              onChange={e => {
-                                const sub = plSubcategories.find(s => s.id === e.target.value)
-                                setPlSubId(e.target.value)
-                                setPlSubName(sub?.name || '')
-                              }}
+                              onChange={e => { const sub = plSubcategories.find(s => s.id === e.target.value); setPlSubId(e.target.value); setPlSubName(sub?.name || '') }}
                               disabled={!plCatId || currentPlSubs.length === 0}>
                               <option value="">Select sub-category...</option>
                               {currentPlSubs.map(sub => <option key={sub.id} value={sub.id}>{sub.name}</option>)}
@@ -702,13 +751,8 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                           <div style={s.field}>
                             <label style={s.lbl}>Department <span style={s.req}>*</span></label>
                             <select style={{ ...s.select, ...(fieldErr('dept') ? s.inputError : {}) }} value={deptId}
-                              onChange={e => {
-                                const dept = departments.find(d => d.id === e.target.value)
-                                setDeptId(e.target.value)
-                                setDeptName(dept?.name || '')
-                                setDeptSubId(''); setDeptSubName(''); setExpDesc('')
-                                touch('dept')
-                              }} onBlur={() => touch('dept')}>
+                              onChange={e => { const dept = departments.find(d => d.id === e.target.value); setDeptId(e.target.value); setDeptName(dept?.name || ''); setDeptSubId(''); setDeptSubName(''); setExpDesc(''); touch('dept') }}
+                              onBlur={() => touch('dept')}>
                               <option value="">Select department...</option>
                               {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                             </select>
@@ -717,12 +761,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                           <div style={s.field}>
                             <label style={s.lbl}>Dept. sub-category</label>
                             <select style={s.select} value={deptSubId}
-                              onChange={e => {
-                                const sub = deptSubcategories.find(s => s.id === e.target.value)
-                                setDeptSubId(e.target.value)
-                                setDeptSubName(sub?.name || '')
-                                setExpDesc('')
-                              }}
+                              onChange={e => { const sub = deptSubcategories.find(s => s.id === e.target.value); setDeptSubId(e.target.value); setDeptSubName(sub?.name || ''); setExpDesc('') }}
                               disabled={!deptId || currentDeptSubs.length === 0}>
                               <option value="">Select sub-category...</option>
                               {currentDeptSubs.map(sub => <option key={sub.id} value={sub.id}>{sub.name}</option>)}
@@ -741,16 +780,102 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                           )}
                         </div>
                       </div>
+
+                      {/* ── Revenue stream allocation ── */}
                       <div style={s.section}>
                         <div style={s.sectionTitle}>Revenue stream allocation</div>
                         <div style={s.allocGrid}>
-                          {[{ id:'sg100',label:'100% Social Growth',sub:'Full allocation' },{ id:'af100',label:'100% Aimfox',sub:'Full allocation' },{ id:'shared',label:'Shared 50/50',sub:'Both streams' },{ id:'byval',label:'By value',sub:'Custom split' }].map(a => (
-                            <div key={a.id} style={{ ...s.allocBtn, ...(revAlloc === a.id ? s.allocBtnActive : {}) }} onClick={() => setRevAlloc(a.id)}>
+                          {[
+                            { id: 'sg100', label: '100% Social Growth', sub: 'Full allocation' },
+                            { id: 'af100', label: '100% Aimfox', sub: 'Full allocation' },
+                            { id: 'shared', label: 'Shared 50/50', sub: 'Both streams' },
+                            { id: 'byval', label: 'By value', sub: 'Custom split' },
+                          ].map(a => (
+                            <div key={a.id}
+                              style={{ ...s.allocBtn, ...(revAlloc === a.id ? s.allocBtnActive : {}) }}
+                              onClick={() => { setRevAlloc(a.id); setAimfoxVal(''); setSgVal('') }}>
                               <div style={s.allocBtnLabel}>{a.label}</div>
                               <div style={s.allocBtnSub}>{a.sub}</div>
                             </div>
                           ))}
                         </div>
+
+                        {/* ── By value input fields ── */}
+                        {revAlloc === 'byval' && (
+                          <div style={{ marginTop: '14px', background: '#f5f5f3', borderRadius: '10px', padding: '14px', border: '0.5px solid #e5e5e5' }}>
+                            <div style={{ fontSize: '11px', color: '#888', fontWeight: '500', marginBottom: '10px', textTransform: 'uppercase' as const, letterSpacing: '0.07em' }}>
+                              Split po vrednosti — ukupno: {amount ? `${parseFloat(amount).toLocaleString('sr-RS')} ${currency}` : '—'}
+                            </div>
+                            <div style={s.row2}>
+                              <div style={s.field}>
+                                <label style={s.lbl}>Aimfox ({currency || '—'})</label>
+                                <input
+                                  type="number"
+                                  style={{ ...s.input, ...(fieldErr('split') ? s.inputError : {}) }}
+                                  value={aimfoxVal}
+                                  onChange={e => handleAimfoxChange(e.target.value)}
+                                  placeholder="0.00"
+                                  min="0"
+                                  max={amount}
+                                />
+                                {aimfoxVal && parseFloat(amount) > 0 && (
+                                  <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '2px' }}>
+                                    {splitPct.af}% od ukupnog
+                                  </div>
+                                )}
+                              </div>
+                              <div style={s.field}>
+                                <label style={s.lbl}>Social Growth ({currency || '—'})</label>
+                                <input
+                                  type="number"
+                                  style={{ ...s.input, ...(fieldErr('split') ? s.inputError : {}) }}
+                                  value={sgVal}
+                                  onChange={e => handleSgChange(e.target.value)}
+                                  placeholder="0.00"
+                                  min="0"
+                                  max={amount}
+                                />
+                                {sgVal && parseFloat(amount) > 0 && (
+                                  <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '2px' }}>
+                                    {splitPct.sg}% od ukupnog
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            {/* Summary bar */}
+                            <div style={{ marginTop: '10px', background: '#fff', borderRadius: '8px', padding: '10px 12px', border: '0.5px solid #e5e5e5' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
+                                <span style={{ color: '#888' }}>Aimfox</span>
+                                <span style={{ fontWeight: '500', color: '#0C447C' }}>{aimfoxVal ? `${parseFloat(aimfoxVal).toLocaleString('sr-RS')} ${currency}` : '—'}</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '8px' }}>
+                                <span style={{ color: '#888' }}>Social Growth</span>
+                                <span style={{ fontWeight: '500', color: '#0F6E56' }}>{sgVal ? `${parseFloat(sgVal).toLocaleString('sr-RS')} ${currency}` : '—'}</span>
+                              </div>
+                              {/* Visual progress bar */}
+                              {aimfoxVal && sgVal && parseFloat(amount) > 0 && (
+                                <div style={{ height: '6px', borderRadius: '3px', background: '#e5e5e5', overflow: 'hidden' }}>
+                                  <div style={{ height: '100%', width: `${splitPct.af}%`, background: '#0C447C', borderRadius: '3px', display: 'inline-block' }} />
+                                  <div style={{ height: '100%', width: `${splitPct.sg}%`, background: '#1D9E75', borderRadius: '3px', display: 'inline-block' }} />
+                                </div>
+                              )}
+                              {/* Validation */}
+                              {aimfoxVal && sgVal && !splitOk && (
+                                <div style={{ fontSize: '11px', color: '#A32D2D', marginTop: '6px' }}>
+                                  ⚠️ Zbir ({(splitTotal).toLocaleString('sr-RS')} {currency}) ne odgovara ukupnom iznosu ({parseFloat(amount).toLocaleString('sr-RS')} {currency})
+                                </div>
+                              )}
+                              {aimfoxVal && sgVal && splitOk && (
+                                <div style={{ fontSize: '11px', color: '#1D9E75', marginTop: '6px' }}>✓ Split je ispravan</div>
+                              )}
+                            </div>
+                            {!amount && (
+                              <div style={{ fontSize: '11px', color: '#aaa', marginTop: '8px' }}>
+                                ℹ️ Unesite iznos u Step 3 pa se vratite da popunite split.
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </>
                   )}
@@ -773,7 +898,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                   <div style={s.section}>
                     <div style={s.sectionTitle}>Tags & note</div>
                     <div style={s.tagRow}>
-                      {['Recurring','Prepayment','Accrual','Capital expenditure','Tax deductible','Reimbursable'].map(t => (
+                      {['Recurring', 'Prepayment', 'Accrual', 'Capital expenditure', 'Tax deductible', 'Reimbursable'].map(t => (
                         <span key={t} style={{ ...s.tag, ...(tags.includes(t) ? s.tagActive : {}) }} onClick={() => toggleTag(t)}>{t}</span>
                       ))}
                     </div>
@@ -862,6 +987,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                     ['Department', deptName || '—'],
                     ['Dept. Sub-category', deptSubName || '—'],
                     ['Description', expDesc || revStream || '—'],
+                    ['Rev. stream alloc.', revAllocLabel()],
                   ]}] : []),
                   { title: 'Amounts', rows: [
                     ['Original amount', amount ? `${parseFloat(amount).toLocaleString()} ${currency}` : '—'],
@@ -871,7 +997,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                 ].map(sec => (
                   <div key={sec.title} style={s.reviewSection}>
                     <div style={s.reviewTitle}>{sec.title}</div>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' as const, fontSize: '13px' }}>
                       {sec.rows.map(([k, v]) => (
                         <tr key={k}>
                           <td style={{ color: '#888', padding: '5px 0', width: '45%', borderBottom: '0.5px solid #f0f0ee' }}>{k}</td>
@@ -917,7 +1043,7 @@ const s: Record<string, React.CSSProperties> = {
   plBadge: { fontSize: '10px', fontWeight: '500', padding: '3px 8px', borderRadius: '20px', background: 'rgba(29,158,117,0.2)', color: '#5DCAA5', border: '0.5px solid rgba(29,158,117,0.3)' },
   cashBadge: { fontSize: '10px', fontWeight: '500', padding: '3px 8px', borderRadius: '20px', background: 'rgba(12,68,124,0.2)', color: '#7FB8EE', border: '0.5px solid rgba(12,68,124,0.3)' },
   stepsBar: { display: 'flex', alignItems: 'center', padding: '0.75rem 1.5rem', borderBottom: '0.5px solid #e5e5e5', gap: 0, overflowX: 'auto' },
-  stepItem: { display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '4px 8px', borderRadius: '8px', whiteSpace: 'nowrap' },
+  stepItem: { display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '4px 8px', borderRadius: '8px', whiteSpace: 'nowrap' as const },
   stepNum: { width: '22px', height: '22px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '500', background: '#f0f0ee', color: '#888', border: '0.5px solid #e5e5e5', flexShrink: 0 },
   stepActive: { background: '#1D9E75', color: '#fff', borderColor: '#1D9E75' },
   stepDone: { background: '#E1F5EE', color: '#085041', borderColor: '#1D9E75' },
