@@ -11,6 +11,7 @@ const HALCOM_SIFRE = [
   { value: '221', label: '221 – Bezgotovinsko (robe i usluge)' },
   { value: '240', label: '240 – Zarade' },
   { value: '253', label: '253 – Javni prihodi' },
+  { value: '254', label: '254 – Porezi i doprinosi (objedinjena naplata)' },
   { value: '260', label: '260 – Premije osiguranja' },
   { value: '263', label: '263 – Ostali transferi' },
   { value: '270', label: '270 – Kratkoročni krediti' },
@@ -85,8 +86,8 @@ function exportHalcom(invoices: any[], companyBankAccount: any, halcomSifra: str
     lines.push(
       padR(racunPrimaoca, 18) +
       padR((inv.partner_name || '').toUpperCase(), 35) +
-      padR('', 35) +
-      padR('', 10) +
+      padR((inv.partner_address || '').toUpperCase(), 35) +
+      padR((inv.partner_city || '').toUpperCase(), 10) +
       '0' +
       svrhaZona +
       '00000 ' +
@@ -149,7 +150,7 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
       // Fakture
       const { data: invData } = await supabase
         .from('invoices')
-        .select('*, partners(id, name)')
+        .select('*, partners(id, name, address, city)')
         .eq('company_id', compData.id)
         .in('status', ['unpaid', 'partial'])
         .order('due_date', { ascending: true })
@@ -255,6 +256,8 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
     const toExport = (selectedInvoices.length > 0 ? selectedInvoices : filtered).map(i => ({
       ...i,
       partner_name: i.partners?.name,
+      partner_address: i.partners?.address || '',
+      partner_city: i.partners?.city || '',
       selected_account_number: invoiceAccountMap[i.id]?.account_number || i.account_number || '',
       selected_model: invoiceAccountMap[i.id]?.model || i.model || '97',
     }))
