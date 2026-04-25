@@ -86,12 +86,20 @@ export default function CashFlow() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
+  // ── Cash flow logic ───────────────────────────────────
+  // Inflows: direct revenue transactions
   const operatingIn = transactions
-    .filter(t => t.tx_subtype === 'revenue' || t.type === 'invoice_payment')
+    .filter(t => t.type === 'direct' && t.tx_subtype === 'revenue')
     .reduce((s, t) => s + (t.amount_usd || 0), 0)
 
+  // Outflows: direct expense + invoice payments (mi plaćamo)
+  // Excluding banking and taxes (separate line items)
   const operatingOut = transactions
-    .filter(t => t.tx_subtype === 'expense' && !['Banking and Finance', 'Taxes'].includes(t.pl_category || ''))
+    .filter(t =>
+      (t.type === 'direct' && t.tx_subtype === 'expense') ||
+      t.type === 'invoice_payment'
+    )
+    .filter(t => !['Banking and Finance', 'Taxes'].includes(t.pl_category || ''))
     .reduce((s, t) => s + (t.amount_usd || 0), 0)
 
   const bankingOut = transactions
@@ -113,8 +121,12 @@ export default function CashFlow() {
 
   const getBankFlow = (bankId: string) => {
     const bankTx = transactions.filter(t => t.bank_id === bankId)
-    const income = bankTx.filter(t => t.tx_subtype === 'revenue').reduce((s, t) => s + (t.amount_usd || 0), 0)
-    const expense = bankTx.filter(t => t.tx_subtype === 'expense' || t.tx_subtype === null).reduce((s, t) => s + (t.amount_usd || 0), 0)
+    const income = bankTx
+      .filter(t => t.type === 'direct' && t.tx_subtype === 'revenue')
+      .reduce((s, t) => s + (t.amount_usd || 0), 0)
+    const expense = bankTx
+      .filter(t => (t.type === 'direct' && t.tx_subtype === 'expense') || t.type === 'invoice_payment')
+      .reduce((s, t) => s + (t.amount_usd || 0), 0)
     return { income, expense, net: income - expense, txCount: bankTx.length }
   }
 
@@ -130,7 +142,7 @@ export default function CashFlow() {
       section: 'Operating Activities', color: '#0F6E56', bg: '#E1F5EE',
       items: [
         { name: 'Revenue received from customers', amount: operatingIn },
-        { name: 'Payments to suppliers & employees', amount: -operatingOut },
+        { name: 'Payments to suppliers (invoices + direct)', amount: -operatingOut },
         { name: 'Banking fees & finance charges', amount: -bankingOut },
         { name: 'Taxes paid', amount: -taxOut },
       ]
@@ -153,7 +165,6 @@ export default function CashFlow() {
     return { bg: '#FBEAF0', color: '#72243E' }
   }
 
-  // fmtAmt: signed USD for cash flow items (+ / -)
   const fmtAmt = (n: number) => {
     if (n === 0) return '—'
     return fmtUSDSigned(n)
@@ -224,7 +235,7 @@ export default function CashFlow() {
           <div style={s.summaryCard}>
             <div style={s.summaryLabel}>Total outflows</div>
             <div style={{ ...s.summaryValue, color: '#A32D2D' }}>{loading ? '...' : fmtUSD(totalOutflows)}</div>
-            <div style={s.summarySub}>Expenses + pass-through OUT</div>
+            <div style={s.summarySub}>Expenses + invoices + pass-through OUT</div>
           </div>
           <div style={s.summaryCard}>
             <div style={s.summaryLabel}>Net cash flow</div>
@@ -317,15 +328,15 @@ export default function CashFlow() {
                       </thead>
                       <tbody>
                         {transactions.slice(0, 15).map(tx => {
-                          const isIn = tx.tx_subtype === 'revenue'
+                          const isIn = tx.type === 'direct' && tx.tx_subtype === 'revenue'
                           return (
                             <tr key={tx.id} style={s.dataRow}>
                               <td style={s.td}>{tx.transaction_date}</td>
                               <td style={s.td}>{tx.partners?.name || '—'}</td>
                               <td style={s.td}>{tx.banks?.name || '—'}</td>
                               <td style={s.td}>
-                                <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '20px', background: tx.type === 'direct' ? '#E1F5EE' : '#E6F1FB', color: tx.type === 'direct' ? '#085041' : '#0C447C' }}>
-                                  {tx.type === 'direct' ? '⚡ Direct' : '💳 Payment'}
+                                <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '20px', background: tx.type === 'direct' ? (tx.tx_subtype === 'revenue' ? '#E1F5EE' : '#FCEBEB') : '#E6F1FB', color: tx.type === 'direct' ? (tx.tx_subtype === 'revenue' ? '#085041' : '#A32D2D') : '#0C447C' }}>
+                                  {tx.type === 'direct' ? (tx.tx_subtype === 'revenue' ? '📥 Direct IN' : '📤 Direct OUT') : '💳 Invoice payment'}
                                 </span>
                               </td>
                               <td style={{ ...s.td, textAlign: 'right' as const, color: isIn ? '#0F6E56' : '#A32D2D', fontWeight: '500' }}>
