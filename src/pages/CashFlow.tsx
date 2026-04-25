@@ -65,7 +65,7 @@ export default function CashFlow() {
 
     let txQuery = supabase
       .from('transactions')
-      .select('*, partners(name), banks(name,currency,company_id), companies(name)')
+      .select('*, partners(name), banks(name,currency,company_id)')
       .gte('transaction_date', start)
       .lte('transaction_date', end)
       .eq('status', 'posted')
