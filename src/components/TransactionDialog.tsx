@@ -300,15 +300,15 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
 
   const touchStep = (n: number) => {
     if (n === 1) setTouched(p => ({ ...p, companyId: true, bankId: true, currency: true, txDate: true }))
-    if (n === 2) setTouched(p => ({ ...p, linkedInvoices: true, plCat: true, dept: true, revStream: true }))
-    if (n === 3) setTouched(p => ({ ...p, amount: true, exRate: true }))
+    if (n === 2) setTouched(p => ({ ...p, amount: true, exRate: true }))
+    if (n === 3) setTouched(p => ({ ...p, linkedInvoices: true, plCat: true, dept: true, revStream: true }))
   }
 
   const stepHasError = (n: number) => {
     const stepFields: Record<number, string[]> = {
       1: ['companyId', 'bankId', 'currency', 'txDate'],
-      2: ['linkedInvoices', 'plCat', 'dept', 'revStream', 'split'],
-      3: ['amount', 'exRate'],
+      2: ['amount', 'exRate'],
+      3: ['linkedInvoices', 'plCat', 'dept', 'revStream', 'split'],
     }
     return (stepFields[n] || []).some(f => !!errors[f])
   }
@@ -354,7 +354,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
 
   const toggleTag = (t: string) => setTags(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t])
 
-  const stepTitles = ['Basic information', 'Type & classification', 'Amount & review']
+  const stepTitles = ['Basic information', 'Amount & rate', 'Type & classification', 'Review & post']
 
   const getStatusStyle = (status: string): React.CSSProperties => {
     const map: Record<string, React.CSSProperties> = {
@@ -477,7 +477,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
         <div style={s.header}>
           <div>
             <div style={s.headerTitle}>{transaction ? 'Edit transaction' : 'New transaction'}</div>
-            <div style={s.headerSub}>Step {step} of 3 — {stepTitles[step - 1]}</div>
+            <div style={s.headerSub}>Step {step} of 4 — {stepTitles[step - 1]}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             {txType === 'direct' && <div style={s.plBadge}>P&L Impact</div>}
@@ -498,7 +498,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                   </div>
                   <span style={{ ...s.stepLabel, ...(step === i + 1 ? { color: '#0F6E56', fontWeight: '500' } : {}) }}>{t}</span>
                 </div>
-                {i < 2 && <div style={s.stepDiv} />}
+                {i < 3 && <div style={s.stepDiv} />}
               </React.Fragment>
             )
           })}
@@ -613,8 +613,49 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
             </>
           )}
 
-          {/* ── STEP 2 ── */}
+          {/* ── STEP 2 — Amount & rate ── */}
           {step === 2 && (
+            <div style={s.section}>
+              <div style={s.sectionTitle}>Amount & currency conversion</div>
+              <div style={s.toggleRow}>
+                <span style={s.toggleLabel}>Amount indexed in foreign currency?</span>
+                <label style={s.toggle}>
+                  <input type="checkbox" checked={isIndexed} onChange={e => setIsIndexed(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
+                  <span style={{ ...s.toggleSlider, background: isIndexed ? '#1D9E75' : '#ddd' }} />
+                </label>
+              </div>
+              <div style={{ ...s.infoBox, margin: '10px 0' }}>
+                {currency === 'USD' ? 'No conversion needed — amount is already in USD.' : `Rate fetched on transaction date (${txDate}).`}
+              </div>
+              <div style={s.row2}>
+                <div style={s.field}>
+                  <label style={s.lbl}>Amount ({currency || '—'}) <span style={s.req}>*</span></label>
+                  <input type="number" style={{ ...s.input, ...(fieldErr('amount') ? s.inputError : {}) }} value={amount}
+                    onChange={e => { setAmount(e.target.value); touch('amount') }} onBlur={() => touch('amount')} placeholder="0.00" />
+                  {fieldErr('amount') && <span style={s.errorMsg}>{fieldErr('amount')}</span>}
+                </div>
+                <div style={s.field}>
+                  <label style={s.lbl}>Exchange rate {currency !== 'USD' && <span style={s.req}>*</span>}</label>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <input type="number" style={{ ...s.input, flex: 1, ...(fieldErr('exRate') ? s.inputError : {}) }} value={exRate}
+                      onChange={e => { setExRate(e.target.value); touch('exRate') }} onBlur={() => touch('exRate')}
+                      placeholder={currency === 'USD' ? 'N/A' : 'Click Fetch'} />
+                    {currency !== 'USD' && <button style={s.fetchBtn} onClick={fetchRate} disabled={fetchingRate}>{fetchingRate ? '...' : 'Fetch'}</button>}
+                  </div>
+                  {rateSource && <div style={{ fontSize: '11px', color: '#0F6E56', marginTop: '4px' }}>Source: {rateSource}</div>}
+                  {fieldErr('exRate') && <span style={s.errorMsg}>{fieldErr('exRate')}</span>}
+                </div>
+              </div>
+              <div style={s.convRow}>
+                <div><div style={s.convLabel}>Original amount</div><div style={s.convVal}>{amount ? `${parseFloat(amount).toLocaleString()} ${currency}` : '—'}</div></div>
+                <div style={{ fontSize: '20px', color: '#aaa', alignSelf: 'flex-end', paddingBottom: '4px' }}>→</div>
+                <div><div style={s.convLabel}>USD equivalent</div><div style={{ ...s.convVal, color: '#1D9E75' }}>${usdAmount > 0 ? usdAmount.toFixed(2) : '0.00'}</div></div>
+              </div>
+            </div>
+          )}
+
+          {/* ── STEP 3 — Type & classification ── */}
+          {step === 3 && (
             <>
               <div style={s.section}>
                 <div style={s.sectionTitle}>Transaction type <span style={s.req}>*</span></div>
@@ -911,49 +952,11 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
               )}
             </>
           )}
+          )}
 
-          {/* ── STEP 3 ── */}
-          {step === 3 && (
+          {/* ── STEP 4 — Review & post ── */}
+          {step === 4 && (
             <>
-              <div style={s.section}>
-                <div style={s.sectionTitle}>Amount & currency conversion</div>
-                <div style={s.toggleRow}>
-                  <span style={s.toggleLabel}>Amount indexed in foreign currency?</span>
-                  <label style={s.toggle}>
-                    <input type="checkbox" checked={isIndexed} onChange={e => setIsIndexed(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
-                    <span style={{ ...s.toggleSlider, background: isIndexed ? '#1D9E75' : '#ddd' }} />
-                  </label>
-                </div>
-                <div style={{ ...s.infoBox, margin: '10px 0' }}>
-                  {currency === 'USD' ? 'No conversion needed — amount is already in USD.' : `Rate fetched on transaction date (${txDate}).`}
-                </div>
-                <div style={s.row2}>
-                  <div style={s.field}>
-                    <label style={s.lbl}>Amount ({currency || '—'}) <span style={s.req}>*</span></label>
-                    <input type="number" style={{ ...s.input, ...(fieldErr('amount') ? s.inputError : {}) }} value={amount}
-                      onChange={e => { setAmount(e.target.value); touch('amount') }} onBlur={() => touch('amount')} placeholder="0.00" />
-                    {fieldErr('amount') && <span style={s.errorMsg}>{fieldErr('amount')}</span>}
-                  </div>
-                  <div style={s.field}>
-                    <label style={s.lbl}>Exchange rate {currency !== 'USD' && <span style={s.req}>*</span>}</label>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <input type="number" style={{ ...s.input, flex: 1, ...(fieldErr('exRate') ? s.inputError : {}) }} value={exRate}
-                        onChange={e => { setExRate(e.target.value); touch('exRate') }} onBlur={() => touch('exRate')}
-                        placeholder={currency === 'USD' ? 'N/A' : 'Click Fetch'} />
-                      {currency !== 'USD' && <button style={s.fetchBtn} onClick={fetchRate} disabled={fetchingRate}>{fetchingRate ? '...' : 'Fetch'}</button>}
-                    </div>
-                    {rateSource && <div style={{ fontSize: '11px', color: '#0F6E56', marginTop: '4px' }}>Source: {rateSource}</div>}
-                    {fieldErr('exRate') && <span style={s.errorMsg}>{fieldErr('exRate')}</span>}
-                  </div>
-                </div>
-                <div style={s.convRow}>
-                  <div><div style={s.convLabel}>Original amount</div><div style={s.convVal}>{amount ? `${parseFloat(amount).toLocaleString()} ${currency}` : '—'}</div></div>
-                  <div style={{ fontSize: '20px', color: '#aaa', alignSelf: 'flex-end', paddingBottom: '4px' }}>→</div>
-                  <div><div style={s.convLabel}>USD equivalent</div><div style={{ ...s.convVal, color: '#1D9E75' }}>${usdAmount > 0 ? usdAmount.toFixed(2) : '0.00'}</div></div>
-                </div>
-              </div>
-
-              <div style={s.section}>
                 <div style={s.sectionTitle}>Review</div>
                 {isValid ? (
                   <div style={{ ...s.infoBox, marginBottom: '14px', display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -1009,12 +1012,13 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                 ))}
               </div>
             </>
+            </>
           )}
         </div>
 
         <div style={s.footer}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '12px', color: '#888' }}>Step {step} of 3</span>
+            <span style={{ fontSize: '12px', color: '#888' }}>Step {step} of 4</span>
             {totalErrors > 0 && Object.keys(touched).length > 0 && (
               <span style={{ fontSize: '11px', color: '#A32D2D', background: '#FCEBEB', padding: '2px 8px', borderRadius: '20px' }}>
                 {totalErrors} field{totalErrors > 1 ? 's' : ''} missing
@@ -1023,8 +1027,8 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             {step > 1 && <button style={s.btnGhost} onClick={() => setStep(step - 1)}>Back</button>}
-            {step < 3 && <button style={s.btnPrimary} onClick={() => { touchStep(step); setStep(step + 1) }}>Continue</button>}
-            {step === 3 && <button style={{ ...s.btnPrimary, opacity: saving ? 0.7 : 1 }} onClick={handlePost} disabled={saving}>{saving ? 'Saving...' : transaction ? 'Update transaction' : 'Post transaction'}</button>}
+            {step < 4 && <button style={s.btnPrimary} onClick={() => { touchStep(step); setStep(step + 1) }}>Continue</button>}
+            {step === 4 && <button style={{ ...s.btnPrimary, opacity: saving ? 0.7 : 1 }} onClick={handlePost} disabled={saving}>{saving ? 'Saving...' : transaction ? 'Update transaction' : 'Post transaction'}</button>}
           </div>
         </div>
       </div>

@@ -324,15 +324,15 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
 
   const touchStep = (n: number) => {
     if (n === 1) setTouched(p => ({ ...p, companyId: true, currency: true, invoiceDate: true, partnerId: true }))
-    if (n === 2) setTouched(p => ({ ...p, plCat: true, dept: true, revStream: true, split: true }))
-    if (n === 3) setTouched(p => ({ ...p, amount: true, exRate: true }))
+    if (n === 2) setTouched(p => ({ ...p, amount: true, exRate: true }))
+    if (n === 3) setTouched(p => ({ ...p, plCat: true, dept: true, revStream: true, split: true }))
   }
 
   const stepHasError = (n: number) => {
     const stepFields: Record<number, string[]> = {
       1: ['companyId', 'currency', 'invoiceDate', 'partnerId'],
-      2: ['plCat', 'dept', 'revStream', 'split'],
-      3: ['amount', 'exRate'],
+      2: ['amount', 'exRate'],
+      3: ['plCat', 'dept', 'revStream', 'split'],
     }
     return (stepFields[n] || []).some(f => !!errors[f])
   }
@@ -366,7 +366,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
     return '—'
   }
 
-  const stepTitles = ['Basic information', 'Classification & P&L', 'Amount & currency', 'Review & post']
+  const stepTitles = ['Basic information', 'Amount & currency', 'Classification & P&L', 'Review & post']
 
   const handlePost = async () => {
     setTouched({ companyId: true, currency: true, invoiceDate: true, partnerId: true, plCat: true, dept: true, revStream: true, amount: true, exRate: true, split: true })
@@ -707,8 +707,55 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
             </>
           )}
 
-          {/* ── STEP 2 ── */}
+          {/* ── STEP 2 — Amount & currency ── */}
           {step === 2 && (
+            <div style={s.section}>
+              <div style={s.sectionTitle}>Amount & currency conversion</div>
+              <div style={s.toggleRow}>
+                <span style={s.toggleLabel}>Amount indexed in foreign currency?</span>
+                <label style={s.toggle}>
+                  <input type="checkbox" checked={isIndexed} onChange={e => setIsIndexed(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
+                  <span style={{ ...s.toggleSlider, background: isIndexed ? '#1D9E75' : '#ddd' }} />
+                </label>
+              </div>
+              {linkedTxId && (
+                <div style={{ ...s.infoBox, marginBottom: '10px', background: '#E6F1FB', borderColor: '#7FB8EE', color: '#0C447C', fontSize: '11px' }}>
+                  🔗 Amount auto-filled from Direct transaction. Edit if invoice amount differs.
+                </div>
+              )}
+              <div style={{ ...s.infoBox, margin: '10px 0' }}>
+                {currency === 'USD' ? 'No conversion needed — amount is already in USD.' : 'Rate fetched on invoice date.'}
+              </div>
+              <div style={s.row2}>
+                <div style={s.field}>
+                  <label style={s.lbl}>Amount ({currency || '—'}) <span style={s.req}>*</span></label>
+                  <input type="number" style={{ ...s.input, ...(fieldErr('amount') ? s.inputError : {}) }} value={amount}
+                    onChange={e => { setAmount(e.target.value); touch('amount') }} onBlur={() => touch('amount')} placeholder="0.00" />
+                  {fieldErr('amount') && <span style={s.errorMsg}>{fieldErr('amount')}</span>}
+                </div>
+                <div style={s.field}>
+                  <label style={s.lbl}>Exchange rate {currency !== 'USD' && <span style={s.req}>*</span>}</label>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <input type="number" style={{ ...s.input, flex: 1, ...(fieldErr('exRate') ? s.inputError : {}) }} value={exRate}
+                      onChange={e => { setExRate(e.target.value); touch('exRate') }} onBlur={() => touch('exRate')}
+                      placeholder={currency === 'USD' ? 'N/A' : 'Click Fetch'} />
+                    {currency !== 'USD' && <button style={s.fetchBtn} onClick={fetchRate} disabled={fetchingRate}>{fetchingRate ? '...' : 'Fetch'}</button>}
+                  </div>
+                  {rateSource && <div style={{ fontSize: '11px', color: '#0F6E56', marginTop: '4px' }}>Source: {rateSource}</div>}
+                  {fieldErr('exRate') && <span style={s.errorMsg}>{fieldErr('exRate')}</span>}
+                </div>
+              </div>
+              <div style={s.convRow}>
+                <div><div style={s.convLabel}>Invoice amount</div><div style={s.convVal}>{amount ? `${parseFloat(amount).toLocaleString('sr-RS')} ${currency}` : '—'}</div></div>
+                <div style={{ fontSize: '20px', color: '#aaa', alignSelf: 'flex-end', paddingBottom: '4px' }}>→</div>
+                <div><div style={s.convLabel}>USD equivalent</div><div style={{ ...s.convVal, color: '#1D9E75' }}>${usdAmount > 0 ? usdAmount.toFixed(2) : '0.00'}</div></div>
+              </div>
+              {dueDate && <div style={{ ...s.infoBox, marginTop: '12px', background: '#FAEEDA', borderColor: '#E5B96A', color: '#633806' }}>📅 Due date: <strong>{dueDate}</strong></div>}
+            </div>
+          )}
+
+          {/* ── STEP 3 — Classification & P&L ── */}
+          {step === 3 && (
             <>
               {linkedTxId && (
                 <div style={{ ...s.infoBox, marginBottom: '16px', background: '#E6F1FB', borderColor: '#7FB8EE', color: '#0C447C' }}>
@@ -716,28 +763,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                 </div>
               )}
               {invType === 'expense' && (
-                <>
-                  <div style={s.section}>
-                    <div style={s.sectionTitle}>P&L classification</div>
-                    <div style={s.row2}>
-                      <div style={s.field}>
-                        <label style={s.lbl}>P&L Category {!linkedTxId && <span style={s.req}>*</span>}</label>
-                        <select style={{ ...s.select, ...(fieldErr('plCat') ? s.inputError : {}) }} value={plCatId}
-                          onChange={e => { const cat = plCategories.find(c => c.id === e.target.value); setPlCatId(e.target.value); setPlCatName(cat?.name || ''); setPlSubId(''); setPlSubName(''); touch('plCat') }}
-                          onBlur={() => touch('plCat')}>
-                          <option value="">Select P&L category...</option>
-                          {expenseCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
-                        {fieldErr('plCat') && <span style={s.errorMsg}>{fieldErr('plCat')}</span>}
-                      </div>
-                      <div style={s.field}>
-                        <label style={s.lbl}>P&L Sub-category</label>
-                        <select style={s.select} value={plSubId}
-                          onChange={e => { const sub = plSubcategories.find(s => s.id === e.target.value); setPlSubId(e.target.value); setPlSubName(sub?.name || '') }}
-                          disabled={!plCatId || currentPlSubs.length === 0}>
-                          <option value="">Select sub-category...</option>
-                          {currentPlSubs.map(sub => <option key={sub.id} value={sub.id}>{sub.name}</option>)}
-                        </select>
                       </div>
                     </div>
                     <div style={s.row2}>
@@ -880,53 +905,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                 </div>
               </div>
             </>
-          )}
-
-          {/* ── STEP 3 ── */}
-          {step === 3 && (
-            <div style={s.section}>
-              <div style={s.sectionTitle}>Amount & currency conversion</div>
-              <div style={s.toggleRow}>
-                <span style={s.toggleLabel}>Amount indexed in foreign currency?</span>
-                <label style={s.toggle}>
-                  <input type="checkbox" checked={isIndexed} onChange={e => setIsIndexed(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
-                  <span style={{ ...s.toggleSlider, background: isIndexed ? '#1D9E75' : '#ddd' }} />
-                </label>
-              </div>
-              {linkedTxId && (
-                <div style={{ ...s.infoBox, marginBottom: '10px', background: '#E6F1FB', borderColor: '#7FB8EE', color: '#0C447C', fontSize: '11px' }}>
-                  🔗 Amount auto-filled from Direct transaction. Edit if invoice amount differs.
-                </div>
-              )}
-              <div style={{ ...s.infoBox, margin: '10px 0' }}>
-                {currency === 'USD' ? 'No conversion needed — amount is already in USD.' : 'Rate fetched on invoice date.'}
-              </div>
-              <div style={s.row2}>
-                <div style={s.field}>
-                  <label style={s.lbl}>Amount ({currency || '—'}) <span style={s.req}>*</span></label>
-                  <input type="number" style={{ ...s.input, ...(fieldErr('amount') ? s.inputError : {}) }} value={amount}
-                    onChange={e => { setAmount(e.target.value); touch('amount') }} onBlur={() => touch('amount')} placeholder="0.00" />
-                  {fieldErr('amount') && <span style={s.errorMsg}>{fieldErr('amount')}</span>}
-                </div>
-                <div style={s.field}>
-                  <label style={s.lbl}>Exchange rate {currency !== 'USD' && <span style={s.req}>*</span>}</label>
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <input type="number" style={{ ...s.input, flex: 1, ...(fieldErr('exRate') ? s.inputError : {}) }} value={exRate}
-                      onChange={e => { setExRate(e.target.value); touch('exRate') }} onBlur={() => touch('exRate')}
-                      placeholder={currency === 'USD' ? 'N/A' : 'Click Fetch'} />
-                    {currency !== 'USD' && <button style={s.fetchBtn} onClick={fetchRate} disabled={fetchingRate}>{fetchingRate ? '...' : 'Fetch'}</button>}
-                  </div>
-                  {rateSource && <div style={{ fontSize: '11px', color: '#0F6E56', marginTop: '4px' }}>Source: {rateSource}</div>}
-                  {fieldErr('exRate') && <span style={s.errorMsg}>{fieldErr('exRate')}</span>}
-                </div>
-              </div>
-              <div style={s.convRow}>
-                <div><div style={s.convLabel}>Invoice amount</div><div style={s.convVal}>{amount ? `${parseFloat(amount).toLocaleString('sr-RS')} ${currency}` : '—'}</div></div>
-                <div style={{ fontSize: '20px', color: '#aaa', alignSelf: 'flex-end', paddingBottom: '4px' }}>→</div>
-                <div><div style={s.convLabel}>USD equivalent</div><div style={{ ...s.convVal, color: '#1D9E75' }}>${usdAmount > 0 ? usdAmount.toFixed(2) : '0.00'}</div></div>
-              </div>
-              {dueDate && <div style={{ ...s.infoBox, marginTop: '12px', background: '#FAEEDA', borderColor: '#E5B96A', color: '#633806' }}>📅 Due date: <strong>{dueDate}</strong></div>}
-            </div>
           )}
 
           {/* ── STEP 4 ── */}
