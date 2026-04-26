@@ -31,7 +31,7 @@ export default function CashFlow() {
     const load = async () => {
       const [{ data: comp }, { data: bnk }] = await Promise.all([
         supabase.from('companies').select('id,name').order('name'),
-        supabase.from('banks').select('id,name,company_id,currency').order('name'),
+        supabase.from('banks').select('id,name,company_id,currencies,is_active').order('name'),
       ])
       if (comp) setCompanies(comp)
       if (bnk) setBanks(bnk)
@@ -65,7 +65,7 @@ export default function CashFlow() {
 
     let txQuery = supabase
       .from('transactions')
-      .select('*, partners(name), banks(name,currency,company_id)')
+      .select('*, partners(name), banks(id,name,currencies)')
       .gte('transaction_date', start)
       .lte('transaction_date', end)
       .eq('status', 'posted')
@@ -73,7 +73,7 @@ export default function CashFlow() {
 
     let ptQuery = supabase
       .from('passthrough')
-      .select('*, partners(name), banks(name,currency,company_id)')
+      .select('*, partners(name), banks(id,name,currencies)')
       .gte('transaction_date', start)
       .lte('transaction_date', end)
     if (companyId !== 'all') ptQuery = ptQuery.eq('company_id', companyId)
@@ -372,7 +372,7 @@ export default function CashFlow() {
                   </div>
                 ) : filteredBanks.map(bank => {
                   const flow = getBankFlow(bank.id)
-                  const cc = currencyColor(bank.currency || 'USD')
+                  const cc = currencyColor((bank.currencies || [])[0] || 'USD')
                   const compName = companies.find(c => c.id === bank.company_id)?.name || '—'
                   return (
                     <div key={bank.id} style={s.accountCard}>
@@ -381,7 +381,7 @@ export default function CashFlow() {
                           <div style={s.accountName}>{bank.name}</div>
                           <div style={s.accountCompany}>{compName}</div>
                         </div>
-                        <span style={{ ...s.currBadge, background: cc.bg, color: cc.color }}>{bank.currency || 'USD'}</span>
+                        <span style={{ ...s.currBadge, background: cc.bg, color: cc.color }}>{(bank.currencies || [])[0] || 'RSD'}</span>
                       </div>
                       <div style={s.accountBalances}>
                         <div>
