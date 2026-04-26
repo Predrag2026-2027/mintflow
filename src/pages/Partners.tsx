@@ -23,10 +23,7 @@ export default function Partners() {
 
   const fetchPartners = async () => {
     setLoading(true)
-    const { data } = await supabase
-      .from('partners')
-      .select('*')
-      .order('name')
+    const { data } = await supabase.from('partners').select('*').order('name')
     if (data) setPartners(data)
     setLoading(false)
   }
@@ -56,9 +53,7 @@ export default function Partners() {
   }
 
   const typeLabels: Record<string, string> = {
-    vendor: 'Vendor',
-    customer: 'Customer',
-    both: 'Both',
+    vendor: 'Vendor', customer: 'Customer', both: 'Both',
   }
 
   return (
@@ -97,7 +92,6 @@ export default function Partners() {
           </button>
         </div>
 
-        {/* Summary */}
         <div style={s.summaryRow}>
           <div style={s.summaryCard}>
             <div style={s.summaryLabel}>Total partners</div>
@@ -117,13 +111,10 @@ export default function Partners() {
           </div>
           <div style={s.summaryCard}>
             <div style={s.summaryLabel}>Active</div>
-            <div style={s.summaryVal}>
-              {partners.filter(p => p.is_active !== false).length}
-            </div>
+            <div style={s.summaryVal}>{partners.filter(p => p.is_active !== false).length}</div>
           </div>
         </div>
 
-        {/* Filter bar */}
         <div style={s.filterBar}>
           <input type="text" placeholder="Search name, tax ID or email..."
             value={search} onChange={e => setSearch(e.target.value)} style={s.searchInput} />
@@ -136,7 +127,6 @@ export default function Partners() {
           <div style={s.totalBadge}>{filtered.length} partners</div>
         </div>
 
-        {/* Table */}
         <div style={s.tableWrap}>
           {loading ? (
             <div style={s.emptyState}>Loading...</div>
@@ -217,7 +207,9 @@ export default function Partners() {
 function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: () => void; onSaved: () => void }) {
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [activeTab, setActiveTab] = useState<'info' | 'accounts'>('info')
 
+  // Partner fields
   const [name, setName] = useState(partner?.name || '')
   const [type, setType] = useState(partner?.type || 'vendor')
   const [taxId, setTaxId] = useState(partner?.tax_id || '')
@@ -230,20 +222,74 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
   const [note, setNote] = useState(partner?.note || '')
   const [isActive, setIsActive] = useState(partner?.is_active !== false)
 
+  // Bank accounts
+  const [accounts, setAccounts] = useState<any[]>([])
+  const [loadingAccounts, setLoadingAccounts] = useState(false)
+  const [newAccNum, setNewAccNum] = useState('')
+  const [newBankName, setNewBankName] = useState('')
+  const [newCurrency, setNewCurrency] = useState('RSD')
+  const [newModel, setNewModel] = useState('')
+  const [addingAccount, setAddingAccount] = useState(false)
+
+  const fetchAccounts = async () => {
+    if (!partner?.id) return
+    setLoadingAccounts(true)
+    const { data } = await supabase
+      .from('partner_accounts')
+      .select('*')
+      .eq('partner_id', partner.id)
+      .order('is_primary', { ascending: false })
+    if (data) setAccounts(data)
+    setLoadingAccounts(false)
+  }
+
+  useEffect(() => {
+    if (partner?.id) fetchAccounts()
+  }, [partner?.id]) // eslint-disable-line
+
+  const setPrimary = async (accountId: string) => {
+    // Ukloni primary sa svih
+    await supabase.from('partner_accounts').update({ is_primary: false }).eq('partner_id', partner.id)
+    // Postavi novi primary
+    await supabase.from('partner_accounts').update({ is_primary: true }).eq('id', accountId)
+    fetchAccounts()
+  }
+
+  const deleteAccount = async (accountId: string) => {
+    if (!window.confirm('Delete this bank account?')) return
+    await supabase.from('partner_accounts').delete().eq('id', accountId)
+    fetchAccounts()
+  }
+
+  const addAccount = async () => {
+    if (!newAccNum.trim()) return
+    setAddingAccount(true)
+    const isPrimary = accounts.length === 0
+    await supabase.from('partner_accounts').insert({
+      partner_id: partner.id,
+      account_number: newAccNum.trim(),
+      bank_name: newBankName.trim() || null,
+      currency: newCurrency,
+      model: newModel.trim() || null,
+      is_primary: isPrimary,
+    })
+    setNewAccNum('')
+    setNewBankName('')
+    setNewModel('')
+    setNewCurrency('RSD')
+    fetchAccounts()
+    setAddingAccount(false)
+  }
+
   const handleSave = async () => {
     if (!name.trim()) return
     setSaving(true)
     const payload = {
-      name: name.trim(),
-      type,
-      tax_id: taxId || null,
-      address: address || null,
-      city: city || null,
-      country: country || null,
-      contact_name: contactName || null,
-      contact_email: contactEmail || null,
-      contact_phone: contactPhone || null,
-      note: note || null,
+      name: name.trim(), type,
+      tax_id: taxId || null, address: address || null,
+      city: city || null, country: country || null,
+      contact_name: contactName || null, contact_email: contactEmail || null,
+      contact_phone: contactPhone || null, note: note || null,
       is_active: isActive,
     }
     if (partner?.id) {
@@ -277,92 +323,199 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
           <button style={ds.closeBtn} onClick={onClose}>×</button>
         </div>
 
+        {/* Tabs — samo za edit mode */}
+        {partner?.id && (
+          <div style={ds.tabBar}>
+            <button style={{ ...ds.tab, ...(activeTab === 'info' ? ds.tabActive : {}) }} onClick={() => setActiveTab('info')}>
+              📋 Basic info
+            </button>
+            <button style={{ ...ds.tab, ...(activeTab === 'accounts' ? ds.tabActive : {}) }} onClick={() => setActiveTab('accounts')}>
+              🏦 Bank accounts
+              {accounts.length > 0 && <span style={ds.tabBadge}>{accounts.length}</span>}
+            </button>
+          </div>
+        )}
+
         <div style={ds.body}>
-          <div style={ds.section}>
-            <div style={ds.sectionTitle}>Basic info</div>
-            <div style={ds.row2}>
-              <div style={ds.field}>
-                <label style={ds.lbl}>Name <span style={{ color: '#E24B4A' }}>*</span></label>
-                <input style={ds.input} value={name} onChange={e => setName(e.target.value)} placeholder="Partner name..." />
+
+          {/* ── TAB: Basic info ── */}
+          {activeTab === 'info' && (
+            <>
+              <div style={ds.section}>
+                <div style={ds.sectionTitle}>Basic info</div>
+                <div style={ds.row2}>
+                  <div style={ds.field}>
+                    <label style={ds.lbl}>Name <span style={{ color: '#E24B4A' }}>*</span></label>
+                    <input style={ds.input} value={name} onChange={e => setName(e.target.value)} placeholder="Partner name..." />
+                  </div>
+                  <div style={ds.field}>
+                    <label style={ds.lbl}>Type <span style={{ color: '#E24B4A' }}>*</span></label>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {[{ id: 'vendor', label: '📤 Vendor' }, { id: 'customer', label: '📥 Customer' }, { id: 'both', label: '🔄 Both' }].map(t => (
+                        <div key={t.id} style={{ ...ds.typeChip, ...(type === t.id ? ds.typeChipActive : {}) }} onClick={() => setType(t.id)}>
+                          {t.label}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div style={ds.row2}>
+                  <div style={ds.field}>
+                    <label style={ds.lbl}>Tax ID / PIB</label>
+                    <input style={ds.input} value={taxId} onChange={e => setTaxId(e.target.value)} placeholder="e.g. 123456789" />
+                  </div>
+                  <div style={ds.field}>
+                    <label style={ds.lbl}>Country</label>
+                    <input style={ds.input} value={country} onChange={e => setCountry(e.target.value)} placeholder="e.g. Serbia" />
+                  </div>
+                </div>
+                <div style={ds.row2}>
+                  <div style={ds.field}>
+                    <label style={ds.lbl}>Address</label>
+                    <input style={ds.input} value={address} onChange={e => setAddress(e.target.value)} placeholder="Street address..." />
+                  </div>
+                  <div style={ds.field}>
+                    <label style={ds.lbl}>City</label>
+                    <input style={ds.input} value={city} onChange={e => setCity(e.target.value)} placeholder="City..." />
+                  </div>
+                </div>
               </div>
-              <div style={ds.field}>
-                <label style={ds.lbl}>Type <span style={{ color: '#E24B4A' }}>*</span></label>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  {[
-                    { id: 'vendor', label: '📤 Vendor' },
-                    { id: 'customer', label: '📥 Customer' },
-                    { id: 'both', label: '🔄 Both' },
-                  ].map(t => (
-                    <div key={t.id}
-                      style={{ ...ds.typeChip, ...(type === t.id ? ds.typeChipActive : {}) }}
-                      onClick={() => setType(t.id)}>
-                      {t.label}
+
+              <div style={ds.section}>
+                <div style={ds.sectionTitle}>Contact</div>
+                <div style={ds.row3}>
+                  <div style={ds.field}>
+                    <label style={ds.lbl}>Contact person</label>
+                    <input style={ds.input} value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Full name..." />
+                  </div>
+                  <div style={ds.field}>
+                    <label style={ds.lbl}>Email</label>
+                    <input style={ds.input} type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} placeholder="email@example.com" />
+                  </div>
+                  <div style={ds.field}>
+                    <label style={ds.lbl}>Phone</label>
+                    <input style={ds.input} value={contactPhone} onChange={e => setContactPhone(e.target.value)} placeholder="+381..." />
+                  </div>
+                </div>
+              </div>
+
+              <div style={ds.section}>
+                <div style={ds.sectionTitle}>Note & status</div>
+                <div style={ds.field}>
+                  <label style={ds.lbl}>Note</label>
+                  <textarea style={ds.textarea} value={note} onChange={e => setNote(e.target.value)} placeholder="Additional notes..." />
+                </div>
+                <div style={{ ...ds.toggleRow, marginTop: '10px' }}>
+                  <span style={{ fontSize: '13px', color: '#111' }}>Active partner</span>
+                  <label style={ds.toggle}>
+                    <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
+                    <span style={{ ...ds.toggleSlider, background: isActive ? '#1D9E75' : '#ddd' }} />
+                  </label>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ── TAB: Bank accounts ── */}
+          {activeTab === 'accounts' && (
+            <div style={ds.section}>
+              <div style={ds.sectionTitle}>Bank accounts</div>
+
+              {loadingAccounts ? (
+                <div style={{ padding: '20px', textAlign: 'center' as const, color: '#888', fontSize: '13px' }}>Loading...</div>
+              ) : accounts.length === 0 ? (
+                <div style={{ padding: '20px', textAlign: 'center' as const, color: '#aaa', fontSize: '13px', background: '#f5f5f3', borderRadius: '8px', marginBottom: '16px' }}>
+                  No bank accounts yet.
+                </div>
+              ) : (
+                <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column' as const, gap: '8px' }}>
+                  {accounts.map(acc => (
+                    <div key={acc.id} style={{ ...ds.accountRow, ...(acc.is_primary ? ds.accountRowPrimary : {}) }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: '500', color: '#111', fontFamily: 'monospace' }}>
+                            {acc.account_number}
+                          </span>
+                          {acc.is_primary && (
+                            <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: '#E1F5EE', color: '#085041' }}>
+                              ★ Primary
+                            </span>
+                          )}
+                          <span style={{ fontSize: '10px', padding: '1px 7px', borderRadius: '20px', background: '#f0f0ee', color: '#666' }}>
+                            {acc.currency || 'RSD'}
+                          </span>
+                        </div>
+                        {acc.bank_name && (
+                          <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>{acc.bank_name}</div>
+                        )}
+                        {acc.model && (
+                          <div style={{ fontSize: '11px', color: '#aaa' }}>Model: {acc.model}</div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        {!acc.is_primary && (
+                          <button style={ds.accountBtn} onClick={() => setPrimary(acc.id)}>
+                            ★ Set primary
+                          </button>
+                        )}
+                        <button style={{ ...ds.accountBtn, color: '#A32D2D', borderColor: '#F5A9A9' }} onClick={() => deleteAccount(acc.id)}>
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
-              </div>
-            </div>
-            <div style={ds.row2}>
-              <div style={ds.field}>
-                <label style={ds.lbl}>Tax ID / PIB</label>
-                <input style={ds.input} value={taxId} onChange={e => setTaxId(e.target.value)} placeholder="e.g. 123456789" />
-              </div>
-              <div style={ds.field}>
-                <label style={ds.lbl}>Country</label>
-                <input style={ds.input} value={country} onChange={e => setCountry(e.target.value)} placeholder="e.g. Serbia" />
-              </div>
-            </div>
-            <div style={ds.row2}>
-              <div style={ds.field}>
-                <label style={ds.lbl}>Address</label>
-                <input style={ds.input} value={address} onChange={e => setAddress(e.target.value)} placeholder="Street address..." />
-              </div>
-              <div style={ds.field}>
-                <label style={ds.lbl}>City</label>
-                <input style={ds.input} value={city} onChange={e => setCity(e.target.value)} placeholder="City..." />
-              </div>
-            </div>
-          </div>
+              )}
 
-          <div style={ds.section}>
-            <div style={ds.sectionTitle}>Contact</div>
-            <div style={ds.row3}>
-              <div style={ds.field}>
-                <label style={ds.lbl}>Contact person</label>
-                <input style={ds.input} value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Full name..." />
-              </div>
-              <div style={ds.field}>
-                <label style={ds.lbl}>Email</label>
-                <input style={ds.input} type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} placeholder="email@example.com" />
-              </div>
-              <div style={ds.field}>
-                <label style={ds.lbl}>Phone</label>
-                <input style={ds.input} value={contactPhone} onChange={e => setContactPhone(e.target.value)} placeholder="+381..." />
+              {/* Add new account */}
+              <div style={{ background: '#f5f5f3', borderRadius: '10px', padding: '14px', border: '0.5px solid #e5e5e5' }}>
+                <div style={{ fontSize: '11px', fontWeight: '500', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.07em', marginBottom: '10px' }}>
+                  Add new account
+                </div>
+                <div style={ds.row2}>
+                  <div style={ds.field}>
+                    <label style={ds.lbl}>Account number <span style={{ color: '#E24B4A' }}>*</span></label>
+                    <input style={ds.input} value={newAccNum} onChange={e => setNewAccNum(e.target.value)} placeholder="e.g. 265-1234567-89" />
+                  </div>
+                  <div style={ds.field}>
+                    <label style={ds.lbl}>Bank name</label>
+                    <input style={ds.input} value={newBankName} onChange={e => setNewBankName(e.target.value)} placeholder="e.g. Raiffeisen" />
+                  </div>
+                </div>
+                <div style={ds.row2}>
+                  <div style={ds.field}>
+                    <label style={ds.lbl}>Currency</label>
+                    <select style={ds.select} value={newCurrency} onChange={e => setNewCurrency(e.target.value)}>
+                      <option>RSD</option>
+                      <option>EUR</option>
+                      <option>USD</option>
+                      <option>AED</option>
+                    </select>
+                  </div>
+                  <div style={ds.field}>
+                    <label style={ds.lbl}>Model</label>
+                    <input style={ds.input} value={newModel} onChange={e => setNewModel(e.target.value)} placeholder="e.g. 97" />
+                  </div>
+                </div>
+                <button
+                  style={{ ...ds.btnPrimary, opacity: !newAccNum.trim() || addingAccount ? 0.6 : 1 }}
+                  onClick={addAccount}
+                  disabled={!newAccNum.trim() || addingAccount}
+                >
+                  {addingAccount ? 'Adding...' : '+ Add account'}
+                </button>
               </div>
             </div>
-          </div>
-
-          <div style={ds.section}>
-            <div style={ds.sectionTitle}>Note & status</div>
-            <div style={ds.field}>
-              <label style={ds.lbl}>Note</label>
-              <textarea style={ds.textarea} value={note} onChange={e => setNote(e.target.value)} placeholder="Additional notes..." />
-            </div>
-            <div style={ds.toggleRow}>
-              <span style={{ fontSize: '13px', color: '#111' }}>Active partner</span>
-              <label style={ds.toggle}>
-                <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
-                <span style={{ ...ds.toggleSlider, background: isActive ? '#1D9E75' : '#ddd' }} />
-              </label>
-            </div>
-          </div>
+          )}
         </div>
 
         <div style={ds.footer}>
           <button style={ds.btnGhost} onClick={onClose}>Cancel</button>
-          <button style={ds.btnPrimary} onClick={handleSave} disabled={saving || !name.trim()}>
-            {saving ? 'Saving...' : partner ? 'Update partner' : 'Save partner'}
-          </button>
+          {activeTab === 'info' && (
+            <button style={ds.btnPrimary} onClick={handleSave} disabled={saving || !name.trim()}>
+              {saving ? 'Saving...' : partner ? 'Update partner' : 'Save partner'}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -415,6 +568,10 @@ const ds: Record<string, React.CSSProperties> = {
   header: { background: '#0a1628', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
   headerTitle: { color: '#fff', fontSize: '15px', fontWeight: '500' },
   closeBtn: { background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '22px', cursor: 'pointer', padding: '0 4px', lineHeight: 1 },
+  tabBar: { display: 'flex', gap: '0', borderBottom: '0.5px solid #e5e5e5', background: '#fafaf9' },
+  tab: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '10px 20px', border: 'none', background: 'transparent', color: '#888', cursor: 'pointer', borderBottom: '2px solid transparent', display: 'flex', alignItems: 'center', gap: '6px' },
+  tabActive: { color: '#1D9E75', borderBottom: '2px solid #1D9E75', background: '#fff', fontWeight: '500' },
+  tabBadge: { fontSize: '10px', background: '#1D9E75', color: '#fff', borderRadius: '20px', padding: '1px 6px', fontWeight: '500' },
   body: { padding: '1.5rem', overflowY: 'auto', flex: 1 },
   footer: { padding: '1rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', justifyContent: 'flex-end', gap: '8px', background: '#f5f5f3' },
   section: { marginBottom: '1.5rem' },
@@ -424,12 +581,16 @@ const ds: Record<string, React.CSSProperties> = {
   field: { display: 'flex', flexDirection: 'column' as const, gap: '4px' },
   lbl: { fontSize: '11px', fontWeight: '500', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.07em' },
   input: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 10px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#fff', color: '#111', outline: 'none' },
+  select: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 10px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#fff', color: '#111', outline: 'none' },
   textarea: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 10px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#fff', color: '#111', outline: 'none', resize: 'vertical' as const, minHeight: '60px' },
   typeChip: { flex: 1, padding: '8px 6px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#f5f5f3', fontSize: '12px', cursor: 'pointer', textAlign: 'center' as const, color: '#888' },
   typeChipActive: { border: '2px solid #1D9E75', background: '#E1F5EE', color: '#085041', fontWeight: '500' },
   toggleRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#f5f5f3', borderRadius: '8px', border: '0.5px solid #e5e5e5' },
   toggle: { position: 'relative' as const, width: '36px', height: '20px', cursor: 'pointer', flexShrink: 0 },
   toggleSlider: { position: 'absolute' as const, inset: 0, borderRadius: '10px', transition: 'background 0.2s', display: 'block' },
+  accountRow: { display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#fff' },
+  accountRowPrimary: { border: '1.5px solid #1D9E75', background: '#f0fdf8' },
+  accountBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '4px 10px', border: '0.5px solid #e5e5e5', borderRadius: '6px', background: 'transparent', color: '#666', cursor: 'pointer', whiteSpace: 'nowrap' as const },
   btnGhost: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 16px', borderRadius: '8px', border: '0.5px solid #e5e5e5', background: 'transparent', color: '#666', cursor: 'pointer' },
   btnPrimary: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 18px', borderRadius: '8px', border: 'none', background: '#1D9E75', color: '#fff', cursor: 'pointer', fontWeight: '500' },
 }
