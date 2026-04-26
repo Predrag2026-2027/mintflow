@@ -60,6 +60,8 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   const [accNum, setAccNum] = useState('')
   const [model, setModel] = useState('')
   const [refNum, setRefNum] = useState('')
+  const [partnerAccounts, setPartnerAccounts] = useState<any[]>([])
+  const [selectedAccountId, setSelectedAccountId] = useState('')
 
   // Step 3 (Type & classification)
   const [txType, setTxType] = useState<'invoice_payment' | 'direct'>('invoice_payment')
@@ -208,6 +210,31 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
     fetchOpenInvoices()
   }, [companyId])
 
+  // Load partner accounts when partner changes
+  useEffect(() => {
+    if (!partnerId) { setPartnerAccounts([]); setSelectedAccountId(''); return }
+    const load = async () => {
+      const { data } = await supabase
+        .from('partner_accounts')
+        .select('*')
+        .eq('partner_id', partnerId)
+        .eq('currency', 'RSD')
+        .order('is_primary', { ascending: false })
+      if (data && data.length > 0) {
+        setPartnerAccounts(data)
+        const primary = data.find((a: any) => a.is_primary) || data[0]
+        setSelectedAccountId(primary.id)
+        setAccNum(primary.account_number || '')
+        setModel(primary.model || '')
+        if (!refNum) setRefNum(primary.reference_number || '')
+      } else {
+        setPartnerAccounts([])
+        setSelectedAccountId('')
+      }
+    }
+    load()
+  }, [partnerId]) // eslint-disable-line
+
   useEffect(() => {
     if (!transaction) return
     setCompanyId(transaction.company_id || '')
@@ -318,6 +345,12 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
 
   const removeInvoiceLink = (invId: string) => setLinkedInvoices(prev => prev.filter(l => l.invoice_id !== invId))
   const updateAllocated = (invId: string, val: number) => setLinkedInvoices(prev => prev.map(l => l.invoice_id === invId ? { ...l, allocated_usd: val } : l))
+
+  const handleAccountSelect = (accountId: string) => {
+    setSelectedAccountId(accountId)
+    const acc = partnerAccounts.find((a: any) => a.id === accountId)
+    if (acc) { setAccNum(acc.account_number || ''); setModel(acc.model || '') }
+  }
 
   const fetchRate = async () => {
     if (!currency || currency === 'USD') { setExRate('1'); setRateSource('N/A'); return }
@@ -574,7 +607,25 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                 </div>
                 {showBankFields ? (
                   <div style={s.row3}>
-                    <div style={s.field}><label style={s.lbl}>Account number</label><input style={s.input} value={accNum} onChange={e => setAccNum(e.target.value)} placeholder="Partner account" /></div>
+                    <div style={s.field}>
+                      <label style={s.lbl}>Account number (RSD)</label>
+                      {partnerAccounts.length > 1 ? (
+                        <select style={s.select} value={selectedAccountId} onChange={e => handleAccountSelect(e.target.value)}>
+                          {partnerAccounts.map((acc: any) => (
+                            <option key={acc.id} value={acc.id}>
+                              {acc.account_number}{acc.bank_name ? ` — ${acc.bank_name}` : ''}{acc.is_primary ? ' ★' : ''}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input style={s.input} value={accNum} onChange={e => setAccNum(e.target.value)} placeholder="Partner account" />
+                      )}
+                      {partnerAccounts.length > 0 && (
+                        <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '2px' }}>
+                          {partnerAccounts.length} račun{partnerAccounts.length > 1 ? 'a' : ''} pronađeno
+                        </div>
+                      )}
+                    </div>
                     <div style={s.field}><label style={s.lbl}>Model</label><input style={s.input} value={model} onChange={e => setModel(e.target.value)} placeholder="e.g. 97" /></div>
                     <div style={s.field}><label style={s.lbl}>Reference number</label><input style={s.input} value={refNum} onChange={e => setRefNum(e.target.value)} placeholder="Poziv na broj" /></div>
                   </div>
