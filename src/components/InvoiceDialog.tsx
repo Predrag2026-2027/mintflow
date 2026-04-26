@@ -763,6 +763,28 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                 </div>
               )}
               {invType === 'expense' && (
+                <>
+                  <div style={s.section}>
+                    <div style={s.sectionTitle}>P&L classification</div>
+                    <div style={s.row2}>
+                      <div style={s.field}>
+                        <label style={s.lbl}>P&L Category {!linkedTxId && <span style={s.req}>*</span>}</label>
+                        <select style={{ ...s.select, ...(fieldErr('plCat') ? s.inputError : {}) }} value={plCatId}
+                          onChange={e => { const cat = plCategories.find(c => c.id === e.target.value); setPlCatId(e.target.value); setPlCatName(cat?.name || ''); setPlSubId(''); setPlSubName(''); touch('plCat') }}
+                          onBlur={() => touch('plCat')}>
+                          <option value="">Select P&L category...</option>
+                          {expenseCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                        {fieldErr('plCat') && <span style={s.errorMsg}>{fieldErr('plCat')}</span>}
+                      </div>
+                      <div style={s.field}>
+                        <label style={s.lbl}>P&L Sub-category</label>
+                        <select style={s.select} value={plSubId}
+                          onChange={e => { const sub = plSubcategories.find(s => s.id === e.target.value); setPlSubId(e.target.value); setPlSubName(sub?.name || '') }}
+                          disabled={!plCatId || currentPlSubs.length === 0}>
+                          <option value="">Select sub-category...</option>
+                          {currentPlSubs.map(sub => <option key={sub.id} value={sub.id}>{sub.name}</option>)}
+                        </select>
                       </div>
                     </div>
                     <div style={s.row2}>
