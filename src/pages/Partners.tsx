@@ -50,10 +50,11 @@ export default function Partners() {
     vendor: { bg: '#FCEBEB', color: '#A32D2D' },
     customer: { bg: '#E1F5EE', color: '#085041' },
     both: { bg: '#E6F1FB', color: '#0C447C' },
+    company: { bg: '#F0F0EE', color: '#666' },
   }
 
   const typeLabels: Record<string, string> = {
-    vendor: 'Vendor', customer: 'Customer', both: 'Both',
+    vendor: 'Vendor', customer: 'Customer', both: 'Both', company: 'Company',
   }
 
   return (
@@ -123,6 +124,7 @@ export default function Partners() {
             <option value="vendor">Vendors</option>
             <option value="customer">Customers</option>
             <option value="both">Both</option>
+            <option value="company">Company</option>
           </select>
           <div style={s.totalBadge}>{filtered.length} partners</div>
         </div>
@@ -351,7 +353,7 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
                   <div style={ds.field}>
                     <label style={ds.lbl}>Type <span style={{ color: '#E24B4A' }}>*</span></label>
                     <div style={{ display: 'flex', gap: '6px' }}>
-                      {[{ id: 'vendor', label: '📤 Vendor' }, { id: 'customer', label: '📥 Customer' }, { id: 'both', label: '🔄 Both' }].map(t => (
+                      {[{ id: 'vendor', label: '📤 Vendor' }, { id: 'customer', label: '📥 Customer' }, { id: 'both', label: '🔄 Both' }, { id: 'company', label: '🏢 Company' }].map(t => (
                         <div key={t.id} style={{ ...ds.typeChip, ...(type === t.id ? ds.typeChipActive : {}) }} onClick={() => setType(t.id)}>
                           {t.label}
                         </div>
