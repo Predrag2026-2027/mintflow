@@ -227,6 +227,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
         setAccNum(primary.account_number || '')
         setModel(primary.model || '')
         if (!refNum) setRefNum(primary.reference_number || '')
+        setShowBankFields(true) // auto-otvori sekciju kada postoje računi
       } else {
         setPartnerAccounts([])
         setSelectedAccountId('')
