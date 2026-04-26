@@ -146,10 +146,24 @@ export default function PL() {
   }
 
   // ── Totals ───────────────────────────────────────────
+  const totalRevenueSG = Object.values(revenueByStream).reduce((s, r) => s + r.sg, 0)
+  const totalRevenueAF = Object.values(revenueByStream).reduce((s, r) => s + r.af, 0)
   const totalRevenue = Object.values(revenueByStream).reduce((s, r) => s + r.total, 0)
+
+  const totalReductionsSG = Object.values(reductionByName).reduce((s, r) => s + r.sg, 0)
+  const totalReductionsAF = Object.values(reductionByName).reduce((s, r) => s + r.af, 0)
   const totalReductions = Object.values(reductionByName).reduce((s, r) => s + r.total, 0)
+
+  const grossProfitSG = totalRevenueSG - totalReductionsSG
+  const grossProfitAF = totalRevenueAF - totalReductionsAF
   const grossProfit = totalRevenue - totalReductions
+
+  const totalExpensesSG = expenseEntries.reduce((s, e) => s + allocAmount(e, 'sg'), 0)
+  const totalExpensesAF = expenseEntries.reduce((s, e) => s + allocAmount(e, 'af'), 0)
   const totalExpenses = expenseEntries.reduce((s, e) => s + (e.amount_usd || 0), 0)
+
+  const netProfitSG = grossProfitSG - totalExpensesSG
+  const netProfitAF = grossProfitAF - totalExpensesAF
   const netProfit = grossProfit - totalExpenses
   const margin = totalRevenue > 0 ? (netProfit / totalRevenue * 100) : 0
 
@@ -294,8 +308,8 @@ export default function PL() {
                   }
                   <tr style={s.totalRow}>
                     <td style={s.totalCell}>TOTAL REVENUE</td>
-                    <td style={{ ...s.totalCell, textAlign: 'right' as const }}></td>
-                    <td style={{ ...s.totalCell, textAlign: 'right' as const }}></td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#0F6E56' }}>{fmtUSD(totalRevenueSG)}</td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#0F6E56' }}>{fmtUSD(totalRevenueAF)}</td>
                     <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#0F6E56' }}>{fmtUSD(totalRevenue)}</td>
                   </tr>
 
@@ -314,16 +328,16 @@ export default function PL() {
                   }
                   <tr style={s.totalRow}>
                     <td style={s.totalCell}>TOTAL REDUCTIONS</td>
-                    <td style={{ ...s.totalCell, textAlign: 'right' as const }}></td>
-                    <td style={{ ...s.totalCell, textAlign: 'right' as const }}></td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmtUSD(totalReductionsSG)}</td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmtUSD(totalReductionsAF)}</td>
                     <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmtUSD(totalReductions)}</td>
                   </tr>
 
                   {/* ── GROSS PROFIT ── */}
                   <tr style={s.grossRow}>
                     <td style={s.grossCell}>GROSS PROFIT</td>
-                    <td style={{ ...s.grossCell, textAlign: 'right' as const }}></td>
-                    <td style={{ ...s.grossCell, textAlign: 'right' as const }}></td>
+                    <td style={{ ...s.grossCell, textAlign: 'right' as const, color: grossProfitSG >= 0 ? '#085041' : '#A32D2D' }}>{fmtUSDSigned(grossProfitSG)}</td>
+                    <td style={{ ...s.grossCell, textAlign: 'right' as const, color: grossProfitAF >= 0 ? '#085041' : '#A32D2D' }}>{fmtUSDSigned(grossProfitAF)}</td>
                     <td style={{ ...s.grossCell, textAlign: 'right' as const, color: grossProfit >= 0 ? '#085041' : '#A32D2D' }}>{fmtUSDSigned(grossProfit)}</td>
                   </tr>
 
@@ -354,8 +368,8 @@ export default function PL() {
                             }
                             <tr style={s.subTotalRow}>
                               <td style={{ ...s.subTotalCell, paddingLeft: '1rem' }}>Total {cat.name}</td>
-                              <td style={{ ...s.subTotalCell, textAlign: 'right' as const }}></td>
-                              <td style={{ ...s.subTotalCell, textAlign: 'right' as const }}></td>
+                              <td style={{ ...s.subTotalCell, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(Object.values(items).reduce((s, i) => s + i.sg, 0))}</td>
+                              <td style={{ ...s.subTotalCell, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(Object.values(items).reduce((s, i) => s + i.af, 0))}</td>
                               <td style={{ ...s.subTotalCell, textAlign: 'right' as const, color: catTotal > 0 ? '#A32D2D' : '#888' }}>{fmtUSD(catTotal)}</td>
                             </tr>
                           </React.Fragment>
@@ -395,8 +409,8 @@ export default function PL() {
                           {/* Department subtotal */}
                           <tr style={s.subTotalRow}>
                             <td style={{ ...s.subTotalCell, paddingLeft: '1rem' }}>Total {dept}</td>
-                            <td style={{ ...s.subTotalCell, textAlign: 'right' as const }}></td>
-                            <td style={{ ...s.subTotalCell, textAlign: 'right' as const }}></td>
+                            <td style={{ ...s.subTotalCell, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(Object.values(data.subcategories).reduce((s, i) => s + i.sg, 0))}</td>
+                            <td style={{ ...s.subTotalCell, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(Object.values(data.subcategories).reduce((s, i) => s + i.af, 0))}</td>
                             <td style={{ ...s.subTotalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmtUSD(data.total)}</td>
                           </tr>
                         </React.Fragment>
@@ -406,16 +420,16 @@ export default function PL() {
 
                   <tr style={s.totalRow}>
                     <td style={s.totalCell}>TOTAL EXPENSES</td>
-                    <td style={{ ...s.totalCell, textAlign: 'right' as const }}></td>
-                    <td style={{ ...s.totalCell, textAlign: 'right' as const }}></td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmtUSD(totalExpensesSG)}</td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmtUSD(totalExpensesAF)}</td>
                     <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmtUSD(totalExpenses)}</td>
                   </tr>
 
                   {/* ── NET PROFIT ── */}
                   <tr style={s.netRow}>
                     <td style={s.netCell}>NET PROFIT / LOSS</td>
-                    <td style={{ ...s.netCell, textAlign: 'right' as const }}></td>
-                    <td style={{ ...s.netCell, textAlign: 'right' as const }}></td>
+                    <td style={{ ...s.netCell, textAlign: 'right' as const, color: netProfitSG >= 0 ? '#5DCAA5' : '#F5A9A9' }}>{fmtUSDSigned(netProfitSG)}</td>
+                    <td style={{ ...s.netCell, textAlign: 'right' as const, color: netProfitAF >= 0 ? '#5DCAA5' : '#F5A9A9' }}>{fmtUSDSigned(netProfitAF)}</td>
                     <td style={{ ...s.netCell, textAlign: 'right' as const, color: netProfit >= 0 ? '#5DCAA5' : '#F5A9A9' }}>{fmtUSDSigned(netProfit)}</td>
                   </tr>
 
