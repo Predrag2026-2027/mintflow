@@ -41,8 +41,10 @@ interface ImportRow {
   parsed: ParsedRow
   proposal: AIProposal | null
   status: RowStatus
-  override_tx_type: 'direct' | 'invoice_payment'
+  override_tx_type: 'direct' | 'invoice_payment' | 'passthrough'
   override_tx_subtype: 'expense' | 'revenue'
+  override_pt_direction: 'in' | 'out'
+  override_pt_period: string
   override_payment_method: string
   override_linked_invoice_id: string
   override_pl_category_id: string
@@ -63,7 +65,6 @@ interface ImportRow {
 const PAYMENT_METHODS = ['Wire transfer', 'ACH transfer', 'Cash', 'Check', 'Credit card', 'Direct debit', 'Other']
 const REVENUE_STREAMS = ['Social Growth', 'Aimfox', 'Outsourced Services', 'VAT Claimed', 'Interest Received', 'Loans', 'Credit', 'Other']
 
-// ── Format detection ──────────────────────────────────────
 function detectFormat(content: string, fileName: string): 'raiffeisen' | 'truist' | 'boa' | 'amex' | 'unknown' {
   if (fileName.toLowerCase().endsWith('.xlsx') || fileName.toLowerCase().endsWith('.xls')) return 'amex'
   const firstLine = content.split('\n')[0] || ''
@@ -73,7 +74,6 @@ function detectFormat(content: string, fileName: string): 'raiffeisen' | 'truist
   return 'unknown'
 }
 
-// ── Raiffeisen/Intesa parser ──────────────────────────────
 function parseRaiffeisen(content: string): ParsedRow[] {
   const lines = content.split('\n').filter(l => l.trim())
   if (lines.length < 2) return []
@@ -106,13 +106,10 @@ function parseRaiffeisen(content: string): ParsedRow[] {
   return rows
 }
 
-// ── Truist CSV parser ────────────────────────────────────
 function parseTruist(content: string): ParsedRow[] {
   const lines = content.split('\n').filter(l => l.trim())
   if (lines.length < 2) return []
   const rows: ParsedRow[] = []
-
-  // Parse CSV respecting quoted fields
   const parseCSVLine = (line: string): string[] => {
     const result: string[] = []
     let current = ''
@@ -125,26 +122,19 @@ function parseTruist(content: string): ParsedRow[] {
     result.push(current.trim())
     return result
   }
-
   lines.slice(1).forEach((line, index) => {
     if (!line.trim()) return
     const cols = parseCSVLine(line)
     if (cols.length < 9) return
-    // Posted Date, Transaction Date, Type, Check#, Full description, Merchant name, Category, Sub-category, Amount
     const type = cols[2]?.trim().toLowerCase()
     const rawAmount = parseFloat(cols[8]?.replace(/[,$]/g, '') || '0') || 0
     if (rawAmount === 0) return
-
-    // Debit/POS = expense (money out), Credit = revenue (money in)
     const isExpense = type === 'debit' || type === 'pos'
     const debit = isExpense ? rawAmount : null
     const credit = isExpense ? null : rawAmount
-
-    // Format date from MM/DD/YYYY to DD.MM.YYYY for consistency
     const rawDate = cols[1]?.trim() || cols[0]?.trim() || ''
     const dateParts = rawDate.split('/')
     const date = dateParts.length === 3 ? `${dateParts[1]}.${dateParts[0]}.${dateParts[2]}` : rawDate
-
     rows.push({
       id: `row_${index}`, source_format: 'truist',
       date, statement_number: '', currency: 'USD',
@@ -158,21 +148,16 @@ function parseTruist(content: string): ParsedRow[] {
   return rows
 }
 
-// ── Bank of America CSV parser ───────────────────────────
 function parseBOA(content: string): ParsedRow[] {
   const lines = content.split('\n').filter(l => l.trim())
   const rows: ParsedRow[] = []
-
-  // Find data start — skip summary header, find line with "Date,Description,Amount"
   let dataStart = 0
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].startsWith('Date,') && lines[i].includes('Description') && lines[i].includes('Amount')) {
-      dataStart = i + 1
-      break
+      dataStart = i + 1; break
     }
   }
   if (dataStart === 0) return []
-
   const parseCSVLine = (line: string): string[] => {
     const result: string[] = []
     let current = ''
@@ -185,30 +170,19 @@ function parseBOA(content: string): ParsedRow[] {
     result.push(current.trim())
     return result
   }
-
   lines.slice(dataStart).forEach((line, index) => {
     if (!line.trim()) return
     const cols = parseCSVLine(line)
     if (cols.length < 3) return
-
-    // Date, Description, Amount, Running Bal
     const rawDate = cols[0]?.trim() || ''
     const description = cols[1]?.trim() || ''
     const rawAmount = parseFloat(cols[2]?.replace(/[,$]/g, '') || '0') || 0
     if (rawAmount === 0) return
-
-    // Skip balance rows
     if (description.toLowerCase().includes('beginning balance') || description.toLowerCase().includes('ending balance')) return
-
-    // Negative = expense, positive = revenue
     const debit = rawAmount < 0 ? Math.abs(rawAmount) : null
     const credit = rawAmount > 0 ? rawAmount : null
-
-    // Format date MM/DD/YYYY → DD.MM.YYYY
     const dateParts = rawDate.split('/')
     const date = dateParts.length === 3 ? `${dateParts[1]}.${dateParts[0]}.${dateParts[2]}` : rawDate
-
-    // Extract partner name from description (first meaningful part)
     let partnerName = description
     if (description.includes('WIRE TYPE:')) {
       const bnfMatch = description.match(/BNF:([^I]+?)(?:\s+ID:|$)/)
@@ -216,7 +190,6 @@ function parseBOA(content: string): ParsedRow[] {
     } else if (description.includes(' DES:')) {
       partnerName = description.split(' DES:')[0].trim()
     }
-
     rows.push({
       id: `row_${index}`, source_format: 'boa',
       date, statement_number: '', currency: 'USD',
@@ -229,48 +202,32 @@ function parseBOA(content: string): ParsedRow[] {
   return rows
 }
 
-// ── Amex XLSX parser ─────────────────────────────────────
 function parseAmex(workbook: XLSX.WorkBook): ParsedRow[] {
   const ws = workbook.Sheets[workbook.SheetNames[0]]
   const data: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
   const rows: ParsedRow[] = []
-
-  // Find header row (contains "Date" and "Description" and "Amount")
   let headerRow = -1
   for (let i = 0; i < data.length; i++) {
     const row = data[i]
-    if (row[0] === 'Date' && row[2] === 'Description' && row[3] === 'Amount') {
-      headerRow = i
-      break
-    }
+    if (row[0] === 'Date' && row[2] === 'Description' && row[3] === 'Amount') { headerRow = i; break }
   }
   if (headerRow === -1) return []
-
   data.slice(headerRow + 1).forEach((row, index) => {
     if (!row[0] || !row[3]) return
     const rawAmount = typeof row[3] === 'number' ? row[3] : parseFloat(String(row[3]).replace(/[,$]/g, '') || '0')
     if (isNaN(rawAmount) || rawAmount === 0) return
-
-    // Amex: positive = charge (expense), negative = payment/credit (skip payments)
     const isPayment = String(row[2] || '').toLowerCase().includes('payment') && rawAmount < 0
     if (isPayment) return
-
     const debit = rawAmount > 0 ? rawAmount : null
     const credit = rawAmount < 0 ? Math.abs(rawAmount) : null
-
-    // Format date MM/DD/YYYY → DD.MM.YYYY
     const rawDate = String(row[0] || '')
     const dateParts = rawDate.split('/')
     const date = dateParts.length === 3 ? `${dateParts[1]}.${dateParts[0]}.${dateParts[2]}` : rawDate
-
     const description = String(row[2] || '').trim()
     const category = String(row[11] || '').trim()
     const city = String(row[7] || '').trim()
-
-    // Partner name: clean up description
     let partnerName = description.split(/\s{2,}/)[0].trim()
     if (city) partnerName = partnerName.replace(city, '').trim()
-
     rows.push({
       id: `row_${index}`, source_format: 'amex',
       date, statement_number: String(row[10] || ''), currency: 'USD',
@@ -284,7 +241,6 @@ function parseAmex(workbook: XLSX.WorkBook): ParsedRow[] {
   return rows
 }
 
-// ── Format date to YYYY-MM-DD ────────────────────────────
 function formatDate(d: string): string {
   if (!d) return ''
   const parts = d.split('.')
@@ -298,6 +254,8 @@ function makeImportRow(parsed: ParsedRow): ImportRow {
     parsed, proposal: null, status: 'pending',
     override_tx_type: 'direct',
     override_tx_subtype: isExpense ? 'expense' : 'revenue',
+    override_pt_direction: isExpense ? 'out' : 'in',
+    override_pt_period: new Date().toISOString().slice(0, 7),
     override_payment_method: 'Wire transfer',
     override_linked_invoice_id: '',
     override_pl_category_id: '', override_pl_category_name: '',
@@ -317,7 +275,6 @@ const FORMAT_LABELS: Record<string, string> = {
   amex: '💳 American Express',
 }
 
-// ── Main Component ────────────────────────────────────────
 export default function BulkImport({ onClose, onImported }: Props) {
   const [step, setStep] = useState<'upload' | 'review' | 'posting' | 'done'>('upload')
   const [rows, setRows] = useState<ImportRow[]>([])
@@ -393,14 +350,12 @@ export default function BulkImport({ onClose, onImported }: Props) {
     setParseError('')
     setFileName(file.name)
     setDetectedFormat('')
-
     try {
       if (file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')) {
-        // Amex XLSX
         const buffer = await file.arrayBuffer()
         const workbook = XLSX.read(buffer, { type: 'array' })
         const parsed = parseAmex(workbook)
-        if (parsed.length === 0) { setParseError('Could not parse Amex file. Make sure it is a valid Amex export.'); return }
+        if (parsed.length === 0) { setParseError('Could not parse Amex file.'); return }
         setDetectedFormat('amex')
         setRows(parsed.map(makeImportRow))
       } else {
@@ -427,50 +382,40 @@ export default function BulkImport({ onClose, onImported }: Props) {
   }
 
   const analyzeWithAI = async () => {
-  if (!company || !bank) return
-  setAnalyzing(true)
-  setAnalyzeError('')
-  setProgress(0)
+    if (!company || !bank) return
+    setAnalyzing(true)
+    setAnalyzeError('')
+    setProgress(0)
 
-  // ── Auto-fetch exchange rates for non-USD currencies ──
-  const supabaseUrl = process.env.REACT_APP_SUPABASE_URL
-  const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY
-  const rateCache: Record<string, number> = {} // key: "RSD_2026-04-15"
+    const supabaseUrl = process.env.REACT_APP_SUPABASE_URL
+    const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY
+    const rateCache: Record<string, number> = {}
 
-  const rowsWithRates = await Promise.all(rows.map(async (row) => {
-    const { currency, date, debit, credit } = row.parsed
-    if (currency === 'USD') return row // already USD
-
-    const amount = (debit || 0) > 0 ? (debit || 0) : (credit || 0)
-    if (!amount) return row
-
-    // Format date DD.MM.YYYY -> YYYY-MM-DD for API
-    const parts = date.split('.')
-    const isoDate = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : date
-    const cacheKey = `${currency}_${isoDate}`
-
-    if (!rateCache[cacheKey]) {
-      try {
-        const rateData = await getRate(currency, isoDate)
-        rateCache[cacheKey] = rateData.rate
-      } catch {
-        const fallbacks: Record<string, number> = { RSD: 105.0, EUR: 1.08, AED: 0.272 }
-        rateCache[cacheKey] = fallbacks[currency] || 1
+    const rowsWithRates = await Promise.all(rows.map(async (row) => {
+      const { currency, date, debit, credit } = row.parsed
+      if (currency === 'USD') return row
+      const amount = (debit || 0) > 0 ? (debit || 0) : (credit || 0)
+      if (!amount) return row
+      const parts = date.split('.')
+      const isoDate = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : date
+      const cacheKey = `${currency}_${isoDate}`
+      if (!rateCache[cacheKey]) {
+        try {
+          const rateData = await getRate(currency, isoDate)
+          rateCache[cacheKey] = rateData.rate
+        } catch {
+          const fallbacks: Record<string, number> = { RSD: 105.0, EUR: 1.08, AED: 0.272 }
+          rateCache[cacheKey] = fallbacks[currency] || 1
+        }
       }
-    }
+      const rate = rateCache[cacheKey]
+      const amountUsd = convertToUSD(amount, currency, rate)
+      return { ...row, parsed: { ...row.parsed, amount_usd: amountUsd, exchange_rate: rate } }
+    }))
 
-    const rate = rateCache[cacheKey]
-    const amountUsd = convertToUSD(amount, currency, rate)
+    setRows(rowsWithRates)
 
-    return {
-      ...row,
-      parsed: { ...row.parsed, amount_usd: amountUsd, exchange_rate: rate }
-    }
-  }))
-
-  setRows(rowsWithRates)
-
-  const partnerNames = partners.map(p => p.name).join(', ')
+    const partnerNames = partners.map(p => p.name).join(', ')
     const batchSize = 5
     const snapshot = [...rowsWithRates]
     const result: ImportRow[] = snapshot.map(r => ({ ...r }))
@@ -486,7 +431,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
         credit: r.parsed.credit,
         reference: r.parsed.reference_number,
       }))
-
       try {
         const response = await fetch(`${supabaseUrl}/functions/v1/ai-categorize`, {
           method: 'POST',
@@ -497,7 +441,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
         const data = await response.json()
         let proposals: AIProposal[] = []
         try { proposals = JSON.parse((data.result || '[]').replace(/```json|```/g, '').trim()) } catch { proposals = [] }
-
         for (let j = i; j < Math.min(i + batchSize, snapshot.length); j++) {
           const proposal = proposals.find((p: any) => p.row_id === snapshot[j].parsed.id)
           if (proposal) {
@@ -527,7 +470,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
       }
       setProgress(Math.round(((i + batchSize) / snapshot.length) * 100))
     }
-
     setRows(result)
     setAnalyzing(false)
     setStep('review')
@@ -552,7 +494,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
 
     for (const row of accepted) {
       const p = row.parsed
-      const isDirectWithPL = row.override_tx_type === 'direct'
       const isExpense = (p.debit || 0) > 0
       const amount = isExpense ? (p.debit || 0) : (p.credit || 0)
 
@@ -567,6 +508,32 @@ export default function BulkImport({ onClose, onImported }: Props) {
         }
       }
 
+      // ── Pass-through → postuj u passthrough tabelu ──
+      if (row.override_tx_type === 'passthrough') {
+        await supabase.from('passthrough').insert({
+          company_id: company,
+          bank_id: bank,
+          partner_id: partnerId,
+          transaction_date: formatDate(p.date),
+          direction: row.override_pt_direction,
+          period_month: row.override_pt_period || null,
+          currency: p.currency,
+          amount,
+          exchange_rate: (p as any).exchange_rate || null,
+          amount_usd: (p as any).amount_usd || (p.currency === 'USD' ? amount : null),
+          note: row.override_note || p.description || null,
+          account_number: p.account_number || null,
+          model: p.model || null,
+          reference_number: p.reference_number || null,
+          status: 'unpaired',
+        })
+        done++
+        setProgress(Math.round((done / accepted.length) * 100))
+        continue
+      }
+
+      // ── Direct / Invoice payment → postuj u transactions tabelu ──
+      const isDirectWithPL = row.override_tx_type === 'direct'
       const { data: newTx } = await supabase.from('transactions').insert({
         company_id: company, bank_id: bank, partner_id: partnerId,
         transaction_date: formatDate(p.date), statement_number: p.statement_number || null,
@@ -574,7 +541,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
         payment_method: row.override_payment_method || null,
         currency: p.currency, amount,
         exchange_rate: (p as any).exchange_rate || null,
-amount_usd: (p as any).amount_usd || (p.currency === 'USD' ? amount : null),
+        amount_usd: (p as any).amount_usd || (p.currency === 'USD' ? amount : null),
         pl_impact: isDirectWithPL,
         pl_category: isDirectWithPL ? (row.override_pl_category_name || null) : null,
         pl_subcategory: isDirectWithPL ? (row.override_pl_subcategory_name || null) : null,
@@ -613,6 +580,12 @@ amount_usd: (p as any).amount_usd || (p.currency === 'USD' ? amount : null),
     return { bg: '#FCEBEB', color: '#A32D2D' }
   }
 
+  const getTxTypeBadge = (type: string) => {
+    if (type === 'direct') return { bg: '#E1F5EE', color: '#085041', label: '⚡ Direct' }
+    if (type === 'passthrough') return { bg: '#FFFBEB', color: '#7A5A00', label: '🔄 Pass-through' }
+    return { bg: '#E6F1FB', color: '#0C447C', label: '💳 Inv. payment' }
+  }
+
   if (step === 'done') return (
     <div style={s.overlay}>
       <div style={{ ...s.dialog, alignItems: 'center', justifyContent: 'center', gap: '16px', minHeight: '260px' }}>
@@ -621,7 +594,7 @@ amount_usd: (p as any).amount_usd || (p.currency === 'USD' ? amount : null),
         </div>
         <div style={{ fontFamily: 'Georgia,serif', fontSize: '22px', color: '#111' }}>Import complete!</div>
         <div style={{ fontSize: '13px', color: '#888', textAlign: 'center' as const }}>
-          {accepted} transaction{accepted !== 1 ? 's' : ''} posted.<br />{rejected} skipped.
+          {accepted} entr{accepted !== 1 ? 'ies' : 'y'} posted.<br />{rejected} skipped.
         </div>
         <button style={s.btnPrimary} onClick={() => { onImported(); onClose() }}>View transactions</button>
       </div>
@@ -631,7 +604,7 @@ amount_usd: (p as any).amount_usd || (p.currency === 'USD' ? amount : null),
   if (step === 'posting') return (
     <div style={s.overlay}>
       <div style={{ ...s.dialog, alignItems: 'center', justifyContent: 'center', gap: '16px', minHeight: '260px' }}>
-        <div style={{ fontSize: '13px', color: '#888' }}>Posting transactions... {progress}%</div>
+        <div style={{ fontSize: '13px', color: '#888' }}>Posting... {progress}%</div>
         <div style={{ ...s.progressBar, width: '300px' }}><div style={{ ...s.progressFill, width: `${progress}%` }} /></div>
       </div>
     </div>
@@ -757,17 +730,18 @@ amount_usd: (p as any).amount_usd || (p.currency === 'USD' ? amount : null),
                   const deptSubs = getDeptSubs(row.override_department_id)
                   const expDescs = getExpDescs(row.override_dept_subcategory_id)
                   const linkedInvoice = openInvoices.find(i => i.id === row.override_linked_invoice_id)
+                  const typeBadge = getTxTypeBadge(row.override_tx_type)
 
                   return (
-                    <div key={p.id} style={{ ...s.reviewRow, ...(row.status === 'accepted' ? s.reviewRowAccepted : {}), ...(row.status === 'rejected' ? s.reviewRowRejected : {}) }}>
+                    <div key={p.id} style={{ ...s.reviewRow, ...(row.status === 'accepted' ? s.reviewRowAccepted : {}), ...(row.status === 'rejected' ? s.reviewRowRejected : {}), ...(row.override_tx_type === 'passthrough' ? s.reviewRowPassthrough : {}) }}>
                       <div style={s.reviewRowMain} onClick={() => toggleExpand(p.id)}>
                         <div style={{ flexShrink: 0, width: '14px', fontSize: '11px', color: '#bbb' }}>{isExpanded ? '▼' : '▶'}</div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px', flexWrap: 'wrap' as const }}>
                             <span style={{ fontSize: '13px', fontWeight: '500', color: '#111' }}>{row.override_partner_name || p.partner_name || '—'}</span>
                             {conf && row.proposal && <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: conf.bg, color: conf.color }}>{row.proposal.confidence}</span>}
-                            <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: row.override_tx_type === 'direct' ? '#E1F5EE' : '#E6F1FB', color: row.override_tx_type === 'direct' ? '#085041' : '#0C447C' }}>
-                              {row.override_tx_type === 'direct' ? '⚡ Direct' : '💳 Inv. payment'}
+                            <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: typeBadge.bg, color: typeBadge.color }}>
+                              {typeBadge.label}
                             </span>
                             <span style={{ fontSize: '10px', color: '#aaa' }}>{FORMAT_LABELS[p.source_format]}</span>
                           </div>
@@ -777,15 +751,18 @@ amount_usd: (p as any).amount_usd || (p.currency === 'USD' ? amount : null),
                           )}
                           {row.override_tx_type === 'invoice_payment' && (
                             <div style={{ fontSize: '11px', color: '#0C447C', marginTop: '2px' }}>
-                              💳 Cash flow only{linkedInvoice ? ` · Closes: ${linkedInvoice.partner_name || '—'}${linkedInvoice.invoice_number ? ` (${linkedInvoice.invoice_number})` : ''}` : ' · No invoice linked'}
+                              💳 Cash flow only{linkedInvoice ? ` · Closes: ${linkedInvoice.partner_name || '—'}` : ' · No invoice linked'}
+                            </div>
+                          )}
+                          {row.override_tx_type === 'passthrough' && (
+                            <div style={{ fontSize: '11px', color: '#7A5A00', marginTop: '2px' }}>
+                              🔄 {row.override_pt_direction === 'in' ? '📥 IN' : '📤 OUT'} · Period: {row.override_pt_period || '—'}
                             </div>
                           )}
                         </div>
                         <div style={{ textAlign: 'right' as const, flexShrink: 0, marginRight: '10px' }}>
                           <div style={{ fontSize: '13px', fontWeight: '500', color: isExpense ? '#A32D2D' : '#1D9E75' }}>{isExpense ? '-' : '+'}{amount?.toLocaleString()} {p.currency}</div>
-                          <div style={{ fontSize: '10px', color: '#aaa' }}>
-                            {p.statement_number ? `Izvod #${p.statement_number}` : p.date}
-                          </div>
+                          <div style={{ fontSize: '10px', color: '#aaa' }}>{p.statement_number ? `Izvod #${p.statement_number}` : p.date}</div>
                         </div>
                         <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                           <button style={{ ...s.actionBtn, ...(row.status === 'accepted' ? s.actionBtnAccepted : {}) }} onClick={() => acceptRow(p.id)}>✓</button>
@@ -805,26 +782,67 @@ amount_usd: (p as any).amount_usd || (p.currency === 'USD' ? amount : null),
                             <div style={s.editField}>
                               <label style={s.editLbl}>Type</label>
                               <select style={s.editSelect} value={row.override_tx_type}
-                                onChange={e => updateRow(p.id, { override_tx_type: e.target.value as any, override_pl_category_id: '', override_pl_category_name: '', override_pl_subcategory_id: '', override_pl_subcategory_name: '', override_department_id: '', override_department_name: '', override_dept_subcategory_id: '', override_dept_subcategory_name: '', override_expense_description: '' })}>
+                                onChange={e => updateRow(p.id, {
+                                  override_tx_type: e.target.value as any,
+                                  override_pl_category_id: '', override_pl_category_name: '',
+                                  override_pl_subcategory_id: '', override_pl_subcategory_name: '',
+                                  override_department_id: '', override_department_name: '',
+                                  override_dept_subcategory_id: '', override_dept_subcategory_name: '',
+                                  override_expense_description: '',
+                                })}>
                                 <option value="direct">⚡ Direct (P&L impact)</option>
                                 <option value="invoice_payment">💳 Invoice payment (cash only)</option>
+                                <option value="passthrough">🔄 Pass-through (transit)</option>
                               </select>
                             </div>
                           </div>
 
-                          <div style={{ ...s.editGrid2, marginTop: '8px' }}>
-                            <div style={s.editField}>
-                              <label style={s.editLbl}>Subtype</label>
-                              <select style={s.editSelect} value={row.override_tx_subtype} onChange={e => updateRow(p.id, { override_tx_subtype: e.target.value as any })}>
-                                <option value="expense">📤 Expense</option>
-                                <option value="revenue">📥 Revenue</option>
-                              </select>
+                          {/* Pass-through fields */}
+                          {row.override_tx_type === 'passthrough' && (
+                            <>
+                              <div style={s.editSectionTitle}>Pass-through details</div>
+                              <div style={s.editGrid2}>
+                                <div style={s.editField}>
+                                  <label style={s.editLbl}>Smer</label>
+                                  <select style={s.editSelect} value={row.override_pt_direction}
+                                    onChange={e => updateRow(p.id, { override_pt_direction: e.target.value as 'in' | 'out' })}>
+                                    <option value="in">📥 IN — Uplata</option>
+                                    <option value="out">📤 OUT — Isplata</option>
+                                  </select>
+                                </div>
+                                <div style={s.editField}>
+                                  <label style={s.editLbl}>Period (mesec)</label>
+                                  <input type="month" style={s.editInput} value={row.override_pt_period}
+                                    onChange={e => updateRow(p.id, { override_pt_period: e.target.value })} />
+                                </div>
+                              </div>
+                              <div style={{ marginTop: '8px' }}>
+                                <div style={s.editField}>
+                                  <label style={s.editLbl}>Napomena</label>
+                                  <input style={s.editInput} value={row.override_note}
+                                    onChange={e => updateRow(p.id, { override_note: e.target.value })}
+                                    placeholder={p.description?.slice(0, 40)} />
+                                </div>
+                              </div>
+                            </>
+                          )}
+
+                          {/* Direct fields */}
+                          {row.override_tx_type !== 'passthrough' && (
+                            <div style={{ ...s.editGrid2, marginTop: '8px' }}>
+                              <div style={s.editField}>
+                                <label style={s.editLbl}>Subtype</label>
+                                <select style={s.editSelect} value={row.override_tx_subtype} onChange={e => updateRow(p.id, { override_tx_subtype: e.target.value as any })}>
+                                  <option value="expense">📤 Expense</option>
+                                  <option value="revenue">📥 Revenue</option>
+                                </select>
+                              </div>
+                              <div style={s.editField}>
+                                <label style={s.editLbl}>Note</label>
+                                <input style={s.editInput} value={row.override_note} onChange={e => updateRow(p.id, { override_note: e.target.value })} placeholder={p.description?.slice(0, 40)} />
+                              </div>
                             </div>
-                            <div style={s.editField}>
-                              <label style={s.editLbl}>Note</label>
-                              <input style={s.editInput} value={row.override_note} onChange={e => updateRow(p.id, { override_note: e.target.value })} placeholder={p.description?.slice(0, 40)} />
-                            </div>
-                          </div>
+                          )}
 
                           {row.override_tx_type === 'invoice_payment' && (
                             <>
@@ -962,11 +980,11 @@ amount_usd: (p as any).amount_usd || (p.currency === 'USD' ? amount : null),
           )}
           {step === 'review' && (
             <>
-              <span style={{ fontSize: '12px', color: '#888' }}>{accepted} transaction{accepted !== 1 ? 's' : ''} will be posted</span>
+              <span style={{ fontSize: '12px', color: '#888' }}>{accepted} entr{accepted !== 1 ? 'ies' : 'y'} will be posted</span>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button style={s.btnGhost} onClick={() => setStep('upload')}>← Back</button>
                 <button style={{ ...s.btnPrimary, opacity: accepted === 0 ? 0.5 : 1 }} onClick={postAccepted} disabled={accepted === 0}>
-                  Post {accepted} transaction{accepted !== 1 ? 's' : ''}
+                  Post {accepted} entr{accepted !== 1 ? 'ies' : 'y'}
                 </button>
               </div>
             </>
@@ -1007,6 +1025,7 @@ const s: Record<string, React.CSSProperties> = {
   reviewRow: { border: '0.5px solid #e5e5e5', borderRadius: '10px', background: '#fff', overflow: 'hidden' },
   reviewRowAccepted: { border: '1.5px solid #1D9E75', background: '#f0fdf8' },
   reviewRowRejected: { opacity: 0.45 },
+  reviewRowPassthrough: { border: '0.5px solid #E6B432', background: '#FFFDF0' },
   reviewRowMain: { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', cursor: 'pointer' },
   editPanel: { padding: '14px 16px', borderTop: '0.5px solid #e5e5e5', background: '#f9f9f7' },
   aiNotes: { fontSize: '11px', color: '#085041', background: '#E1F5EE', border: '0.5px solid #5DCAA5', borderRadius: '6px', padding: '6px 10px', marginBottom: '12px' },

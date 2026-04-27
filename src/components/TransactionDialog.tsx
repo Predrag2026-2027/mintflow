@@ -64,7 +64,9 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   const [selectedAccountId, setSelectedAccountId] = useState('')
 
   // Step 3 (Type & classification)
-  const [txType, setTxType] = useState<'invoice_payment' | 'direct'>('invoice_payment')
+  const [txType, setTxType] = useState<'invoice_payment' | 'direct' | 'passthrough'>('invoice_payment')
+  const [ptDirection, setPtDirection] = useState<'in' | 'out'>('out')
+  const [ptPeriodMonth, setPtPeriodMonth] = useState(new Date().toISOString().slice(0, 7))
   const [directSubtype, setDirectSubtype] = useState<'expense' | 'revenue'>('expense')
   const [linkedInvoices, setLinkedInvoices] = useState<LinkedInvoice[]>([])
   const [invoiceSearch, setInvoiceSearch] = useState('')
@@ -440,23 +442,50 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
         status: 'posted',
       }
       let txId: string
-      if (transaction?.id) {
-        await supabase.from('transactions').update(payload).eq('id', transaction.id)
-        txId = transaction.id
+      if (txType === 'passthrough') {
+        // Postuj u passthrough tabelu
+        const ptPayload = {
+          company_id: companyId || null,
+          bank_id: bankId || null,
+          partner_id: finalPartnerId || null,
+          transaction_date: txDate,
+          direction: ptDirection,
+          period_month: ptPeriodMonth || null,
+          currency,
+          amount: parseFloat(amount),
+          exchange_rate: parseFloat(exRate) || null,
+          amount_usd: usdAmount,
+          note: note || null,
+          status: 'unpaired',
+          account_number: accNum || null,
+          model: model || null,
+          reference_number: refNum || null,
+        }
+        if (transaction?.id) {
+          await supabase.from('passthrough').update(ptPayload).eq('id', transaction.id)
+        } else {
+          await supabase.from('passthrough').insert(ptPayload)
+        }
       } else {
-        const { data: newTx } = await supabase.from('transactions').insert(payload).select().single()
-        txId = newTx?.id
-      }
-      if (txType === 'invoice_payment' && linkedInvoices.length > 0 && txId) {
-        for (const link of linkedInvoices) {
-          await supabase.from('invoice_transaction_links').upsert({
-            invoice_id: link.invoice_id,
-            transaction_id: txId,
-            allocated_amount: link.allocated_usd,
-            allocated_amount_usd: link.allocated_usd,
-          }, { onConflict: 'invoice_id,transaction_id' })
-          const { data: invStatus } = await supabase.from('v_invoice_status').select('calculated_status').eq('id', link.invoice_id).single()
-          if (invStatus) await supabase.from('invoices').update({ status: invStatus.calculated_status }).eq('id', link.invoice_id)
+        let txId: string
+        if (transaction?.id) {
+          await supabase.from('transactions').update(payload).eq('id', transaction.id)
+          txId = transaction.id
+        } else {
+          const { data: newTx } = await supabase.from('transactions').insert(payload).select().single()
+          txId = newTx?.id
+        }
+        if (txType === 'invoice_payment' && linkedInvoices.length > 0 && txId) {
+          for (const link of linkedInvoices) {
+            await supabase.from('invoice_transaction_links').upsert({
+              invoice_id: link.invoice_id,
+              transaction_id: txId,
+              allocated_amount: link.allocated_usd,
+              allocated_amount_usd: link.allocated_usd,
+            }, { onConflict: 'invoice_id,transaction_id' })
+            const { data: invStatus } = await supabase.from('v_invoice_status').select('calculated_status').eq('id', link.invoice_id).single()
+            if (invStatus) await supabase.from('invoices').update({ status: invStatus.calculated_status }).eq('id', link.invoice_id)
+          }
         }
       }
       setSuccess(true)
@@ -488,6 +517,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             {txType === 'direct' && <div style={s.plBadge}>P&L Impact</div>}
             {txType === 'invoice_payment' && <div style={s.cashBadge}>Cash Flow Only</div>}
+            {txType === 'passthrough' && <div style={{ ...s.cashBadge, background: 'rgba(230,180,50,0.2)', color: '#E6B432', border: '0.5px solid rgba(230,180,50,0.3)' }}>Pass-through</div>}
             <span style={s.logoText}>Mintflow</span>
             <button style={s.closeBtn} onClick={onClose}>×</button>
           </div>
@@ -683,7 +713,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
             <>
               <div style={s.section}>
                 <div style={s.sectionTitle}>Transaction type <span style={s.req}>*</span></div>
-                <div style={s.typeGrid}>
+                <div style={{ ...s.typeGrid, gridTemplateColumns: '1fr 1fr 1fr' }}>
                   <div style={{ ...s.typeCard, ...(txType === 'invoice_payment' ? s.typeCardPayment : {}) }} onClick={() => setTxType('invoice_payment')}>
                     <div style={{ fontSize: '24px', marginBottom: '6px' }}>💳</div>
                     <div style={s.typeCardTitle}>Invoice payment</div>
@@ -694,8 +724,40 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                     <div style={s.typeCardTitle}>Direct transaction</div>
                     <div style={s.typeCardSub}>No invoice exists or will exist. Impacts P&L directly.</div>
                   </div>
+                  <div style={{ ...s.typeCard, ...(txType === 'passthrough' ? { border: '2px solid #E6B432', background: '#FFFBEB' } : {}) }} onClick={() => setTxType('passthrough')}>
+                    <div style={{ fontSize: '24px', marginBottom: '6px' }}>🔄</div>
+                    <div style={s.typeCardTitle}>Pass-through</div>
+                    <div style={s.typeCardSub}>Money in transit — no P&L impact. Paired IN/OUT entries.</div>
+                  </div>
                 </div>
               </div>
+
+              {txType === 'passthrough' && (
+                <div style={s.section}>
+                  <div style={{ ...s.infoBox, background: '#FFFBEB', borderColor: '#E6B432', color: '#7A5A00', marginBottom: '16px' }}>
+                    🔄 Pass-through transakcija nema P&L uticaj. Evidentira se kao IN ili OUT i čeka uparivanje sa suprotnim unosom.
+                  </div>
+                  <div style={s.row2}>
+                    <div style={s.field}>
+                      <label style={s.lbl}>Smer <span style={s.req}>*</span></label>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <div style={{ ...s.typeChip, flex: 1, ...(ptDirection === 'in' ? { border: '2px solid #1D9E75', background: '#E1F5EE', color: '#085041', fontWeight: '500' } : {}) }}
+                          onClick={() => setPtDirection('in')}>📥 IN — Uplata</div>
+                        <div style={{ ...s.typeChip, flex: 1, ...(ptDirection === 'out' ? { border: '2px solid #E24B4A', background: '#FCEBEB', color: '#A32D2D', fontWeight: '500' } : {}) }}
+                          onClick={() => setPtDirection('out')}>📤 OUT — Isplata</div>
+                      </div>
+                    </div>
+                    <div style={s.field}>
+                      <label style={s.lbl}>Period (mesec)</label>
+                      <input type="month" style={s.input} value={ptPeriodMonth} onChange={e => setPtPeriodMonth(e.target.value)} />
+                    </div>
+                  </div>
+                  <div style={s.field}>
+                    <label style={s.lbl}>Napomena</label>
+                    <textarea style={{ ...s.textarea, marginTop: '4px' }} value={note} onChange={e => setNote(e.target.value)} placeholder="Opis pass-through transakcije..." />
+                  </div>
+                </div>
+              )}
 
               {txType === 'invoice_payment' && (
                 <div style={s.section}>

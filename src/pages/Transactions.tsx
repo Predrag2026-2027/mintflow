@@ -268,8 +268,7 @@ export default function Transactions() {
           </div>
           <div style={s.btnGroup}>
             <button style={s.btnInvoice} onClick={() => { setEditInvoice(null); setShowInvoiceDialog(true) }}>📄 New invoice</button>
-            <button style={s.btnTransaction} onClick={() => { setEditTransaction(null); setShowTransactionDialog(true) }}>💳 New transaction</button>
-            <button style={s.btnPassthrough} onClick={() => { setEditPassthrough(null); setShowPassthroughDialog(true) }}>⚡ Pass-through</button>
+            <button style={s.btnTransaction} onClick={() => { setEditTransaction(null); setShowTransactionDialog(true) }}>💳 New transaction</button>            
             <button style={s.btnBulk} onClick={() => setShowBulkImport(true)}>📥 Bulk import</button>
           </div>
         </div>
