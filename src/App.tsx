@@ -8,6 +8,7 @@ import CashFlow from './pages/CashFlow'
 import Reports from './pages/Reports'
 import Partners from './pages/Partners'
 import Settings from './pages/Settings'
+import Sidebar from './components/Sidebar'
 
 export type Page = 'dashboard' | 'transactions' | 'pl' | 'cashflow' | 'reports' | 'partners' | 'settings'
 
@@ -19,7 +20,7 @@ function AppContent() {
   const [page, setPage] = useState<Page>('dashboard')
 
   if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', fontFamily: 'system-ui,sans-serif', color: '#888' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', fontFamily: "'Inter', system-ui, sans-serif", color: '#888' }}>
       Loading Mintflow...
     </div>
   )
@@ -28,13 +29,18 @@ function AppContent() {
 
   return (
     <NavContext.Provider value={{ page, setPage }}>
-      {page === 'dashboard'     && <Dashboard />}
-      {page === 'transactions'  && <Transactions />}
-      {page === 'pl'            && <PL />}
-      {page === 'cashflow'      && <CashFlow />}
-      {page === 'reports'       && <Reports />}
-      {page === 'partners'      && <Partners />}
-      {page === 'settings'      && <Settings />}
+      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: '#FAF9F7' }}>
+        <Sidebar />
+        <main style={{ flex: 1, overflow: 'auto' }}>
+          {page === 'dashboard'    && <Dashboard />}
+          {page === 'transactions' && <Transactions />}
+          {page === 'pl'           && <PL />}
+          {page === 'cashflow'     && <CashFlow />}
+          {page === 'reports'      && <Reports />}
+          {page === 'partners'     && <Partners />}
+          {page === 'settings'     && <Settings />}
+        </main>
+      </div>
     </NavContext.Provider>
   )
 }

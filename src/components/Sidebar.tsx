@@ -1,0 +1,193 @@
+import React from 'react'
+import { useAuth } from '../contexts/AuthContext'
+import { NavContext } from '../App'
+import type { Page } from '../App'
+
+// ── Nav icons (inline SVG, no library required) ───────────
+const Icon = ({ children }: { children: React.ReactNode }) => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"
+    stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    {children}
+  </svg>
+)
+
+const ICONS: Record<string, React.ReactNode> = {
+  dashboard: <Icon><rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1.2"/><rect x="9" y="1.5" width="5.5" height="5.5" rx="1.2"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="1.2"/><rect x="9" y="9" width="5.5" height="5.5" rx="1.2"/></Icon>,
+  transactions: <Icon><path d="M2 5h12M10.5 2l3.5 3-3.5 3"/><path d="M14 11H2M5.5 8l-3.5 3 3.5 3"/></Icon>,
+  pl: <Icon><path d="M2.5 12V8.5M5.5 12V5M8.5 12V7M11.5 12V3M14.5 12V6"/></Icon>,
+  cashflow: <Icon><path d="M1 10C2.5 7 4.5 6 8 6s5.5 2 7 0"/><path d="M1 14C2.5 11 4.5 10 8 10s5.5 2 7 0"/></Icon>,
+  reports: <Icon><rect x="2.5" y="1.5" width="11" height="13" rx="1.5"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3"/></Icon>,
+  partners: <Icon><circle cx="5.5" cy="5" r="2.5"/><path d="M1 13.5c0-2.5 2-4.5 4.5-4.5s4.5 2 4.5 4.5"/><circle cx="12" cy="5" r="2"/><path d="M14.5 13c0-1.9-1.1-3.5-2.5-4"/></Icon>,
+  settings: <Icon><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.6 3.6l1.3 1.3M11.1 11.1l1.3 1.3M3.6 12.4l1.3-1.3M11.1 4.9l1.3-1.3"/></Icon>,
+}
+
+const NAV_ITEMS: { key: Page; label: string }[] = [
+  { key: 'dashboard',    label: 'Dashboard' },
+  { key: 'transactions', label: 'Transactions' },
+  { key: 'pl',           label: 'P&L' },
+  { key: 'cashflow',     label: 'Cash Flow' },
+  { key: 'reports',      label: 'Reports' },
+  { key: 'partners',     label: 'Partners' },
+  { key: 'settings',     label: 'Settings' },
+]
+
+// ── Logo mark ─────────────────────────────────────────────
+export function LogoMark({ size = 26 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 36 36" fill="none">
+      <polygon points="18,2 34,30 2,30" fill="none" stroke="#1D9E75" strokeWidth="1.8"/>
+      <circle cx="18" cy="2" r="2.5" fill="#1D9E75"/>
+      <circle cx="34" cy="30" r="2" fill="#5DCAA5"/>
+      <circle cx="2" cy="30" r="2" fill="#9FE1CB"/>
+    </svg>
+  )
+}
+
+// ── Sidebar component ─────────────────────────────────────
+export default function Sidebar() {
+  const { user, signOut } = useAuth()
+  const { page, setPage } = React.useContext(NavContext)
+  const initials = user?.email?.substring(0, 2).toUpperCase() ?? 'AD'
+
+  return (
+    <aside style={s.sidebar}>
+      {/* Logo */}
+      <div style={s.logoRow}>
+        <LogoMark size={26} />
+        <span style={s.logoText}>
+          Mint<span style={{ color: '#1D9E75' }}>flow</span>
+        </span>
+      </div>
+
+      {/* Nav */}
+      <nav style={s.nav}>
+        {NAV_ITEMS.map(item => {
+          const active = page === item.key
+          return (
+            <button
+              key={item.key}
+              onClick={() => setPage(item.key)}
+              style={{
+                ...s.navItem,
+                background: active ? 'rgba(255,255,255,0.09)' : 'transparent',
+                color: active ? '#fff' : 'rgba(255,255,255,0.44)',
+              }}
+            >
+              <span style={{ color: active ? '#1D9E75' : 'rgba(255,255,255,0.32)', display: 'flex' }}>
+                {ICONS[item.key]}
+              </span>
+              <span style={{ fontSize: '13px', fontWeight: active ? '500' : '400' }}>
+                {item.label}
+              </span>
+            </button>
+          )
+        })}
+      </nav>
+
+      {/* User */}
+      <div style={s.userRow}>
+        <div style={s.avatar}>{initials}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={s.userEmail}>{user?.email}</div>
+          <div style={s.userRole}>Administrator</div>
+        </div>
+        <button style={s.signoutBtn} onClick={signOut} title="Sign out">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" strokeLinecap="round">
+            <path d="M6 8h8M11 5l3 3-3 3M10 3H3a1 1 0 00-1 1v8a1 1 0 001 1h7"/>
+          </svg>
+        </button>
+      </div>
+    </aside>
+  )
+}
+
+// ── Styles ────────────────────────────────────────────────
+const s: Record<string, React.CSSProperties> = {
+  sidebar: {
+    width: '208px',
+    flexShrink: 0,
+    background: '#111111',
+    borderRight: '1px solid rgba(255,255,255,0.07)',
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100vh',
+    position: 'sticky',
+    top: 0,
+  },
+  logoRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '9px',
+    padding: '20px 20px 16px',
+    borderBottom: '1px solid rgba(255,255,255,0.07)',
+  },
+  logoText: {
+    fontFamily: "'DM Serif Display', Georgia, serif",
+    fontSize: '18px',
+    fontWeight: '400',
+    color: '#fff',
+    letterSpacing: '0.01em',
+  },
+  nav: {
+    flex: 1,
+    padding: '10px',
+    overflowY: 'auto',
+  },
+  navItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    width: '100%',
+    padding: '9px 12px',
+    borderRadius: '8px',
+    border: 'none',
+    cursor: 'pointer',
+    marginBottom: '2px',
+    textAlign: 'left',
+    transition: 'background 0.15s, color 0.15s',
+    fontFamily: "'Inter', system-ui, sans-serif",
+  },
+  userRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '14px 16px',
+    borderTop: '1px solid rgba(255,255,255,0.07)',
+  },
+  avatar: {
+    width: '30px',
+    height: '30px',
+    borderRadius: '50%',
+    background: '#1D9E75',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#fff',
+    flexShrink: 0,
+  },
+  userEmail: {
+    fontSize: '11px',
+    fontWeight: '500',
+    color: '#fff',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  userRole: {
+    fontSize: '10px',
+    color: 'rgba(255,255,255,0.35)',
+    letterSpacing: '0.04em',
+  },
+  signoutBtn: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: '4px',
+    borderRadius: '6px',
+    display: 'flex',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+}

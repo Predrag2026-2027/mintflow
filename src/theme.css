@@ -1,0 +1,74 @@
+/* ============================================================
+   Mintflow Design System — Theme Tokens
+   Carbon variant (recommended starting point for migration)
+   ============================================================ */
+
+:root {
+  /* ── Surfaces ─────────────────────────────── */
+  --page-bg:      #FAF9F7;
+  --sidebar-bg:   #111111;
+  --surface:      #FFFFFF;
+  --surface-2:    #F5F4F1;
+  --card-shadow:  0 1px 4px rgba(0,0,0,0.06);
+
+  /* ── Borders ──────────────────────────────── */
+  --border:         #E8E7E2;
+  --border-strong:  #D0CFC9;
+  --sidebar-border: rgba(255,255,255,0.07);
+
+  /* ── Text ─────────────────────────────────── */
+  --text-1: #111111;
+  --text-2: #555555;
+  --text-3: #AAAAAA;
+
+  /* ── Sidebar nav ──────────────────────────── */
+  --nav-icon:         rgba(255,255,255,0.32);
+  --nav-icon-active:  #1D9E75;
+  --nav-text:         rgba(255,255,255,0.44);
+  --nav-text-active:  #FFFFFF;
+  --nav-active-bg:    rgba(255,255,255,0.09);
+
+  /* ── Semantic — Revenue / Positive ───────── */
+  --green:     #1D9E75;
+  --green-dk:  #0B5E49;
+  --green-bg:  #E1F5EE;
+  --green-mid: rgba(29,158,117,0.22);
+
+  /* ── Semantic — Expense / Negative ───────── */
+  --red:    #E24B4A;
+  --red-dk: #A32D2D;
+  --red-bg: #FCEBEB;
+
+  /* ── Semantic — Warning ───────────────────── */
+  --amber:    #BA7517;
+  --amber-bg: rgba(186,117,23,0.10);
+
+  /* ── Semantic — Info ─────────────────────── */
+  --blue:    #185FA5;
+  --blue-bg: #E6F1FB;
+
+  /* ── Entity colors ────────────────────────── */
+  --entity-constel: #1D9E75;
+  --entity-sfbc:    #185FA5;
+  --entity-const:   #BA7517;
+  --entity-social:  #D4537E;
+
+  /* ── Typography ───────────────────────────── */
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body:    'Inter', system-ui, sans-serif;
+  --font-mono:    'DM Mono', 'Fira Mono', monospace;
+
+  /* ── Spacing ──────────────────────────────── */
+  --sidebar-width: 208px;
+  --card-pad:      1.1rem 1.2rem;
+  --page-pad:      24px 28px;
+
+  /* ── Radii ────────────────────────────────── */
+  --radius-sm:   8px;
+  --radius-md:   12px;
+  --radius-full: 9999px;
+
+  /* ── Transitions ──────────────────────────── */
+  --ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --duration: 0.15s;
+}

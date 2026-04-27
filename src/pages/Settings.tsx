@@ -1,48 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { NavContext } from '../App'
-import type { Page } from '../App'
 import { supabase } from '../supabase'
 import UserManagement from '../components/UserManagement'
 
 type SettingsTab = 'companies' | 'pl' | 'departments' | 'descriptions' | 'users'
 
 export default function Settings() {
-  const { user, signOut, canManageSettings, canManageUsers } = useAuth()
-  const { setPage } = React.useContext(NavContext)
+  const { canManageSettings, canManageUsers } = useAuth()
   const [activeTab, setActiveTab] = useState<SettingsTab>('companies')
-
-  const pageMap: Record<string, Page> = {
-    'Dashboard': 'dashboard', 'Transactions': 'transactions',
-    'P&L': 'pl', 'Cash Flow': 'cashflow', 'Reports': 'reports',
-    'Partners': 'partners', 'Settings': 'settings',
-  }
 
   return (
     <div style={s.root}>
-      <nav style={s.nav}>
-        <div style={s.navLogo}>
-          <svg width="24" height="24" viewBox="0 0 36 36" fill="none">
-            <polygon points="18,2 34,30 2,30" fill="none" stroke="#1D9E75" strokeWidth="1.5" />
-            <circle cx="18" cy="2" r="2" fill="#1D9E75" />
-            <circle cx="34" cy="30" r="2" fill="#5DCAA5" />
-            <circle cx="2" cy="30" r="2" fill="#9FE1CB" />
-          </svg>
-          <span style={s.navLogoText}>Mint<span style={{ color: '#1D9E75' }}>flow</span></span>
-        </div>
-        <div style={s.navLinks}>
-          {['Dashboard', 'Transactions', 'P&L', 'Cash Flow', 'Reports', 'Partners', 'Settings'].map(l => (
-            <span key={l} style={l === 'Settings' ? s.navLinkActive : s.navLink}
-              onClick={() => setPage(pageMap[l])}>{l}</span>
-          ))}
-        </div>
-        <div style={s.navRight}>
-          <div style={s.navAvatar}>{user?.email?.substring(0, 2).toUpperCase()}</div>
-          <span style={s.navEmail}>{user?.email}</span>
-          <button style={s.navSignout} onClick={signOut}>Sign out</button>
-        </div>
-      </nav>
-
       <div style={s.body}>
         <div style={s.pageHeader}>
           <div>
@@ -855,20 +823,10 @@ function DescriptionsTab({ canEdit }: { canEdit: boolean }) {
 }
 
 const s: Record<string, React.CSSProperties> = {
-  root: { minHeight: '100vh', background: '#f5f5f3', fontFamily: 'system-ui,sans-serif' },
-  nav: { background: '#0a1628', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1.5rem', height: '52px' },
-  navLogo: { display: 'flex', alignItems: 'center', gap: '8px' },
-  navLogoText: { fontFamily: 'Georgia,serif', fontSize: '18px', fontWeight: '500', color: '#fff' },
-  navLinks: { display: 'flex', gap: '4px' },
-  navLink: { fontSize: '13px', color: 'rgba(255,255,255,0.5)', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' },
-  navLinkActive: { fontSize: '13px', color: '#fff', padding: '6px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', cursor: 'pointer' },
-  navRight: { display: 'flex', alignItems: 'center', gap: '10px' },
-  navAvatar: { width: '30px', height: '30px', borderRadius: '50%', background: '#1D9E75', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '500', color: '#fff' },
-  navEmail: { fontSize: '13px', color: 'rgba(255,255,255,0.7)' },
-  navSignout: { background: 'none', border: '0.5px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.5)', fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer' },
-  body: { padding: '2rem 1.5rem' },
+  root: { minHeight: '100vh', background: '#FAF9F7', fontFamily: "'Inter', system-ui, sans-serif" },
+  body: { padding: '24px 28px' },
   pageHeader: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.5rem' },
-  pageTitle: { fontFamily: 'Georgia,serif', fontSize: '24px', fontWeight: '400', color: '#111', marginBottom: '4px' },
+  pageTitle: { fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '24px', fontWeight: '400', color: '#111', marginBottom: '4px' },
   pageSub: { fontSize: '13px', color: '#888' },
   tabBar: { display: 'flex', gap: 0, borderBottom: '0.5px solid #e5e5e5', marginBottom: '1.5rem', overflowX: 'auto' as const },
   tab: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '10px 20px', border: 'none', background: 'transparent', color: '#888', cursor: 'pointer', borderBottom: '2px solid transparent', marginBottom: '-0.5px', whiteSpace: 'nowrap' as const },

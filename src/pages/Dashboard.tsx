@@ -4,37 +4,9 @@ import { supabase } from '../supabase'
 import { NavContext } from '../App'
 import type { Page } from '../App'
 import { fmtUSD, fmtUSDSigned } from '../utils/formatters'
+import MetricCard from '../components/MetricCard'
 
 type Entity = 'constel' | 'sfbc' | 'constellation' | 'social'
-
-// ── SVG Sparkline ─────────────────────────────────────────
-function Sparkline({ data, color, height = 36, width = 120 }: { data: number[]; color: string; height?: number; width?: number }) {
-  if (!data.length || data.every(v => v === 0)) return <div style={{ width, height }} />
-  const max = Math.max(...data, 0.01)
-  const min = Math.min(...data, 0)
-  const range = max - min || 1
-  const pad = 4
-  const pts = data.map((v, i) => {
-    const x = pad + (i / Math.max(data.length - 1, 1)) * (width - pad * 2)
-    const y = pad + (1 - (v - min) / range) * (height - pad * 2)
-    return `${x},${y}`
-  })
-  const pathD = `M ${pts.join(' L ')}`
-  const areaD = `M ${pts[0]} L ${pts.join(' L ')} L ${width - pad},${height - pad} L ${pad},${height - pad} Z`
-  return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <defs>
-        <linearGradient id={`sg-${color.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
-          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
-        </linearGradient>
-      </defs>
-      <path d={areaD} fill={`url(#sg-${color.replace('#', '')})`} />
-      <path d={pathD} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={pts[pts.length - 1]?.split(',')[0]} cy={pts[pts.length - 1]?.split(',')[1]} r="3" fill={color} />
-    </svg>
-  )
-}
 
 // ── Area Chart ───────────────────────────────────────────
 function AreaChart({ months, revenues, expenses }: { months: string[]; revenues: number[]; expenses: number[] }) {
@@ -81,7 +53,7 @@ function AreaChart({ months, revenues, expenses }: { months: string[]; revenues:
         {/* Grid lines */}
         {ticks.map((t, i) => (
           <g key={i}>
-            <line x1={padL} y1={t.y} x2={W - padR} y2={t.y} stroke="#F0F0EE" strokeWidth="1" />
+            <line x1={padL} y1={t.y} x2={W - padR} y2={t.y} stroke="#E8E7E2" strokeWidth="1" />
             <text x={padL - 6} y={t.y + 4} textAnchor="end" fontSize="9" fill="#ccc" fontFamily="system-ui">{fmt(t.v)}</text>
           </g>
         ))}
@@ -192,7 +164,7 @@ function HBar({ label, value, max, color, sub }: { label: string; value: number;
 }
 
 export default function Dashboard() {
-  const { user, signOut } = useAuth()
+  const { user } = useAuth()
   const { setPage } = React.useContext(NavContext)
   const [entity, setEntity] = useState<Entity>('constel')
   const [dateFrom, setDateFrom] = useState(() => `${new Date().getFullYear()}-01-01`)
@@ -212,12 +184,6 @@ export default function Dashboard() {
   const [topPartners, setTopPartners] = useState<{ name: string; amount: number; type: string }[]>([])
   const [recentActivity, setRecentActivity] = useState<any[]>([])
   const [alerts, setAlerts] = useState<{ type: 'warn' | 'ok' | 'info'; text: string }[]>([])
-
-  const pageMap: Record<string, Page> = {
-    'Dashboard': 'dashboard', 'Transactions': 'transactions',
-    'P&L': 'pl', 'Cash Flow': 'cashflow', 'Reports': 'reports',
-    'Partners': 'partners', 'Settings': 'settings',
-  }
 
   const entities = [
     { id: 'constel' as Entity, name: 'Constel Group', sub: 'All entities', badge: 'ALL', color: '#1D9E75', bg: 'rgba(29,158,117,0.08)' },
@@ -370,32 +336,6 @@ export default function Dashboard() {
 
   return (
     <div style={s.root}>
-      {/* NAV */}
-      <nav style={s.nav}>
-        <div style={s.navLogo}>
-          <svg width="22" height="22" viewBox="0 0 36 36" fill="none">
-            <polygon points="18,2 34,30 2,30" fill="none" stroke="#1D9E75" strokeWidth="2" />
-            <circle cx="18" cy="2" r="2.5" fill="#1D9E75" />
-            <circle cx="34" cy="30" r="2" fill="#5DCAA5" />
-            <circle cx="2" cy="30" r="2" fill="#9FE1CB" />
-          </svg>
-          <span style={s.navLogoText}>Mint<span style={{ color: '#5DCAA5' }}>flow</span></span>
-        </div>
-        <div style={s.navLinks}>
-          {['Dashboard', 'Transactions', 'P&L', 'Cash Flow', 'Reports', 'Partners', 'Settings'].map(l => (
-            <span key={l} style={l === 'Dashboard' ? s.navLinkActive : s.navLink} onClick={() => setPage(pageMap[l])}>{l}</span>
-          ))}
-        </div>
-        <div style={s.navRight}>
-          <div style={s.navAvatar}>{user?.email?.substring(0, 2).toUpperCase()}</div>
-          <div>
-            <div style={s.navEmail}>{user?.email}</div>
-            <div style={s.navRole}>Administrator</div>
-          </div>
-          <button style={s.navSignout} onClick={signOut}>Sign out</button>
-        </div>
-      </nav>
-
       <div style={s.body}>
 
         {/* HEADER */}
@@ -441,67 +381,38 @@ export default function Dashboard() {
 
         {/* TOP METRIC CARDS */}
         <div style={s.metricsRow}>
-
-          {/* Revenue */}
-          <div style={{ ...s.metricCard, borderTop: `3px solid #1D9E75` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <div style={s.metricLabel}>Total Revenue</div>
-                <div style={{ ...s.metricValue, color: '#0B5E49' }}>{loading ? '—' : fmtUSD(metrics.totalRevenue)}</div>
-                <div style={s.metricSub}>YTD {activeEntity.name}</div>
-              </div>
-              <Sparkline data={sparkRevenue} color="#1D9E75" />
-            </div>
-            <div style={{ marginTop: '8px', height: '3px', background: '#f0f0ee', borderRadius: '2px', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${Math.min((metrics.totalRevenue / (metrics.totalRevenue + metrics.totalExpenses + 0.01)) * 100, 100)}%`, background: '#1D9E75', borderRadius: '2px' }} />
-            </div>
-          </div>
-
-          {/* Expenses */}
-          <div style={{ ...s.metricCard, borderTop: `3px solid #E24B4A` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <div style={s.metricLabel}>Total Expenses</div>
-                <div style={{ ...s.metricValue, color: '#A32D2D' }}>{loading ? '—' : fmtUSD(metrics.totalExpenses)}</div>
-                <div style={s.metricSub}>{metrics.totalRevenue > 0 ? `${((metrics.totalExpenses / metrics.totalRevenue) * 100).toFixed(0)}% of revenue` : 'No revenue'}</div>
-              </div>
-              <Sparkline data={sparkExpenses} color="#E24B4A" />
-            </div>
-            <div style={{ marginTop: '8px', height: '3px', background: '#f0f0ee', borderRadius: '2px', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${Math.min((metrics.totalExpenses / (metrics.totalRevenue + metrics.totalExpenses + 0.01)) * 100, 100)}%`, background: '#E24B4A', borderRadius: '2px' }} />
-            </div>
-          </div>
-
-          {/* Net Profit */}
-          <div style={{ ...s.metricCard, borderTop: `3px solid ${metrics.netProfit >= 0 ? '#1D9E75' : '#E24B4A'}` }}>
-            <div style={s.metricLabel}>Net Profit / Loss</div>
-            <div style={{ ...s.metricValue, color: metrics.netProfit >= 0 ? '#0B5E49' : '#A32D2D' }}>{loading ? '—' : fmtUSDSigned(metrics.netProfit)}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
-              <div style={{ fontSize: '11px', color: '#888' }}>Margin</div>
-              <div style={{ flex: 1, height: '4px', background: '#f0f0ee', borderRadius: '2px', overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${Math.max(0, Math.min(margin, 100))}%`, background: metrics.netProfit >= 0 ? '#1D9E75' : '#E24B4A', borderRadius: '2px' }} />
-              </div>
-              <div style={{ fontSize: '11px', fontWeight: '600', color: metrics.netProfit >= 0 ? '#0B5E49' : '#A32D2D' }}>{margin.toFixed(1)}%</div>
-            </div>
-          </div>
-
-          {/* Open Invoices */}
-          <div style={{ ...s.metricCard, borderTop: `3px solid ${metrics.overdueCount > 0 ? '#BA7517' : '#1D9E75'}` }}>
-            <div style={s.metricLabel}>Open Invoices</div>
-            <div style={{ ...s.metricValue, color: metrics.overdueCount > 0 ? '#633806' : '#0B5E49', fontSize: '26px' }}>
-              {loading ? '—' : metrics.openInvoicesCount > 0 ? fmtUSD(metrics.unpaidInvoices) : '$0'}
-            </div>
-            <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' as const }}>
-              <span style={{ fontSize: '10px', fontWeight: '500', padding: '2px 8px', borderRadius: '20px', background: '#f0f0ee', color: '#666' }}>
-                {metrics.openInvoicesCount} open
-              </span>
-              {metrics.overdueCount > 0 && (
-                <span style={{ fontSize: '10px', fontWeight: '500', padding: '2px 8px', borderRadius: '20px', background: '#FCEBEB', color: '#A32D2D' }}>
-                  ⚠ {metrics.overdueCount} overdue
-                </span>
-              )}
-            </div>
-          </div>
+          <MetricCard
+            label="Total Revenue"
+            value={loading ? '—' : fmtUSD(metrics.totalRevenue)}
+            sub={`YTD ${activeEntity.name}`}
+            color="#1D9E75"
+            darkColor="#0B5E49"
+            sparklineData={sparkRevenue}
+          />
+          <MetricCard
+            label="Total Expenses"
+            value={loading ? '—' : fmtUSD(metrics.totalExpenses)}
+            sub={metrics.totalRevenue > 0 ? `${((metrics.totalExpenses / metrics.totalRevenue) * 100).toFixed(0)}% of revenue` : 'No revenue'}
+            color="#E24B4A"
+            darkColor="#A32D2D"
+            sparklineData={sparkExpenses}
+          />
+          <MetricCard
+            label="Net Profit / Loss"
+            value={loading ? '—' : fmtUSDSigned(metrics.netProfit)}
+            sub={`${margin.toFixed(1)}% margin`}
+            color={metrics.netProfit >= 0 ? '#1D9E75' : '#E24B4A'}
+            darkColor={metrics.netProfit >= 0 ? '#0B5E49' : '#A32D2D'}
+            sparklineData={monthlyData.map(m => m.revenue - m.expenses)}
+          />
+          <MetricCard
+            label="Open Invoices"
+            value={loading ? '—' : metrics.openInvoicesCount > 0 ? fmtUSD(metrics.unpaidInvoices) : '$0'}
+            sub={`${metrics.openInvoicesCount} open${metrics.overdueCount > 0 ? ` · ${metrics.overdueCount} overdue` : ''}`}
+            color={metrics.overdueCount > 0 ? '#BA7517' : '#1D9E75'}
+            darkColor={metrics.overdueCount > 0 ? '#633806' : '#0B5E49'}
+            sparklineData={[]}
+          />
         </div>
 
         {/* MAIN GRID */}
@@ -604,14 +515,14 @@ export default function Dashboard() {
                   <thead>
                     <tr>
                       {['Date', 'Partner', 'Type', 'Amount', 'USD'].map(h => (
-                        <th key={h} style={{ textAlign: 'left' as const, padding: '0 0 8px', fontSize: '10px', color: '#bbb', fontWeight: '600', textTransform: 'uppercase' as const, letterSpacing: '0.07em' }}>{h}</th>
+                        <th key={h} style={{ textAlign: 'left' as const, padding: '0 0 8px', fontSize: '9.5px', color: '#AAAAAA', fontWeight: '600', textTransform: 'uppercase' as const, letterSpacing: '0.09em' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {recentActivity.map((t, i) => (
-                      <tr key={i} style={{ borderTop: '0.5px solid #f5f5f3' }}>
-                        <td style={{ padding: '8px 0', color: '#888', whiteSpace: 'nowrap' as const }}>{t.transaction_date}</td>
+                      <tr key={i} style={{ borderTop: '1px solid #E8E7E2' }}>
+                        <td style={{ padding: '8px 0', color: '#555', whiteSpace: 'nowrap' as const }}>{t.transaction_date}</td>
                         <td style={{ padding: '8px 8px 8px 0', fontWeight: '500', color: '#111', maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{(t.partners as any)?.name || '—'}</td>
                         <td style={{ padding: '8px 8px 8px 0' }}>
                           <span style={{ fontSize: '10px', fontWeight: '500', padding: '2px 7px', borderRadius: '20px', background: t.type === 'direct' ? '#E1F5EE' : '#E6F1FB', color: t.type === 'direct' ? '#085041' : '#0C447C' }}>
@@ -640,9 +551,9 @@ export default function Dashboard() {
                 </span>
               </div>
               {loading ? <div style={s.loadingBox}>Loading...</div> : alerts.map((a, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '8px 10px', borderRadius: '8px', marginBottom: '4px', background: a.type === 'ok' ? 'rgba(29,158,117,0.05)' : a.type === 'warn' ? 'rgba(186,117,23,0.05)' : 'rgba(24,95,165,0.05)' }}>
+                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '8px 10px', borderRadius: '8px', marginBottom: '5px', background: a.type === 'ok' ? '#E1F5EE' : a.type === 'warn' ? 'rgba(186,117,23,0.10)' : '#E6F1FB' }}>
                   <div style={{ width: '6px', height: '6px', borderRadius: '50%', marginTop: '5px', flexShrink: 0, background: a.type === 'ok' ? '#1D9E75' : a.type === 'warn' ? '#BA7517' : '#185FA5' }} />
-                  <span style={{ fontSize: '12px', color: '#555', lineHeight: '1.5' }}>{a.text}</span>
+                  <span style={{ fontSize: '11px', color: '#111', lineHeight: '1.5' }}>{a.text}</span>
                 </div>
               ))}
             </div>
@@ -660,7 +571,7 @@ export default function Dashboard() {
                 { label: 'Expense categories', value: String(expenseByCategory.length), color: '#555' },
                 { label: 'Active partners', value: String(topPartners.length), color: '#555' },
               ].map(item => (
-                <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '0.5px solid #f5f5f3' }}>
+                <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #E8E7E2' }}>
                   <span style={{ fontSize: '12px', color: '#888' }}>{item.label}</span>
                   <span style={{ fontSize: '13px', fontWeight: '600', color: loading ? '#ccc' : item.color }}>{loading ? '...' : item.value}</span>
                 </div>
@@ -696,41 +607,26 @@ export default function Dashboard() {
 }
 
 const s: Record<string, React.CSSProperties> = {
-  root: { minHeight: '100vh', background: '#F0F0EC', fontFamily: 'system-ui,sans-serif' },
-  nav: { background: '#0D1B2A', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2rem', height: '54px', position: 'sticky', top: 0, zIndex: 100 },
-  navLogo: { display: 'flex', alignItems: 'center', gap: '9px' },
-  navLogoText: { fontFamily: 'Georgia,serif', fontSize: '18px', fontWeight: '400', color: '#fff' },
-  navLinks: { display: 'flex', gap: '2px' },
-  navLink: { fontSize: '13px', color: 'rgba(255,255,255,0.48)', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' },
-  navLinkActive: { fontSize: '13px', color: '#fff', fontWeight: '500', padding: '6px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.10)', cursor: 'pointer' },
-  navRight: { display: 'flex', alignItems: 'center', gap: '12px' },
-  navAvatar: { width: '30px', height: '30px', borderRadius: '50%', background: '#1D9E75', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '600', color: '#fff' },
-  navEmail: { fontSize: '12px', color: 'rgba(255,255,255,0.60)' },
-  navRole: { fontSize: '10px', color: '#5DCAA5', letterSpacing: '0.06em', fontWeight: '600' },
-  navSignout: { background: 'transparent', border: '1px solid rgba(255,255,255,0.13)', color: 'rgba(255,255,255,0.45)', fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer' },
-  body: { padding: '2rem 2rem', maxWidth: '1400px', margin: '0 auto' },
-  greetingDate: { fontSize: '10px', color: '#aaa', letterSpacing: '0.14em', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase' as const },
-  greetingTitle: { fontFamily: 'Georgia,serif', fontSize: '30px', fontWeight: '400', color: '#0D1B2A', margin: '0', lineHeight: '1.2' },
-  segmented: { display: 'flex', gap: '2px', background: '#E5E5E0', borderRadius: '8px', padding: '3px' },
-  shortcutBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '12px', border: 'none', borderRadius: '5px', padding: '5px 11px', background: 'transparent', color: '#888', cursor: 'pointer', whiteSpace: 'nowrap' as const, fontWeight: '500' },
-  shortcutActive: { background: '#fff', color: '#0F6E56', boxShadow: '0 1px 3px rgba(0,0,0,0.10)' },
-  dateInput: { fontFamily: 'system-ui,sans-serif', fontSize: '12px', border: '1px solid #D8D8D2', borderRadius: '7px', padding: '5px 9px', color: '#333', background: '#fff' },
-  entityRow: { display: 'flex', gap: '10px', marginBottom: '1.5rem', flexWrap: 'wrap' as const },
-  entityChip: { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '10px', background: '#fff', border: '1.5px solid #E5E5E0', cursor: 'pointer', flex: '1', minWidth: '160px' },
-  entityChipActive: { border: '1.5px solid', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' },
-  entityDot: { width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0 },
+  root: { minHeight: '100vh', background: '#FAF9F7', fontFamily: "'Inter', system-ui, sans-serif" },
+  body: { padding: '24px 28px', maxWidth: '1400px', margin: '0 auto' },
+  greetingDate: { fontSize: '10px', color: '#AAAAAA', letterSpacing: '0.13em', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase' as const },
+  greetingTitle: { fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '28px', fontWeight: '400', color: '#111', margin: '0', lineHeight: '1.2' },
+  segmented: { display: 'flex', gap: '2px', background: '#E8E7E2', borderRadius: '9px', padding: '3px' },
+  shortcutBtn: { fontFamily: "'Inter', system-ui, sans-serif", fontSize: '11px', border: 'none', borderRadius: '6px', padding: '5px 11px', background: 'transparent', color: '#AAAAAA', cursor: 'pointer', whiteSpace: 'nowrap' as const, fontWeight: '500' },
+  shortcutActive: { background: '#fff', color: '#0B5E49', boxShadow: '0 1px 4px rgba(0,0,0,0.12)' },
+  dateInput: { fontFamily: "'Inter', system-ui, sans-serif", fontSize: '12px', border: '1px solid #E8E7E2', borderRadius: '7px', padding: '5px 9px', color: '#333', background: '#fff' },
+  entityRow: { display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' as const },
+  entityChip: { display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 14px', borderRadius: '9px', background: 'transparent', border: '1px solid #E8E7E2', cursor: 'pointer', flex: '1', minWidth: '150px', transition: 'border-color 0.15s, background 0.15s' },
+  entityChipActive: { border: '1.5px solid', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' },
+  entityDot: { width: '7px', height: '7px', borderRadius: '50%', flexShrink: 0 },
   entityBadgePill: { marginLeft: 'auto', fontSize: '9px', fontWeight: '700', padding: '2px 7px', borderRadius: '20px', letterSpacing: '0.06em', flexShrink: 0 },
   metricsRow: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '14px' },
-  metricCard: { background: '#fff', borderRadius: '12px', padding: '1.1rem 1.2rem 1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '0.5px solid #E5E5E0' },
-  metricLabel: { fontSize: '10px', color: '#aaa', textTransform: 'uppercase' as const, letterSpacing: '0.09em', marginBottom: '6px', fontWeight: '600' },
-  metricValue: { fontSize: '28px', fontWeight: '400', lineHeight: '1', marginBottom: '4px', fontFamily: 'Georgia,serif' },
-  metricSub: { fontSize: '11px', color: '#bbb' },
-  mainGrid: { display: 'grid', gridTemplateColumns: '1fr 280px', gap: '14px' },
-  card: { background: '#fff', borderRadius: '12px', padding: '1.1rem 1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '0.5px solid #E5E5E0' },
+  mainGrid: { display: 'grid', gridTemplateColumns: '1fr 280px', gap: '12px' },
+  card: { background: '#fff', borderRadius: '12px', padding: '1rem 1.2rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #E8E7E2' },
   cardHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' },
-  cardTitle: { fontSize: '13px', fontWeight: '600', color: '#111', letterSpacing: '-0.01em' },
-  cardLink: { fontSize: '12px', color: '#1D9E75', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'system-ui,sans-serif', padding: 0 },
-  loadingBox: { padding: '24px', textAlign: 'center' as const, color: '#bbb', fontSize: '12px' },
-  emptyBox: { padding: '24px', textAlign: 'center' as const, color: '#ccc', fontSize: '12px' },
-  quickBtn: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', background: '#FAFAF8', border: '0.5px solid #E5E5E0', borderRadius: '8px', padding: '9px 11px', fontFamily: 'system-ui,sans-serif', cursor: 'pointer', marginBottom: '5px', textAlign: 'left' as const },
+  cardTitle: { fontSize: '12px', fontWeight: '600', color: '#111', letterSpacing: '-0.01em' },
+  cardLink: { fontSize: '12px', color: '#1D9E75', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Inter', system-ui, sans-serif", padding: 0 },
+  loadingBox: { padding: '24px', textAlign: 'center' as const, color: '#AAAAAA', fontSize: '12px' },
+  emptyBox: { padding: '24px', textAlign: 'center' as const, color: '#AAAAAA', fontSize: '12px' },
+  quickBtn: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', background: '#F5F4F1', border: '1px solid #E8E7E2', borderRadius: '8px', padding: '8px 11px', fontFamily: "'Inter', system-ui, sans-serif", cursor: 'pointer', marginBottom: '5px', textAlign: 'left' as const, transition: 'background 0.15s' },
 }
