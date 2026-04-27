@@ -441,7 +441,6 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
         tags: tags.length > 0 ? tags : null,
         status: 'posted',
       }
-      let txId: string
       if (txType === 'passthrough') {
         // Postuj u passthrough tabelu
         const ptPayload = {
