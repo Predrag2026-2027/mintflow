@@ -58,6 +58,8 @@ interface ImportRow {
   override_expense_description: string
   override_revenue_stream: string
   override_rev_alloc: string
+  override_aimfox_val: string
+  override_sg_val: string
   override_partner_name: string
   override_note: string
 }
@@ -340,6 +342,7 @@ function makeImportRow(parsed: ParsedRow): ImportRow {
     override_dept_subcategory_id: '', override_dept_subcategory_name: '',
     override_expense_description: '', override_revenue_stream: '',
     override_rev_alloc: 'sg100',
+    override_aimfox_val: '', override_sg_val: '',
     override_partner_name: parsed.partner_name, override_note: '',
   }
 }
@@ -612,6 +615,8 @@ export default function BulkImport({ onClose, onImported }: Props) {
 
       // ── Direct / Invoice payment → postuj u transactions tabelu ──
       const isDirectWithPL = row.override_tx_type === 'direct'
+      const aimfoxAmount = row.override_rev_alloc === 'byval' ? (parseFloat(row.override_aimfox_val) || null) : null
+      const sgAmount = row.override_rev_alloc === 'byval' ? (parseFloat(row.override_sg_val) || null) : null
       const { data: newTx } = await supabase.from('transactions').insert({
         company_id: company, bank_id: bank, partner_id: partnerId,
         transaction_date: formatDate(p.date), statement_number: p.statement_number || null,
@@ -628,6 +633,8 @@ export default function BulkImport({ onClose, onImported }: Props) {
         expense_description: isDirectWithPL ? (row.override_expense_description || null) : null,
         revenue_stream: isDirectWithPL ? (row.override_revenue_stream || null) : null,
         rev_alloc_type: row.override_rev_alloc || 'sg100',
+        rev_alloc_aimfox: aimfoxAmount,
+        rev_alloc_sg: sgAmount,
         account_number: p.account_number || null, model: p.model || null,
         reference_number: p.reference_number || null,
         note: row.override_note || p.description || null, status: 'posted',
@@ -1008,12 +1015,71 @@ export default function BulkImport({ onClose, onImported }: Props) {
                               <div style={s.editSectionTitle}>Revenue stream allocation</div>
                               <div style={s.allocGrid}>
                                 {[{ id: 'sg100', label: '100% Social Growth', sub: 'Full allocation' }, { id: 'af100', label: '100% Aimfox', sub: 'Full allocation' }, { id: 'shared', label: 'Shared 50/50', sub: 'Both streams' }, { id: 'byval', label: 'By value', sub: 'Custom split' }].map(a => (
-                                  <div key={a.id} style={{ ...s.allocBtn, ...(row.override_rev_alloc === a.id ? s.allocBtnActive : {}) }} onClick={() => updateRow(p.id, { override_rev_alloc: a.id })}>
+                                  <div key={a.id} style={{ ...s.allocBtn, ...(row.override_rev_alloc === a.id ? s.allocBtnActive : {}) }} onClick={() => updateRow(p.id, { override_rev_alloc: a.id, override_aimfox_val: '', override_sg_val: '' })}>
                                     <div style={{ fontSize: '11px', fontWeight: '500', color: '#111' }}>{a.label}</div>
                                     <div style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>{a.sub}</div>
                                   </div>
                                 ))}
                               </div>
+                              {row.override_rev_alloc === 'byval' && (() => {
+                                const total = (p.debit || 0)
+                                const af = parseFloat(row.override_aimfox_val) || 0
+                                const sg = parseFloat(row.override_sg_val) || 0
+                                const splitOk = total > 0 && Math.abs(af + sg - total) < 0.01
+                                const afPct = total > 0 ? (af / total * 100).toFixed(1) : '0'
+                                const sgPct = total > 0 ? (sg / total * 100).toFixed(1) : '0'
+                                return (
+                                  <div style={{ marginTop: '10px', background: '#f5f5f3', borderRadius: '8px', padding: '12px', border: '0.5px solid #e5e5e5' }}>
+                                    <div style={{ fontSize: '10px', color: '#888', fontWeight: '500', marginBottom: '8px', textTransform: 'uppercase' as const, letterSpacing: '0.07em' }}>
+                                      Split po vrednosti · ukupno: {total > 0 ? `${total.toLocaleString('sr-RS')} ${p.currency}` : '—'}
+                                    </div>
+                                    <div style={s.editGrid2}>
+                                      <div style={s.editField}>
+                                        <label style={s.editLbl}>Aimfox ({p.currency})</label>
+                                        <input type="number" style={{ ...s.editInput, border: !splitOk && af > 0 ? '1.5px solid #E24B4A' : '0.5px solid #e5e5e5' }}
+                                          value={row.override_aimfox_val}
+                                          onChange={e => {
+                                            const val = e.target.value
+                                            const afNum = parseFloat(val) || 0
+                                            updateRow(p.id, {
+                                              override_aimfox_val: val,
+                                              override_sg_val: total > 0 && afNum >= 0 && afNum <= total ? (total - afNum).toFixed(2) : row.override_sg_val
+                                            })
+                                          }}
+                                          placeholder="0.00" min="0" max={String(total)} />
+                                        {row.override_aimfox_val && total > 0 && <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '2px' }}>{afPct}%</div>}
+                                      </div>
+                                      <div style={s.editField}>
+                                        <label style={s.editLbl}>Social Growth ({p.currency})</label>
+                                        <input type="number" style={{ ...s.editInput, border: !splitOk && sg > 0 ? '1.5px solid #E24B4A' : '0.5px solid #e5e5e5' }}
+                                          value={row.override_sg_val}
+                                          onChange={e => {
+                                            const val = e.target.value
+                                            const sgNum = parseFloat(val) || 0
+                                            updateRow(p.id, {
+                                              override_sg_val: val,
+                                              override_aimfox_val: total > 0 && sgNum >= 0 && sgNum <= total ? (total - sgNum).toFixed(2) : row.override_aimfox_val
+                                            })
+                                          }}
+                                          placeholder="0.00" min="0" max={String(total)} />
+                                        {row.override_sg_val && total > 0 && <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '2px' }}>{sgPct}%</div>}
+                                      </div>
+                                    </div>
+                                    {af > 0 && sg > 0 && (
+                                      <div style={{ marginTop: '8px' }}>
+                                        <div style={{ height: '5px', borderRadius: '3px', background: '#e5e5e5', overflow: 'hidden', display: 'flex' }}>
+                                          <div style={{ height: '100%', width: `${afPct}%`, background: '#0C447C', borderRadius: '3px 0 0 3px' }} />
+                                          <div style={{ height: '100%', width: `${sgPct}%`, background: '#1D9E75', borderRadius: '0 3px 3px 0' }} />
+                                        </div>
+                                        {splitOk
+                                          ? <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '4px' }}>✓ Split ispravan</div>
+                                          : <div style={{ fontSize: '10px', color: '#A32D2D', marginTop: '4px' }}>⚠ Zbir ({(af + sg).toLocaleString('sr-RS')}) ≠ ukupno ({total.toLocaleString('sr-RS')})</div>
+                                        }
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })()}
                             </>
                           )}
 
