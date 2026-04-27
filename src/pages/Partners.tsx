@@ -1,4 +1,4 @@
--import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { NavContext } from '../App'
 import { supabase } from '../supabase'
@@ -11,6 +11,7 @@ export default function Partners() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState('all')
+  const [showMenu, setShowMenu] = useState<string | null>(null)
   const [showDialog, setShowDialog] = useState(false)
   const [editPartner, setEditPartner] = useState<any>(null)
 
@@ -57,7 +58,7 @@ export default function Partners() {
   }
 
   return (
-    <div style={s.root}>
+    <div style={s.root} onClick={() => setShowMenu(null)}>
       <nav style={s.nav}>
         <div style={s.navLogo}>
           <svg width="24" height="24" viewBox="0 0 36 36" fill="none">
@@ -155,15 +156,14 @@ export default function Partners() {
               </thead>
               <tbody>
                 {filtered.map((p, i) => (
-                  <tr key={p.id} style={{ ...s.tr, background: i % 2 === 0 ? '#fff' : '#fafaf9', cursor: 'pointer' }}
-                    onClick={() => { setEditPartner(p); setShowDialog(true) }}>
+                  <tr key={p.id} style={{ ...s.tr, background: i % 2 === 0 ? '#fff' : '#fafaf9' }}>
                     <td style={s.td}>
-                      <div style={{ fontWeight: '500', fontSize: '13px', color: '#1D9E75', textDecoration: 'underline', textDecorationStyle: 'dotted' as const }}>{p.name}</div>
+                      <div style={{ fontWeight: '500', fontSize: '13px', color: '#111' }}>{p.name}</div>
                       {p.address && <div style={{ fontSize: '11px', color: '#aaa' }}>{p.address}</div>}
                     </td>
                     <td style={s.td}>
-                      <span style={{ ...s.badge, background: typeColors[p.type || 'vendor']?.bg || '#f0f0ee', color: typeColors[p.type || 'vendor']?.color || '#666' }}>
-                        {typeLabels[p.type || 'vendor'] || p.type}
+                      <span style={{ ...s.badge, background: typeColors[p.type || 'vendor']?.bg, color: typeColors[p.type || 'vendor']?.color }}>
+                        {typeLabels[p.type || 'vendor']}
                       </span>
                     </td>
                     <td style={s.td}><span style={s.monoCell}>{p.tax_id || '—'}</span></td>
@@ -177,7 +177,15 @@ export default function Partners() {
                       </span>
                     </td>
                     <td style={s.td} onClick={e => e.stopPropagation()}>
-                      <button style={s.deleteBtn} onClick={() => deletePartner(p.id)}>🗑</button>
+                      <div style={{ position: 'relative' }}>
+                        <button style={s.editBtn} onClick={() => setShowMenu(showMenu === p.id ? null : p.id)}>···</button>
+                        {showMenu === p.id && (
+                          <div style={s.contextMenu}>
+                            <div style={s.contextItem} onClick={() => { setEditPartner(p); setShowDialog(true); setShowMenu(null) }}>Edit</div>
+                            <div style={{ ...s.contextItem, color: '#A32D2D' }} onClick={() => deletePartner(p.id)}>Delete</div>
+                          </div>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -552,7 +560,6 @@ const s: Record<string, React.CSSProperties> = {
   monoCell: { fontSize: '12px', fontFamily: 'monospace', color: '#666', background: '#f5f5f3', padding: '2px 6px', borderRadius: '4px' },
   smallCell: { fontSize: '12px', color: '#666' },
   editBtn: { background: 'none', border: '0.5px solid #e5e5e5', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', color: '#888', fontSize: '14px' },
-  deleteBtn: { background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', padding: '4px', opacity: 0.4, transition: 'opacity 0.15s' },
   contextMenu: { position: 'fixed' as const, background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '8px', zIndex: 9999, minWidth: '120px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' },
   contextItem: { padding: '8px 14px', fontSize: '13px', color: '#111', cursor: 'pointer', borderBottom: '0.5px solid #f0f0ee' },
 }
