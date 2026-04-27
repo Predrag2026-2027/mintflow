@@ -7,26 +7,140 @@ import { fmtUSD, fmtUSDSigned } from '../utils/formatters'
 
 type Entity = 'constel' | 'sfbc' | 'constellation' | 'social'
 
+// ── SVG Sparkline ─────────────────────────────────────────
+function Sparkline({ data, color, height = 36, width = 120 }: { data: number[]; color: string; height?: number; width?: number }) {
+  if (!data.length || data.every(v => v === 0)) return <div style={{ width, height }} />
+  const max = Math.max(...data, 0.01)
+  const min = Math.min(...data, 0)
+  const range = max - min || 1
+  const pad = 4
+  const pts = data.map((v, i) => {
+    const x = pad + (i / Math.max(data.length - 1, 1)) * (width - pad * 2)
+    const y = pad + (1 - (v - min) / range) * (height - pad * 2)
+    return `${x},${y}`
+  })
+  const pathD = `M ${pts.join(' L ')}`
+  const areaD = `M ${pts[0]} L ${pts.join(' L ')} L ${width - pad},${height - pad} L ${pad},${height - pad} Z`
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      <defs>
+        <linearGradient id={`sg-${color.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      <path d={areaD} fill={`url(#sg-${color.replace('#', '')})`} />
+      <path d={pathD} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={pts[pts.length - 1]?.split(',')[0]} cy={pts[pts.length - 1]?.split(',')[1]} r="3" fill={color} />
+    </svg>
+  )
+}
+
+// ── Mini Bar Chart ────────────────────────────────────────
+function BarChart({ months, revenues, expenses }: { months: string[]; revenues: number[]; expenses: number[] }) {
+  const max = Math.max(...revenues, ...expenses, 0.01)
+  const chartH = 120
+  const barW = 18
+  const gap = 6
+  const groupW = barW * 2 + gap
+  const padL = 8
+  const totalW = padL + months.length * (groupW + 10)
+
+  return (
+    <svg width="100%" viewBox={`0 0 ${totalW} ${chartH + 30}`} preserveAspectRatio="none" style={{ overflow: 'visible' }}>
+      {months.map((m, i) => {
+        const x = padL + i * (groupW + 10)
+        const rH = (revenues[i] / max) * chartH
+        const eH = (expenses[i] / max) * chartH
+        return (
+          <g key={m}>
+            {/* Revenue bar */}
+            <rect x={x} y={chartH - rH} width={barW} height={Math.max(rH, 1)} rx="3" fill="#1D9E75" fillOpacity="0.85" />
+            {/* Expense bar */}
+            <rect x={x + barW + gap} y={chartH - eH} width={barW} height={Math.max(eH, 1)} rx="3" fill="#E24B4A" fillOpacity="0.7" />
+            {/* Month label */}
+            <text x={x + barW} y={chartH + 16} textAnchor="middle" fontSize="9" fill="#aaa" fontFamily="system-ui">{m}</text>
+          </g>
+        )
+      })}
+      {/* Baseline */}
+      <line x1={0} y1={chartH} x2={totalW} y2={chartH} stroke="#f0f0ee" strokeWidth="1" />
+    </svg>
+  )
+}
+
+// ── Donut Chart ───────────────────────────────────────────
+function DonutChart({ segments }: { segments: { label: string; value: number; color: string }[] }) {
+  const total = segments.reduce((s, seg) => s + seg.value, 0)
+  if (!total) return <div style={{ width: 120, height: 120, borderRadius: '50%', background: '#f0f0ee' }} />
+  const r = 45
+  const cx = 60
+  const cy = 60
+  let angle = -90
+
+  const arcs = segments.map(seg => {
+    const pct = seg.value / total
+    const sweep = pct * 360
+    const startRad = (angle * Math.PI) / 180
+    const endRad = ((angle + sweep) * Math.PI) / 180
+    const x1 = cx + r * Math.cos(startRad)
+    const y1 = cy + r * Math.sin(startRad)
+    const x2 = cx + r * Math.cos(endRad)
+    const y2 = cy + r * Math.sin(endRad)
+    const largeArc = sweep > 180 ? 1 : 0
+    const d = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`
+    angle += sweep
+    return { ...seg, d, pct }
+  })
+
+  return (
+    <svg width={120} height={120} viewBox="0 0 120 120">
+      {arcs.map((arc, i) => (
+        <path key={i} d={arc.d} fill={arc.color} fillOpacity="0.9" stroke="#fff" strokeWidth="1.5" />
+      ))}
+      <circle cx={cx} cy={cy} r={28} fill="#fff" />
+      <text x={cx} y={cy - 4} textAnchor="middle" fontSize="10" fill="#888" fontFamily="system-ui">EXPENSES</text>
+      <text x={cx} y={cy + 10} textAnchor="middle" fontSize="9" fill="#aaa" fontFamily="system-ui">breakdown</text>
+    </svg>
+  )
+}
+
+// ── Horizontal Bar ────────────────────────────────────────
+function HBar({ label, value, max, color, sub }: { label: string; value: number; max: number; color: string; sub?: string }) {
+  const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0
+  return (
+    <div style={{ marginBottom: '10px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+        <span style={{ fontSize: '12px', color: '#444', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, maxWidth: '60%' }}>{label}</span>
+        <span style={{ fontSize: '12px', color: '#888', whiteSpace: 'nowrap' as const }}>{fmtUSD(value)}{sub ? ` · ${sub}` : ''}</span>
+      </div>
+      <div style={{ height: '5px', background: '#f0f0ee', borderRadius: '3px', overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: '3px', transition: 'width 0.6s ease' }} />
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const { user, signOut } = useAuth()
   const { setPage } = React.useContext(NavContext)
   const [entity, setEntity] = useState<Entity>('constel')
-  const [hoveredEntity, setHoveredEntity] = useState<Entity | null>(null)
-  const [dateFrom, setDateFrom] = useState(() => {
-    const d = new Date()
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
-  })
+  const [dateFrom, setDateFrom] = useState(() => `${new Date().getFullYear()}-01-01`)
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0])
-  const [activeShortcut, setActiveShortcut] = useState('This month')
-
+  const [activeShortcut, setActiveShortcut] = useState('YTD')
   const [companies, setCompanies] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+
   const [metrics, setMetrics] = useState({
     totalRevenue: 0, totalExpenses: 0, netProfit: 0,
-    unpaidInvoices: 0, unpaidInvoicesCount: 0,
+    unpaidInvoices: 0, openInvoicesCount: 0,
     overdueCount: 0, unmatchedPassthrough: 0,
-    openInvoicesCount: 0,
+    prevRevenue: 0, prevExpenses: 0,
   })
+  const [monthlyData, setMonthlyData] = useState<{ month: string; revenue: number; expenses: number }[]>([])
+  const [expenseByCategory, setExpenseByCategory] = useState<{ label: string; value: number; color: string }[]>([])
+  const [topPartners, setTopPartners] = useState<{ name: string; amount: number; type: string }[]>([])
+  const [recentActivity, setRecentActivity] = useState<any[]>([])
   const [alerts, setAlerts] = useState<{ type: 'warn' | 'ok' | 'info'; text: string }[]>([])
 
   const pageMap: Record<string, Page> = {
@@ -36,10 +150,10 @@ export default function Dashboard() {
   }
 
   const entities = [
-    { id: 'constel' as Entity, name: 'Constel Group', sub: 'All companies · USD', badge: 'ALL', badgeColor: '#0B5E49', badgeBg: 'rgba(29,158,117,0.12)', iconColor: '#1D9E75', iconBg: 'rgba(29,158,117,0.10)', ringColor: 'rgba(29,158,117,0.5)' },
-    { id: 'sfbc' as Entity, name: 'SFBC', sub: 'USD', badge: 'US', badgeColor: '#0C447C', badgeBg: 'rgba(24,95,165,0.10)', iconColor: '#185FA5', iconBg: 'rgba(24,95,165,0.08)', ringColor: 'rgba(24,95,165,0.45)' },
-    { id: 'constellation' as Entity, name: 'Constellation LLC', sub: 'RSD/USD/EUR', badge: 'RS', badgeColor: '#633806', badgeBg: 'rgba(186,117,23,0.12)', iconColor: '#BA7517', iconBg: 'rgba(186,117,23,0.08)', ringColor: 'rgba(186,117,23,0.45)' },
-    { id: 'social' as Entity, name: 'Social Growth', sub: 'USD/AED', badge: 'AE', badgeColor: '#72243E', badgeBg: 'rgba(212,83,126,0.12)', iconColor: '#D4537E', iconBg: 'rgba(212,83,126,0.08)', ringColor: 'rgba(212,83,126,0.45)' },
+    { id: 'constel' as Entity, name: 'Constel Group', sub: 'All entities', badge: 'ALL', color: '#1D9E75', bg: 'rgba(29,158,117,0.08)' },
+    { id: 'sfbc' as Entity, name: 'SFBC', sub: 'USD', badge: 'US', color: '#185FA5', bg: 'rgba(24,95,165,0.08)' },
+    { id: 'constellation' as Entity, name: 'Constellation LLC', sub: 'RSD/EUR', badge: 'RS', color: '#BA7517', bg: 'rgba(186,117,23,0.08)' },
+    { id: 'social' as Entity, name: 'Social Growth', sub: 'USD/AED', badge: 'AE', color: '#D4537E', bg: 'rgba(212,83,126,0.08)' },
   ]
 
   const shortcuts = [
@@ -49,15 +163,7 @@ export default function Dashboard() {
     { label: 'Last month', from: (() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01` })(), to: (() => { const d = new Date(); d.setDate(0); return d.toISOString().split('T')[0] })() },
   ]
 
-  const quickActions: { label: string; icon: string; page: Page; accent: string }[] = [
-    { label: 'New invoice',     icon: '🧾', page: 'transactions', accent: '#1D9E75' },
-    { label: 'New transaction', icon: '＋', page: 'transactions', accent: '#1D9E75' },
-    { label: 'Pass-through',    icon: '⇄',  page: 'transactions', accent: '#0C447C' },
-    { label: 'Bulk import',     icon: '📥', page: 'transactions', accent: '#633806' },
-    { label: 'P&L report',      icon: '↗',  page: 'pl',           accent: '#185FA5' },
-    { label: 'Partners',        icon: '🤝', page: 'partners',     accent: '#BA7517' },
-    { label: 'Settings',        icon: '⚙',  page: 'settings',     accent: '#888'    },
-  ]
+  const CATEGORY_COLORS = ['#1D9E75', '#185FA5', '#BA7517', '#D4537E', '#7C3AED', '#0891B2', '#DC2626', '#059669']
 
   useEffect(() => {
     const load = async () => {
@@ -77,77 +183,124 @@ export default function Dashboard() {
     return companies.find(c => c.name === nameMap[entity])?.id || null
   }, [entity, companies])
 
-  const fetchMetrics = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     setLoading(true)
     const companyId = getCompanyId()
     const today = new Date().toISOString().split('T')[0]
 
     try {
-      // P&L entries
-      let plQuery = supabase.from('v_pl_entries').select('tx_type,amount_usd')
+      // ── P&L entries for period ──
+      let plQ = supabase.from('v_pl_entries').select('tx_type,amount_usd,pl_date,pl_category,partner_id')
         .gte('pl_date', dateFrom).lte('pl_date', dateTo)
-      if (companyId) plQuery = plQuery.eq('company_id', companyId)
-      const { data: plEntries } = await plQuery
+      if (companyId) plQ = plQ.eq('company_id', companyId)
+      const { data: plEntries } = await plQ
 
-      const revenue = (plEntries || [])
-        .filter(e => e.tx_type === 'revenue' || e.tx_type === 'invoice_revenue')
-        .reduce((s, e) => s + (e.amount_usd || 0), 0)
-      const expenses = (plEntries || [])
-        .filter(e => e.tx_type === 'expense' || e.tx_type === 'invoice_expense')
-        .reduce((s, e) => s + (e.amount_usd || 0), 0)
+      const revenue = (plEntries || []).filter(e => e.tx_type === 'revenue' || e.tx_type === 'invoice_revenue').reduce((s, e) => s + (e.amount_usd || 0), 0)
+      const expenses = (plEntries || []).filter(e => e.tx_type === 'expense' || e.tx_type === 'invoice_expense').reduce((s, e) => s + (e.amount_usd || 0), 0)
 
-      // Open invoices
-      let invQuery = supabase.from('v_invoice_status').select('calculated_status,remaining_usd,due_date')
-        .in('calculated_status', ['unpaid', 'partial'])
-      if (companyId) invQuery = invQuery.eq('company_id', companyId)
-      const { data: openInvoices } = await invQuery
+      // ── Monthly breakdown ──
+      const monthMap: Record<string, { revenue: number; expenses: number }> = {}
+      const start = new Date(dateFrom)
+      const end = new Date(dateTo)
+      for (let d = new Date(start.getFullYear(), start.getMonth(), 1); d <= end; d.setMonth(d.getMonth() + 1)) {
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+        monthMap[key] = { revenue: 0, expenses: 0 }
+      }
+      ;(plEntries || []).forEach(e => {
+        const key = (e.pl_date || '').slice(0, 7)
+        if (!monthMap[key]) monthMap[key] = { revenue: 0, expenses: 0 }
+        if (e.tx_type === 'revenue' || e.tx_type === 'invoice_revenue') monthMap[key].revenue += e.amount_usd || 0
+        if (e.tx_type === 'expense' || e.tx_type === 'invoice_expense') monthMap[key].expenses += e.amount_usd || 0
+      })
+      const monthly = Object.entries(monthMap).sort(([a], [b]) => a.localeCompare(b)).map(([key, v]) => ({
+        month: new Date(key + '-01').toLocaleString('en', { month: 'short' }),
+        ...v,
+      }))
+      setMonthlyData(monthly)
 
-      const unpaidTotal = (openInvoices || []).reduce((s, i) => s + (i.remaining_usd || 0), 0)
-      const overdueCount = (openInvoices || []).filter(i => i.due_date && i.due_date < today).length
+      // ── Expense by category ──
+      const catMap: Record<string, number> = {}
+      ;(plEntries || []).filter(e => e.tx_type === 'expense' || e.tx_type === 'invoice_expense').forEach(e => {
+        const cat = e.pl_category || 'Other'
+        catMap[cat] = (catMap[cat] || 0) + (e.amount_usd || 0)
+      })
+      const cats = Object.entries(catMap).sort(([, a], [, b]) => b - a).slice(0, 6).map(([label, value], i) => ({
+        label, value, color: CATEGORY_COLORS[i % CATEGORY_COLORS.length]
+      }))
+      setExpenseByCategory(cats)
 
-      // Unmatched passthrough — fix: no double select
-      let ptQuery = supabase.from('passthrough').select('id').eq('status', 'unpaired')
-      if (companyId) ptQuery = ptQuery.eq('company_id', companyId)
-      const { data: ptData } = await ptQuery
-      const ptCount = (ptData || []).length
+      // ── Open invoices ──
+      let invQ = supabase.from('v_invoice_status').select('calculated_status,remaining_usd,due_date,partner_name,amount_usd').in('calculated_status', ['unpaid', 'partial'])
+      if (companyId) invQ = invQ.eq('company_id', companyId)
+      const { data: openInv } = await invQ
+      const unpaidTotal = (openInv || []).reduce((s, i) => s + (i.remaining_usd || 0), 0)
+      const overdueCount = (openInv || []).filter(i => i.due_date && i.due_date < today).length
 
-      // Build alerts
+      // ── Pass-through unmatched ──
+      let ptQ = supabase.from('passthrough').select('id').eq('status', 'unpaired')
+      if (companyId) ptQ = ptQ.eq('company_id', companyId)
+      const { data: ptData } = await ptQ
+
+      // ── Top partners by transaction volume ──
+      let txQ = supabase.from('transactions')
+        .select('amount_usd, partners!transactions_partner_id_fkey(name,type)')
+        .gte('transaction_date', dateFrom).lte('transaction_date', dateTo)
+        .not('partner_id', 'is', null)
+      if (companyId) txQ = txQ.eq('company_id', companyId)
+      const { data: txData } = await txQ
+      const partnerMap: Record<string, { amount: number; type: string }> = {}
+      ;(txData || []).forEach((t: any) => {
+        const name = t.partners?.name || 'Unknown'
+        const type = t.partners?.type || 'vendor'
+        if (!partnerMap[name]) partnerMap[name] = { amount: 0, type }
+        partnerMap[name].amount += t.amount_usd || 0
+      })
+      const topP = Object.entries(partnerMap).sort(([, a], [, b]) => b.amount - a.amount).slice(0, 5).map(([name, v]) => ({ name, ...v }))
+      setTopPartners(topP)
+
+      // ── Recent activity ──
+      let actQ = supabase.from('transactions')
+        .select('transaction_date,type,amount,currency,amount_usd,partners!transactions_partner_id_fkey(name),companies!transactions_company_id_fkey(name)')
+        .order('transaction_date', { ascending: false }).limit(5)
+      if (companyId) actQ = actQ.eq('company_id', companyId)
+      const { data: actData } = await actQ
+      setRecentActivity(actData || [])
+
+      // ── Alerts ──
       const newAlerts: { type: 'warn' | 'ok' | 'info'; text: string }[] = []
-      if (overdueCount > 0) newAlerts.push({ type: 'warn', text: `${overdueCount} overdue invoice${overdueCount > 1 ? 's' : ''} — payment past due date.` })
-      if ((openInvoices || []).length > 0) newAlerts.push({ type: 'warn', text: `${(openInvoices || []).length} open invoice${(openInvoices || []).length > 1 ? 's' : ''} — $${unpaidTotal.toFixed(0)} remaining.` })
-      if (ptCount > 0) newAlerts.push({ type: 'warn', text: `${ptCount} pass-through entr${ptCount === 1 ? 'y' : 'ies'} waiting for pair.` })
-      if (newAlerts.length === 0) newAlerts.push({ type: 'ok', text: 'All clear — no pending alerts for this period.' })
+      if (overdueCount > 0) newAlerts.push({ type: 'warn', text: `${overdueCount} overdue invoice${overdueCount > 1 ? 's' : ''}` })
+      if ((openInv || []).length > 0) newAlerts.push({ type: 'info', text: `${(openInv || []).length} open invoices · ${fmtUSD(unpaidTotal)} remaining` })
+      if ((ptData || []).length > 0) newAlerts.push({ type: 'warn', text: `${(ptData || []).length} unpaired pass-through entries` })
+      if (newAlerts.length === 0) newAlerts.push({ type: 'ok', text: 'All clear — no pending alerts' })
 
       setMetrics({
         totalRevenue: revenue, totalExpenses: expenses, netProfit: revenue - expenses,
-        unpaidInvoices: unpaidTotal, unpaidInvoicesCount: (openInvoices || []).length,
-        overdueCount, unmatchedPassthrough: ptCount,
-        openInvoicesCount: (openInvoices || []).length,
+        unpaidInvoices: unpaidTotal, openInvoicesCount: (openInv || []).length,
+        overdueCount, unmatchedPassthrough: (ptData || []).length,
+        prevRevenue: 0, prevExpenses: 0,
       })
       setAlerts(newAlerts)
-    } catch (err) {
-      console.error('Dashboard fetch error:', err)
-    }
+    } catch (err) { console.error('Dashboard error:', err) }
     setLoading(false)
-  }, [dateFrom, dateTo, getCompanyId])
+  }, [dateFrom, dateTo, getCompanyId]) // eslint-disable-line
 
   useEffect(() => {
-    if (companies.length > 0 || entity === 'constel') fetchMetrics()
-  }, [fetchMetrics, companies, entity])
+    if (companies.length > 0 || entity === 'constel') fetchAll()
+  }, [fetchAll, companies, entity])
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
   const username = user?.email?.split('@')[0] ?? 'admin'
+  const margin = metrics.totalRevenue > 0 ? (metrics.netProfit / metrics.totalRevenue * 100) : 0
+  const activeEntity = entities.find(e => e.id === entity)!
 
-  const metricCards = [
-    { label: 'Revenue', value: loading ? '...' : fmtUSD(metrics.totalRevenue), sub: `${dateFrom} – ${dateTo}`, accent: '#1D9E75', accentBg: 'rgba(29,158,117,0.07)', textColor: '#0B5E49' },
-    { label: 'Expenses', value: loading ? '...' : fmtUSD(metrics.totalExpenses), sub: `${dateFrom} – ${dateTo}`, accent: '#A32D2D', accentBg: 'rgba(163,45,45,0.07)', textColor: '#A32D2D' },
-    { label: 'Net Profit / Loss', value: loading ? '...' : fmtUSDSigned(metrics.netProfit), sub: metrics.netProfit >= 0 ? 'Profitable period' : 'Loss period', accent: metrics.netProfit >= 0 ? '#1D9E75' : '#A32D2D', accentBg: metrics.netProfit >= 0 ? 'rgba(29,158,117,0.07)' : 'rgba(163,45,45,0.07)', textColor: metrics.netProfit >= 0 ? '#0B5E49' : '#A32D2D' },
-    { label: 'Open Invoices', value: loading ? '...' : metrics.openInvoicesCount > 0 ? `${metrics.openInvoicesCount} · ${fmtUSD(metrics.unpaidInvoices)}` : 'None', sub: metrics.overdueCount > 0 ? `${metrics.overdueCount} overdue` : 'All on time', accent: metrics.overdueCount > 0 ? '#BA7517' : '#1D9E75', accentBg: metrics.overdueCount > 0 ? 'rgba(186,117,23,0.07)' : 'rgba(29,158,117,0.07)', textColor: metrics.overdueCount > 0 ? '#5C3205' : '#0B5E49' },
-  ]
+  const sparkRevenue = monthlyData.map(m => m.revenue)
+  const sparkExpenses = monthlyData.map(m => m.expenses)
+  const maxPartner = topPartners[0]?.amount || 1
 
   return (
     <div style={s.root}>
+      {/* NAV */}
       <nav style={s.nav}>
         <div style={s.navLogo}>
           <svg width="22" height="22" viewBox="0 0 36 36" fill="none">
@@ -174,116 +327,297 @@ export default function Dashboard() {
       </nav>
 
       <div style={s.body}>
-        <div style={s.greeting}>
-          <div style={s.greetingDate}>
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).toUpperCase()}
+
+        {/* HEADER */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '2rem' }}>
+          <div>
+            <div style={s.greetingDate}>{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).toUpperCase()}</div>
+            <h1 style={s.greetingTitle}>{greeting}, <span style={{ color: '#1D9E75', fontStyle: 'italic' }}>{username}</span></h1>
           </div>
-          <h1 style={s.greetingTitle}>
-            {greeting},{' '}
-            <span style={{ color: '#1D9E75', fontStyle: 'italic' }}>{username}</span>
-          </h1>
-          <p style={s.greetingSub}>Select an entity and period to review financial performance.</p>
+          {/* Period bar inline */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' as const }}>
+            <div style={s.segmented}>
+              {shortcuts.map(sc => (
+                <button key={sc.label}
+                  style={activeShortcut === sc.label ? { ...s.shortcutBtn, ...s.shortcutActive } : s.shortcutBtn}
+                  onClick={() => { setDateFrom(sc.from); setDateTo(sc.to); setActiveShortcut(sc.label) }}>
+                  {sc.label}
+                </button>
+              ))}
+            </div>
+            <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setActiveShortcut('') }} style={s.dateInput} />
+            <span style={{ color: '#ccc', fontSize: '12px' }}>→</span>
+            <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setActiveShortcut('') }} style={s.dateInput} />
+          </div>
         </div>
 
-        <div style={s.sectionLabel}>Select entity</div>
-        <div style={s.entityGrid}>
+        {/* ENTITY SELECTOR */}
+        <div style={s.entityRow}>
           {entities.map(e => {
-            const isActive = entity === e.id
-            const isHovered = hoveredEntity === e.id
+            const active = entity === e.id
             return (
-              <div key={e.id}
-                style={{ ...s.entityCard, background: isActive ? e.iconBg : '#fff', boxShadow: isActive ? `0 0 0 2px ${e.ringColor}, 0 8px 24px rgba(0,0,0,0.10)` : isHovered ? '0 6px 20px rgba(0,0,0,0.10)' : '0 1px 4px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)' }}
-                onClick={() => setEntity(e.id)}
-                onMouseEnter={() => setHoveredEntity(e.id)}
-                onMouseLeave={() => setHoveredEntity(null)}>
-                <div style={{ ...s.entityBadge, color: e.badgeColor, background: e.badgeBg }}>{e.badge}</div>
-                <div style={{ ...s.entityIcon, background: isActive ? `${e.iconColor}22` : e.iconBg }}>
-                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke={e.iconColor} strokeWidth="1.5">
-                    <rect x="2" y="4" width="14" height="10" rx="2" /><path d="M6 4v10M2 8h14" />
-                  </svg>
+              <div key={e.id} style={{ ...s.entityChip, ...(active ? { ...s.entityChipActive, borderColor: e.color, background: e.bg } : {}) }}
+                onClick={() => setEntity(e.id)}>
+                <div style={{ ...s.entityDot, background: active ? e.color : '#ddd' }} />
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: active ? '600' : '400', color: active ? '#111' : '#666' }}>{e.name}</div>
+                  <div style={{ fontSize: '10px', color: active ? e.color : '#bbb', fontWeight: '500' }}>{e.sub}</div>
                 </div>
-                <div style={{ ...s.entityName, color: isActive ? '#0a2a22' : '#0D1B2A' }}>{e.name}</div>
-                <div style={{ ...s.entitySub, color: isActive ? e.iconColor : '#999' }}>{e.sub}</div>
+                <div style={{ ...s.entityBadgePill, background: active ? e.color : '#f0f0ee', color: active ? '#fff' : '#aaa' }}>{e.badge}</div>
               </div>
             )
           })}
         </div>
 
-        <div style={s.periodBar}>
-          <div style={s.periodGroup}>
-            <span style={s.periodLabel}>From</span>
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={s.dateInput} />
+        {/* TOP METRIC CARDS */}
+        <div style={s.metricsRow}>
+
+          {/* Revenue */}
+          <div style={{ ...s.metricCard, borderTop: `3px solid #1D9E75` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={s.metricLabel}>Total Revenue</div>
+                <div style={{ ...s.metricValue, color: '#0B5E49' }}>{loading ? '—' : fmtUSD(metrics.totalRevenue)}</div>
+                <div style={s.metricSub}>YTD {activeEntity.name}</div>
+              </div>
+              <Sparkline data={sparkRevenue} color="#1D9E75" />
+            </div>
+            <div style={{ marginTop: '8px', height: '3px', background: '#f0f0ee', borderRadius: '2px', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${Math.min((metrics.totalRevenue / (metrics.totalRevenue + metrics.totalExpenses + 0.01)) * 100, 100)}%`, background: '#1D9E75', borderRadius: '2px' }} />
+            </div>
           </div>
-          <span style={s.periodArrow}>→</span>
-          <div style={s.periodGroup}>
-            <span style={s.periodLabel}>To</span>
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={s.dateInput} />
+
+          {/* Expenses */}
+          <div style={{ ...s.metricCard, borderTop: `3px solid #E24B4A` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={s.metricLabel}>Total Expenses</div>
+                <div style={{ ...s.metricValue, color: '#A32D2D' }}>{loading ? '—' : fmtUSD(metrics.totalExpenses)}</div>
+                <div style={s.metricSub}>{metrics.totalRevenue > 0 ? `${((metrics.totalExpenses / metrics.totalRevenue) * 100).toFixed(0)}% of revenue` : 'No revenue'}</div>
+              </div>
+              <Sparkline data={sparkExpenses} color="#E24B4A" />
+            </div>
+            <div style={{ marginTop: '8px', height: '3px', background: '#f0f0ee', borderRadius: '2px', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${Math.min((metrics.totalExpenses / (metrics.totalRevenue + metrics.totalExpenses + 0.01)) * 100, 100)}%`, background: '#E24B4A', borderRadius: '2px' }} />
+            </div>
           </div>
-          <div style={s.segmented}>
-            {shortcuts.map(sc => (
-              <button key={sc.label}
-                style={activeShortcut === sc.label ? { ...s.shortcutBtn, ...s.shortcutActive } : s.shortcutBtn}
-                onClick={() => { setDateFrom(sc.from); setDateTo(sc.to); setActiveShortcut(sc.label) }}>
-                {sc.label}
-              </button>
-            ))}
+
+          {/* Net Profit */}
+          <div style={{ ...s.metricCard, borderTop: `3px solid ${metrics.netProfit >= 0 ? '#1D9E75' : '#E24B4A'}` }}>
+            <div style={s.metricLabel}>Net Profit / Loss</div>
+            <div style={{ ...s.metricValue, color: metrics.netProfit >= 0 ? '#0B5E49' : '#A32D2D' }}>{loading ? '—' : fmtUSDSigned(metrics.netProfit)}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+              <div style={{ fontSize: '11px', color: '#888' }}>Margin</div>
+              <div style={{ flex: 1, height: '4px', background: '#f0f0ee', borderRadius: '2px', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${Math.max(0, Math.min(margin, 100))}%`, background: metrics.netProfit >= 0 ? '#1D9E75' : '#E24B4A', borderRadius: '2px' }} />
+              </div>
+              <div style={{ fontSize: '11px', fontWeight: '600', color: metrics.netProfit >= 0 ? '#0B5E49' : '#A32D2D' }}>{margin.toFixed(1)}%</div>
+            </div>
           </div>
-          <div style={s.periodDisplay}>
-            {new Date(dateFrom).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-            {' – '}
-            {new Date(dateTo).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+
+          {/* Open Invoices */}
+          <div style={{ ...s.metricCard, borderTop: `3px solid ${metrics.overdueCount > 0 ? '#BA7517' : '#1D9E75'}` }}>
+            <div style={s.metricLabel}>Open Invoices</div>
+            <div style={{ ...s.metricValue, color: metrics.overdueCount > 0 ? '#633806' : '#0B5E49', fontSize: '26px' }}>
+              {loading ? '—' : metrics.openInvoicesCount > 0 ? fmtUSD(metrics.unpaidInvoices) : '$0'}
+            </div>
+            <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' as const }}>
+              <span style={{ fontSize: '10px', fontWeight: '500', padding: '2px 8px', borderRadius: '20px', background: '#f0f0ee', color: '#666' }}>
+                {metrics.openInvoicesCount} open
+              </span>
+              {metrics.overdueCount > 0 && (
+                <span style={{ fontSize: '10px', fontWeight: '500', padding: '2px 8px', borderRadius: '20px', background: '#FCEBEB', color: '#A32D2D' }}>
+                  ⚠ {metrics.overdueCount} overdue
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
-        <div style={s.contentGrid}>
-          <div>
-            <div style={s.metricsGrid}>
-              {metricCards.map(m => (
-                <div key={m.label} style={{ ...s.metricCard, borderLeft: `3px solid ${m.accent}`, background: m.accentBg }}>
-                  <div style={s.metricLabel}>{m.label}</div>
-                  <div style={{ ...s.metricValue, color: m.textColor }}>{m.value}</div>
-                  <div style={s.metricSub}>{m.sub}</div>
-                </div>
-              ))}
-            </div>
+        {/* MAIN GRID */}
+        <div style={s.mainGrid}>
 
-            <div style={s.alertCard}>
-              <div style={s.alertHeader}>
-                <span style={s.alertTitle}>Alerts & notifications</span>
-                <span style={s.alertCount}>{loading ? '...' : `${alerts.length} active`}</span>
+          {/* LEFT COLUMN */}
+          <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '14px' }}>
+
+            {/* Revenue vs Expenses Bar Chart */}
+            <div style={s.card}>
+              <div style={s.cardHeader}>
+                <div style={s.cardTitle}>Revenue vs Expenses</div>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#1D9E75', opacity: 0.85 }} />
+                    <span style={{ fontSize: '11px', color: '#888' }}>Revenue</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#E24B4A', opacity: 0.7 }} />
+                    <span style={{ fontSize: '11px', color: '#888' }}>Expenses</span>
+                  </div>
+                </div>
               </div>
               {loading ? (
-                <div style={{ padding: '12px', fontSize: '12px', color: '#aaa' }}>Loading alerts...</div>
-              ) : alerts.map((a, i) => (
-                <div key={i} style={{ ...s.alertItem, background: a.type === 'ok' ? 'rgba(29,158,117,0.05)' : a.type === 'warn' ? 'rgba(186,117,23,0.05)' : 'rgba(24,95,165,0.05)' }}>
-                  <div style={{ ...s.alertDot, background: a.type === 'ok' ? '#1D9E75' : a.type === 'warn' ? '#BA7517' : '#185FA5', boxShadow: `0 0 0 4px ${a.type === 'ok' ? 'rgba(29,158,117,0.15)' : a.type === 'warn' ? 'rgba(186,117,23,0.15)' : 'rgba(24,95,165,0.15)'}` }} />
-                  <span style={s.alertText}>{a.text}</span>
+                <div style={s.loadingBox}>Loading chart data...</div>
+              ) : monthlyData.length === 0 ? (
+                <div style={s.emptyBox}>No data for selected period</div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <BarChart
+                    months={monthlyData.map(m => m.month)}
+                    revenues={monthlyData.map(m => m.revenue)}
+                    expenses={monthlyData.map(m => m.expenses)}
+                  />
                 </div>
-              ))}
+              )}
+            </div>
+
+            {/* Expense Breakdown + Top Partners side by side */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+
+              {/* Expense by Category */}
+              <div style={s.card}>
+                <div style={s.cardHeader}>
+                  <div style={s.cardTitle}>Expense breakdown</div>
+                </div>
+                {loading ? <div style={s.loadingBox}>Loading...</div> : expenseByCategory.length === 0 ? (
+                  <div style={s.emptyBox}>No expenses</div>
+                ) : (
+                  <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+                    <DonutChart segments={expenseByCategory} />
+                    <div style={{ flex: 1, paddingTop: '8px' }}>
+                      {expenseByCategory.map(cat => (
+                        <div key={cat.label} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '7px' }}>
+                          <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: cat.color, flexShrink: 0 }} />
+                          <span style={{ fontSize: '11px', color: '#555', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{cat.label}</span>
+                          <span style={{ fontSize: '11px', fontWeight: '500', color: '#333', whiteSpace: 'nowrap' as const }}>{fmtUSD(cat.value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Top Partners */}
+              <div style={s.card}>
+                <div style={s.cardHeader}>
+                  <div style={s.cardTitle}>Top partners</div>
+                  <span style={{ fontSize: '10px', color: '#bbb' }}>by volume</span>
+                </div>
+                {loading ? <div style={s.loadingBox}>Loading...</div> : topPartners.length === 0 ? (
+                  <div style={s.emptyBox}>No partner data</div>
+                ) : (
+                  <div>
+                    {topPartners.map((p, i) => (
+                      <HBar
+                        key={p.name}
+                        label={p.name}
+                        value={p.amount}
+                        max={maxPartner}
+                        color={i === 0 ? '#0C447C' : i === 1 ? '#185FA5' : i === 2 ? '#4A90D9' : '#7FB8EE'}
+                        sub={p.type}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Recent activity */}
+            <div style={s.card}>
+              <div style={s.cardHeader}>
+                <div style={s.cardTitle}>Recent transactions</div>
+                <button style={s.cardLink} onClick={() => setPage('transactions')}>View all →</button>
+              </div>
+              {loading ? <div style={s.loadingBox}>Loading...</div> : recentActivity.length === 0 ? (
+                <div style={s.emptyBox}>No transactions yet</div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse' as const, fontSize: '12px' }}>
+                  <thead>
+                    <tr>
+                      {['Date', 'Partner', 'Type', 'Amount', 'USD'].map(h => (
+                        <th key={h} style={{ textAlign: 'left' as const, padding: '0 0 8px', fontSize: '10px', color: '#bbb', fontWeight: '600', textTransform: 'uppercase' as const, letterSpacing: '0.07em' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentActivity.map((t, i) => (
+                      <tr key={i} style={{ borderTop: '0.5px solid #f5f5f3' }}>
+                        <td style={{ padding: '8px 0', color: '#888', whiteSpace: 'nowrap' as const }}>{t.transaction_date}</td>
+                        <td style={{ padding: '8px 8px 8px 0', fontWeight: '500', color: '#111', maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{(t.partners as any)?.name || '—'}</td>
+                        <td style={{ padding: '8px 8px 8px 0' }}>
+                          <span style={{ fontSize: '10px', fontWeight: '500', padding: '2px 7px', borderRadius: '20px', background: t.type === 'direct' ? '#E1F5EE' : '#E6F1FB', color: t.type === 'direct' ? '#085041' : '#0C447C' }}>
+                            {t.type === 'invoice_payment' ? 'Inv. pay' : t.type}
+                          </span>
+                        </td>
+                        <td style={{ padding: '8px 8px 8px 0', fontWeight: '500', color: '#111', whiteSpace: 'nowrap' as const }}>{(t.amount || 0).toLocaleString()} {t.currency}</td>
+                        <td style={{ padding: '8px 0', fontWeight: '500', color: '#1D9E75', whiteSpace: 'nowrap' as const }}>{fmtUSD(t.amount_usd || 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
 
-          <div style={s.quickCard}>
-            <div style={s.quickTitle}>Quick actions</div>
-            {quickActions.map(action => (
-              <button key={action.label} style={s.quickBtn} onClick={() => setPage(action.page)}>
-                <span style={{ ...s.quickIcon, color: action.accent }}>{action.icon}</span>
-                {action.label}
-              </button>
-            ))}
-            <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '0.5px solid #f0f0ee' }}>
-              <div style={{ fontSize: '11px', fontWeight: '600', color: '#bbb', textTransform: 'uppercase' as const, letterSpacing: '0.1em', marginBottom: '10px' }}>At a glance</div>
-              {[
-                { label: 'Pass-through unpaired', value: loading ? '...' : String(metrics.unmatchedPassthrough), warn: metrics.unmatchedPassthrough > 0 },
-                { label: 'Overdue invoices', value: loading ? '...' : String(metrics.overdueCount), warn: metrics.overdueCount > 0 },
-                { label: 'Open invoices', value: loading ? '...' : String(metrics.openInvoicesCount), warn: false },
-              ].map(item => (
-                <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '0.5px solid #f5f5f3' }}>
-                  <span style={{ fontSize: '12px', color: '#888' }}>{item.label}</span>
-                  <span style={{ fontSize: '12px', fontWeight: '500', color: item.warn ? '#BA7517' : '#0B5E49' }}>{item.value}</span>
+          {/* RIGHT COLUMN */}
+          <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '14px' }}>
+
+            {/* Alerts */}
+            <div style={s.card}>
+              <div style={s.cardHeader}>
+                <div style={s.cardTitle}>Alerts</div>
+                <span style={{ fontSize: '10px', background: alerts.some(a => a.type === 'warn') ? '#FCEBEB' : '#E1F5EE', color: alerts.some(a => a.type === 'warn') ? '#A32D2D' : '#085041', padding: '2px 8px', borderRadius: '20px', fontWeight: '500' }}>
+                  {alerts.length}
+                </span>
+              </div>
+              {loading ? <div style={s.loadingBox}>Loading...</div> : alerts.map((a, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '8px 10px', borderRadius: '8px', marginBottom: '4px', background: a.type === 'ok' ? 'rgba(29,158,117,0.05)' : a.type === 'warn' ? 'rgba(186,117,23,0.05)' : 'rgba(24,95,165,0.05)' }}>
+                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', marginTop: '5px', flexShrink: 0, background: a.type === 'ok' ? '#1D9E75' : a.type === 'warn' ? '#BA7517' : '#185FA5' }} />
+                  <span style={{ fontSize: '12px', color: '#555', lineHeight: '1.5' }}>{a.text}</span>
                 </div>
               ))}
             </div>
+
+            {/* At a glance */}
+            <div style={s.card}>
+              <div style={s.cardHeader}>
+                <div style={s.cardTitle}>At a glance</div>
+              </div>
+              {[
+                { label: 'Net margin', value: `${margin.toFixed(1)}%`, color: margin >= 0 ? '#0B5E49' : '#A32D2D' },
+                { label: 'Pass-through unpaired', value: String(metrics.unmatchedPassthrough), color: metrics.unmatchedPassthrough > 0 ? '#BA7517' : '#0B5E49' },
+                { label: 'Overdue invoices', value: String(metrics.overdueCount), color: metrics.overdueCount > 0 ? '#A32D2D' : '#0B5E49' },
+                { label: 'Open invoices', value: String(metrics.openInvoicesCount), color: '#555' },
+                { label: 'Expense categories', value: String(expenseByCategory.length), color: '#555' },
+                { label: 'Active partners', value: String(topPartners.length), color: '#555' },
+              ].map(item => (
+                <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '0.5px solid #f5f5f3' }}>
+                  <span style={{ fontSize: '12px', color: '#888' }}>{item.label}</span>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: loading ? '#ccc' : item.color }}>{loading ? '...' : item.value}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Quick actions */}
+            <div style={s.card}>
+              <div style={s.cardHeader}>
+                <div style={s.cardTitle}>Quick actions</div>
+              </div>
+              {[
+                { label: 'New invoice', icon: '📄', page: 'transactions' as Page, color: '#1D9E75' },
+                { label: 'New transaction', icon: '💳', page: 'transactions' as Page, color: '#0C447C' },
+                { label: 'Bulk import', icon: '📥', page: 'transactions' as Page, color: '#633806' },
+                { label: 'P&L report', icon: '📊', page: 'pl' as Page, color: '#185FA5' },
+                { label: 'Cash Flow', icon: '💧', page: 'cashflow' as Page, color: '#0891B2' },
+                { label: 'Partners', icon: '🤝', page: 'partners' as Page, color: '#BA7517' },
+              ].map(action => (
+                <button key={action.label} style={s.quickBtn} onClick={() => setPage(action.page)}>
+                  <span style={{ fontSize: '15px' }}>{action.icon}</span>
+                  <span style={{ fontSize: '13px', color: '#333' }}>{action.label}</span>
+                  <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#ccc' }}>→</span>
+                </button>
+              ))}
+            </div>
+
           </div>
         </div>
       </div>
@@ -292,54 +626,41 @@ export default function Dashboard() {
 }
 
 const s: Record<string, React.CSSProperties> = {
-  root: { minHeight: '100vh', background: '#F7F6F3', fontFamily: "'DM Sans', system-ui, sans-serif" },
-  nav: { background: '#0D1B2A', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2rem', height: '56px', borderBottom: '1px solid rgba(255,255,255,0.04)', position: 'sticky', top: 0, zIndex: 100 },
+  root: { minHeight: '100vh', background: '#F0F0EC', fontFamily: 'system-ui,sans-serif' },
+  nav: { background: '#0D1B2A', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2rem', height: '54px', position: 'sticky', top: 0, zIndex: 100 },
   navLogo: { display: 'flex', alignItems: 'center', gap: '9px' },
-  navLogoText: { fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '19px', fontWeight: '400', color: '#fff', letterSpacing: '-0.01em' },
+  navLogoText: { fontFamily: 'Georgia,serif', fontSize: '18px', fontWeight: '400', color: '#fff' },
   navLinks: { display: 'flex', gap: '2px' },
-  navLink: { fontSize: '13px', color: 'rgba(255,255,255,0.48)', padding: '6px 13px', borderRadius: '6px', cursor: 'pointer', userSelect: 'none' as const },
-  navLinkActive: { fontSize: '13px', color: '#fff', fontWeight: '500', padding: '6px 13px', borderRadius: '6px', background: 'rgba(255,255,255,0.10)', cursor: 'pointer', userSelect: 'none' as const },
+  navLink: { fontSize: '13px', color: 'rgba(255,255,255,0.48)', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' },
+  navLinkActive: { fontSize: '13px', color: '#fff', fontWeight: '500', padding: '6px 12px', borderRadius: '6px', background: 'rgba(255,255,255,0.10)', cursor: 'pointer' },
   navRight: { display: 'flex', alignItems: 'center', gap: '12px' },
-  navAvatar: { width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg,#1D9E75,#0B5E49)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '600', color: '#fff', flexShrink: 0 },
-  navEmail: { fontSize: '12px', color: 'rgba(255,255,255,0.60)', lineHeight: '1.3' },
+  navAvatar: { width: '30px', height: '30px', borderRadius: '50%', background: '#1D9E75', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '600', color: '#fff' },
+  navEmail: { fontSize: '12px', color: 'rgba(255,255,255,0.60)' },
   navRole: { fontSize: '10px', color: '#5DCAA5', letterSpacing: '0.06em', fontWeight: '600' },
-  navSignout: { background: 'transparent', border: '1px solid rgba(255,255,255,0.13)', color: 'rgba(255,255,255,0.45)', fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: '12px', padding: '5px 13px', borderRadius: '6px', cursor: 'pointer', whiteSpace: 'nowrap' as const },
-  body: { padding: '2.5rem 2rem', maxWidth: '1400px', margin: '0 auto' },
-  greeting: { marginBottom: '2.5rem' },
-  greetingDate: { fontSize: '10.5px', color: '#aaa', letterSpacing: '0.14em', marginBottom: '6px', fontWeight: '500' },
-  greetingTitle: { fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '34px', fontWeight: '400', color: '#0D1B2A', margin: '0 0 8px', lineHeight: '1.15' },
-  greetingSub: { fontSize: '14px', color: '#aaa', margin: 0, fontWeight: '400' },
-  sectionLabel: { fontSize: '11px', fontWeight: '600', color: '#bbb', textTransform: 'uppercase' as const, letterSpacing: '0.14em', marginBottom: '12px' },
-  entityGrid: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '14px', marginBottom: '1.5rem' },
-  entityCard: { borderRadius: '14px', padding: '1.4rem', cursor: 'pointer', position: 'relative' as const },
-  entityBadge: { position: 'absolute' as const, top: '12px', right: '12px', fontSize: '9px', fontWeight: '600', padding: '2px 8px', borderRadius: '20px', textTransform: 'uppercase' as const, letterSpacing: '0.06em' },
-  entityIcon: { width: '40px', height: '40px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' },
-  entityName: { fontSize: '14px', fontWeight: '500', marginBottom: '4px', letterSpacing: '-0.01em' },
-  entitySub: { fontSize: '11.5px', fontWeight: '400' },
-  periodBar: { background: '#fff', borderRadius: '12px', padding: '0.85rem 1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' as const, boxShadow: '0 1px 3px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04)' },
-  periodGroup: { display: 'flex', alignItems: 'center', gap: '8px' },
-  periodLabel: { fontSize: '11px', fontWeight: '600', color: '#bbb', textTransform: 'uppercase' as const, letterSpacing: '0.1em', whiteSpace: 'nowrap' as const },
-  dateInput: { fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: '13px', border: '1px solid rgba(0,0,0,0.09)', borderRadius: '7px', padding: '6px 10px', color: '#0D1B2A', background: '#FAFAF9' },
-  periodArrow: { fontSize: '14px', color: '#ddd' },
-  segmented: { display: 'flex', gap: '3px', background: '#F1F0ED', borderRadius: '8px', padding: '3px' },
-  shortcutBtn: { fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: '12px', border: 'none', borderRadius: '6px', padding: '5px 12px', background: 'transparent', color: '#999', cursor: 'pointer', whiteSpace: 'nowrap' as const, fontWeight: '500' },
-  shortcutActive: { background: '#fff', color: '#0F6E56', boxShadow: '0 1px 4px rgba(0,0,0,0.10)' },
-  periodDisplay: { fontSize: '12px', color: '#0F6E56', fontWeight: '600', background: 'rgba(29,158,117,0.09)', padding: '5px 12px', borderRadius: '7px', marginLeft: 'auto', whiteSpace: 'nowrap' as const, letterSpacing: '-0.01em' },
-  contentGrid: { display: 'grid', gridTemplateColumns: '1fr 280px', gap: '14px' },
-  metricsGrid: { display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '10px', marginBottom: '14px' },
-  metricCard: { borderRadius: '12px', padding: '1.1rem 1.1rem 1.1rem 1.3rem', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' },
-  metricLabel: { fontSize: '11px', color: '#aaa', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '8px', fontWeight: '600' },
-  metricValue: { fontSize: '26px', fontWeight: '400', lineHeight: '1', marginBottom: '5px', fontFamily: "'DM Serif Display', Georgia, serif" },
-  metricSub: { fontSize: '11px', color: '#bbb', marginTop: '2px' },
-  alertCard: { background: '#fff', borderRadius: '12px', padding: '1.1rem 1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04)' },
-  alertHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' },
-  alertTitle: { fontSize: '13px', fontWeight: '600', color: '#0D1B2A', letterSpacing: '-0.01em' },
-  alertCount: { fontSize: '11px', background: '#F1F0ED', color: '#999', padding: '2px 9px', borderRadius: '20px', fontWeight: '500' },
-  alertItem: { display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '9px 10px', borderRadius: '8px', marginBottom: '4px' },
-  alertDot: { width: '7px', height: '7px', borderRadius: '50%', marginTop: '5px', flexShrink: 0 },
-  alertText: { fontSize: '12.5px', color: '#555', lineHeight: '1.55', fontWeight: '400' },
-  quickCard: { background: '#fff', borderRadius: '12px', padding: '1.1rem 1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.04)', alignSelf: 'start' as const },
-  quickTitle: { fontSize: '13px', fontWeight: '600', color: '#0D1B2A', marginBottom: '12px', letterSpacing: '-0.01em' },
-  quickBtn: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', background: '#FAFAF8', border: '1px solid rgba(0,0,0,0.05)', borderRadius: '9px', padding: '10px 12px', fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: '13px', color: '#333', cursor: 'pointer', marginBottom: '6px', textAlign: 'left' as const, fontWeight: '400' },
-  quickIcon: { fontSize: '14px', width: '20px', textAlign: 'center' as const, flexShrink: 0 },
+  navSignout: { background: 'transparent', border: '1px solid rgba(255,255,255,0.13)', color: 'rgba(255,255,255,0.45)', fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer' },
+  body: { padding: '2rem 2rem', maxWidth: '1400px', margin: '0 auto' },
+  greetingDate: { fontSize: '10px', color: '#aaa', letterSpacing: '0.14em', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase' as const },
+  greetingTitle: { fontFamily: 'Georgia,serif', fontSize: '30px', fontWeight: '400', color: '#0D1B2A', margin: '0', lineHeight: '1.2' },
+  segmented: { display: 'flex', gap: '2px', background: '#E5E5E0', borderRadius: '8px', padding: '3px' },
+  shortcutBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '12px', border: 'none', borderRadius: '5px', padding: '5px 11px', background: 'transparent', color: '#888', cursor: 'pointer', whiteSpace: 'nowrap' as const, fontWeight: '500' },
+  shortcutActive: { background: '#fff', color: '#0F6E56', boxShadow: '0 1px 3px rgba(0,0,0,0.10)' },
+  dateInput: { fontFamily: 'system-ui,sans-serif', fontSize: '12px', border: '1px solid #D8D8D2', borderRadius: '7px', padding: '5px 9px', color: '#333', background: '#fff' },
+  entityRow: { display: 'flex', gap: '10px', marginBottom: '1.5rem', flexWrap: 'wrap' as const },
+  entityChip: { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '10px', background: '#fff', border: '1.5px solid #E5E5E0', cursor: 'pointer', flex: '1', minWidth: '160px' },
+  entityChipActive: { border: '1.5px solid', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' },
+  entityDot: { width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0 },
+  entityBadgePill: { marginLeft: 'auto', fontSize: '9px', fontWeight: '700', padding: '2px 7px', borderRadius: '20px', letterSpacing: '0.06em', flexShrink: 0 },
+  metricsRow: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '14px' },
+  metricCard: { background: '#fff', borderRadius: '12px', padding: '1.1rem 1.2rem 1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '0.5px solid #E5E5E0' },
+  metricLabel: { fontSize: '10px', color: '#aaa', textTransform: 'uppercase' as const, letterSpacing: '0.09em', marginBottom: '6px', fontWeight: '600' },
+  metricValue: { fontSize: '28px', fontWeight: '400', lineHeight: '1', marginBottom: '4px', fontFamily: 'Georgia,serif' },
+  metricSub: { fontSize: '11px', color: '#bbb' },
+  mainGrid: { display: 'grid', gridTemplateColumns: '1fr 280px', gap: '14px' },
+  card: { background: '#fff', borderRadius: '12px', padding: '1.1rem 1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '0.5px solid #E5E5E0' },
+  cardHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' },
+  cardTitle: { fontSize: '13px', fontWeight: '600', color: '#111', letterSpacing: '-0.01em' },
+  cardLink: { fontSize: '12px', color: '#1D9E75', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'system-ui,sans-serif', padding: 0 },
+  loadingBox: { padding: '24px', textAlign: 'center' as const, color: '#bbb', fontSize: '12px' },
+  emptyBox: { padding: '24px', textAlign: 'center' as const, color: '#ccc', fontSize: '12px' },
+  quickBtn: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', background: '#FAFAF8', border: '0.5px solid #E5E5E0', borderRadius: '8px', padding: '9px 11px', fontFamily: 'system-ui,sans-serif', cursor: 'pointer', marginBottom: '5px', textAlign: 'left' as const },
 }
