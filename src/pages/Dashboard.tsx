@@ -36,36 +36,106 @@ function Sparkline({ data, color, height = 36, width = 120 }: { data: number[]; 
   )
 }
 
-// ── Mini Bar Chart ────────────────────────────────────────
-function BarChart({ months, revenues, expenses }: { months: string[]; revenues: number[]; expenses: number[] }) {
+// ── Area Chart ───────────────────────────────────────────
+function AreaChart({ months, revenues, expenses }: { months: string[]; revenues: number[]; expenses: number[] }) {
+  const [hovered, setHovered] = React.useState<number | null>(null)
+  const W = 560
+  const H = 140
+  const padL = 42
+  const padR = 16
+  const padT = 10
+  const padB = 28
+  const chartW = W - padL - padR
+  const chartH = H - padT - padB
   const max = Math.max(...revenues, ...expenses, 0.01)
-  const chartH = 120
-  const barW = 18
-  const gap = 6
-  const groupW = barW * 2 + gap
-  const padL = 8
-  const totalW = padL + months.length * (groupW + 10)
+  const n = months.length
+
+  const xPos = (i: number) => padL + (i / Math.max(n - 1, 1)) * chartW
+  const yPos = (v: number) => padT + (1 - v / max) * chartH
+
+  const revPts = revenues.map((v, i) => `${xPos(i)},${yPos(v)}`).join(' ')
+  const expPts = expenses.map((v, i) => `${xPos(i)},${yPos(v)}`).join(' ')
+
+  const revArea = `M ${xPos(0)},${yPos(0)} L ${revPts} L ${xPos(n - 1)},${padT + chartH} L ${xPos(0)},${padT + chartH} Z`
+  const expArea = `M ${xPos(0)},${yPos(0)} L ${expPts} L ${xPos(n - 1)},${padT + chartH} L ${xPos(0)},${padT + chartH} Z`
+
+  // Y-axis ticks
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map(f => ({ v: max * f, y: padT + (1 - f) * chartH }))
+
+  const fmt = (v: number) => v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v.toFixed(0)}`
 
   return (
-    <svg width="100%" viewBox={`0 0 ${totalW} ${chartH + 30}`} preserveAspectRatio="none" style={{ overflow: 'visible' }}>
-      {months.map((m, i) => {
-        const x = padL + i * (groupW + 10)
-        const rH = (revenues[i] / max) * chartH
-        const eH = (expenses[i] / max) * chartH
-        return (
-          <g key={m}>
-            {/* Revenue bar */}
-            <rect x={x} y={chartH - rH} width={barW} height={Math.max(rH, 1)} rx="3" fill="#1D9E75" fillOpacity="0.85" />
-            {/* Expense bar */}
-            <rect x={x + barW + gap} y={chartH - eH} width={barW} height={Math.max(eH, 1)} rx="3" fill="#E24B4A" fillOpacity="0.7" />
-            {/* Month label */}
-            <text x={x + barW} y={chartH + 16} textAnchor="middle" fontSize="9" fill="#aaa" fontFamily="system-ui">{m}</text>
+    <div style={{ position: 'relative' }}>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow: 'visible' }}>
+        <defs>
+          <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#1D9E75" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="#1D9E75" stopOpacity="0.02" />
+          </linearGradient>
+          <linearGradient id="expGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#E24B4A" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="#E24B4A" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+
+        {/* Grid lines */}
+        {ticks.map((t, i) => (
+          <g key={i}>
+            <line x1={padL} y1={t.y} x2={W - padR} y2={t.y} stroke="#F0F0EE" strokeWidth="1" />
+            <text x={padL - 6} y={t.y + 4} textAnchor="end" fontSize="9" fill="#ccc" fontFamily="system-ui">{fmt(t.v)}</text>
           </g>
-        )
-      })}
-      {/* Baseline */}
-      <line x1={0} y1={chartH} x2={totalW} y2={chartH} stroke="#f0f0ee" strokeWidth="1" />
-    </svg>
+        ))}
+
+        {/* Area fills */}
+        <path d={expArea} fill="url(#expGrad)" />
+        <path d={revArea} fill="url(#revGrad)" />
+
+        {/* Lines */}
+        <polyline points={expPts} fill="none" stroke="#E24B4A" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" opacity="0.8" />
+        <polyline points={revPts} fill="none" stroke="#1D9E75" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+
+        {/* Month labels */}
+        {months.map((m, i) => (
+          <text key={m} x={xPos(i)} y={H - 4} textAnchor="middle" fontSize="9" fill={hovered === i ? '#555' : '#bbb'} fontFamily="system-ui" fontWeight={hovered === i ? '600' : '400'}>{m}</text>
+        ))}
+
+        {/* Hover zones + dots */}
+        {months.map((m, i) => (
+          <g key={`h${i}`}>
+            {hovered === i && (
+              <>
+                <line x1={xPos(i)} y1={padT} x2={xPos(i)} y2={padT + chartH} stroke="#e5e5e5" strokeWidth="1" strokeDasharray="3,2" />
+                <circle cx={xPos(i)} cy={yPos(revenues[i])} r="4" fill="#1D9E75" stroke="#fff" strokeWidth="2" />
+                <circle cx={xPos(i)} cy={yPos(expenses[i])} r="4" fill="#E24B4A" stroke="#fff" strokeWidth="2" />
+                {/* Tooltip */}
+                <rect x={Math.min(xPos(i) - 45, W - padR - 95)} y={padT + 4} width="90" height="42" rx="6" fill="#0D1B2A" opacity="0.88" />
+                <text x={Math.min(xPos(i), W - padR - 50)} y={padT + 17} textAnchor="middle" fontSize="9.5" fill="#5DCAA5" fontFamily="system-ui" fontWeight="600">{m}</text>
+                <text x={Math.min(xPos(i), W - padR - 50)} y={padT + 29} textAnchor="middle" fontSize="8.5" fill="#9FE1CB" fontFamily="system-ui">Rev: {fmt(revenues[i])}</text>
+                <text x={Math.min(xPos(i), W - padR - 50)} y={padT + 40} textAnchor="middle" fontSize="8.5" fill="#F5A9A9" fontFamily="system-ui">Exp: {fmt(expenses[i])}</text>
+              </>
+            )}
+            <rect
+              x={xPos(i) - (i === 0 ? 0 : chartW / (n - 1) / 2)}
+              y={padT}
+              width={chartW / Math.max(n - 1, 1)}
+              height={chartH}
+              fill="transparent"
+              style={{ cursor: 'crosshair' }}
+              onMouseEnter={() => setHovered(i)}
+              onMouseLeave={() => setHovered(null)}
+            />
+          </g>
+        ))}
+
+        {/* Dots at ends */}
+        {n > 0 && (
+          <>
+            <circle cx={xPos(n - 1)} cy={yPos(revenues[n - 1])} r="3" fill="#1D9E75" stroke="#fff" strokeWidth="1.5" />
+            <circle cx={xPos(n - 1)} cy={yPos(expenses[n - 1])} r="3" fill="#E24B4A" stroke="#fff" strokeWidth="1.5" />
+          </>
+        )}
+      </svg>
+    </div>
   )
 }
 
@@ -460,8 +530,8 @@ export default function Dashboard() {
               ) : monthlyData.length === 0 ? (
                 <div style={s.emptyBox}>No data for selected period</div>
               ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <BarChart
+                <div style={{ padding: '0 4px' }}>
+                  <AreaChart
                     months={monthlyData.map(m => m.month)}
                     revenues={monthlyData.map(m => m.revenue)}
                     expenses={monthlyData.map(m => m.expenses)}
