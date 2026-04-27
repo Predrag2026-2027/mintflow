@@ -485,7 +485,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
           const rateData = await getRate(currency, isoDate)
           rateCache[cacheKey] = rateData.rate
         } catch {
-          const fallbacks: Record<string, number> = { RSD: 105.0, EUR: 1.08, AED: 0.272 }
+          const fallbacks: Record<string, number> = { RSD: 117.4, EUR: 1.18, AED: 0.272 }
           rateCache[cacheKey] = fallbacks[currency] || 1
         }
       }
@@ -572,6 +572,27 @@ export default function BulkImport({ onClose, onImported }: Props) {
     const accepted = rows.filter(r => r.status === 'accepted')
     let done = 0
     const localPartners = [...partners]
+    const rateCache: Record<string, number> = {}
+
+    const getAmountUsd = async (p: any, amount: number): Promise<{ amount_usd: number; exchange_rate: number | null }> => {
+      if (p.currency === 'USD') return { amount_usd: amount, exchange_rate: 1 }
+      if ((p as any).amount_usd) return { amount_usd: (p as any).amount_usd, exchange_rate: (p as any).exchange_rate }
+      // Konvertuj ako nije već konvertovano
+      const parts = (p.date || '').split('.')
+      const isoDate = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : p.date
+      const cacheKey = `${p.currency}_${isoDate}`
+      if (!rateCache[cacheKey]) {
+        try {
+          const rateData = await getRate(p.currency, isoDate)
+          rateCache[cacheKey] = rateData.rate
+        } catch {
+          const fallbacks: Record<string, number> = { RSD: 117.4, EUR: 1.18, AED: 0.272 }
+          rateCache[cacheKey] = fallbacks[p.currency] || 1
+        }
+      }
+      const rate = rateCache[cacheKey]
+      return { amount_usd: convertToUSD(amount, p.currency, rate), exchange_rate: rate }
+    }
 
     for (const row of accepted) {
       const p = row.parsed
@@ -591,6 +612,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
 
       // ── Pass-through → postuj u passthrough tabelu ──
       if (row.override_tx_type === 'passthrough') {
+        const { amount_usd, exchange_rate } = await getAmountUsd(p, amount)
         await supabase.from('passthrough').insert({
           company_id: company,
           bank_id: bank,
@@ -600,8 +622,8 @@ export default function BulkImport({ onClose, onImported }: Props) {
           period_month: row.override_pt_period || null,
           currency: p.currency,
           amount,
-          exchange_rate: (p as any).exchange_rate || null,
-          amount_usd: (p as any).amount_usd || (p.currency === 'USD' ? amount : null),
+          exchange_rate,
+          amount_usd,
           note: row.override_note || p.description || null,
           account_number: p.account_number || null,
           model: p.model || null,
@@ -617,14 +639,15 @@ export default function BulkImport({ onClose, onImported }: Props) {
       const isDirectWithPL = row.override_tx_type === 'direct'
       const aimfoxAmount = row.override_rev_alloc === 'byval' ? (parseFloat(row.override_aimfox_val) || null) : null
       const sgAmount = row.override_rev_alloc === 'byval' ? (parseFloat(row.override_sg_val) || null) : null
+      const { amount_usd, exchange_rate } = await getAmountUsd(p, amount)
       const { data: newTx } = await supabase.from('transactions').insert({
         company_id: company, bank_id: bank, partner_id: partnerId,
         transaction_date: formatDate(p.date), statement_number: p.statement_number || null,
         type: row.override_tx_type, tx_subtype: row.override_tx_subtype,
         payment_method: row.override_payment_method || null,
         currency: p.currency, amount,
-        exchange_rate: (p as any).exchange_rate || null,
-        amount_usd: (p as any).amount_usd || (p.currency === 'USD' ? amount : null),
+        exchange_rate,
+        amount_usd,
         pl_impact: isDirectWithPL,
         pl_category: isDirectWithPL ? (row.override_pl_category_name || null) : null,
         pl_subcategory: isDirectWithPL ? (row.override_pl_subcategory_name || null) : null,
