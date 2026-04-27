@@ -155,11 +155,11 @@ export default function Partners() {
               </thead>
               <tbody>
                 {filtered.map((p, i) => (
-                  <tr key={p.id} style={{ ...s.tr, background: i % 2 === 0 ? '#fff' : '#fafaf9', cursor: 'pointer' }}
+                  <tr key={p.id} style={{ ...s.tr, background: i % 2 === 0 ? '#fff' : '#F7F7F4', cursor: 'pointer' }}
                     onClick={() => { setEditPartner(p); setShowDialog(true) }}>
                     <td style={s.td}>
-                      <div style={{ fontWeight: '500', fontSize: '13px', color: '#1D9E75', textDecoration: 'underline', textDecorationStyle: 'dotted' as const }}>{p.name}</div>
-                      {p.address && <div style={{ fontSize: '11px', color: '#aaa' }}>{p.address}</div>}
+                      <div style={{ fontWeight: '600', fontSize: '13px', color: '#0F6E56' }}>{p.name}</div>
+                      {p.address && <div style={{ fontSize: '11px', color: '#888', marginTop: '1px' }}>{p.address}</div>}
                     </td>
                     <td style={s.td}>
                       <span style={{ ...s.badge, background: typeColors[p.type || 'vendor']?.bg || '#f0f0ee', color: typeColors[p.type || 'vendor']?.color || '#666' }}>
@@ -517,7 +517,7 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
 }
 
 const s: Record<string, React.CSSProperties> = {
-  root: { minHeight: '100vh', background: '#f5f5f3', fontFamily: 'system-ui,sans-serif' },
+  root: { minHeight: '100vh', background: '#EEEEE9', fontFamily: 'system-ui,sans-serif' },
   nav: { background: '#0a1628', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1.5rem', height: '52px' },
   navLogo: { display: 'flex', alignItems: 'center', gap: '8px' },
   navLogoText: { fontFamily: 'Georgia,serif', fontSize: '18px', fontWeight: '500', color: '#fff' },
@@ -531,28 +531,28 @@ const s: Record<string, React.CSSProperties> = {
   body: { padding: '2rem 1.5rem' },
   pageHeader: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.5rem' },
   pageTitle: { fontFamily: 'Georgia,serif', fontSize: '24px', fontWeight: '400', color: '#111', marginBottom: '4px' },
-  pageSub: { fontSize: '13px', color: '#888' },
-  newBtn: { background: '#1D9E75', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 18px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer' },
+  pageSub: { fontSize: '13px', color: '#666' },
+  newBtn: { background: '#1D9E75', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 18px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer', boxShadow: '0 2px 8px rgba(29,158,117,0.3)' },
   summaryRow: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '1.5rem' },
-  summaryCard: { background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '12px', padding: '14px 16px' },
-  summaryLabel: { fontSize: '10px', fontWeight: '500', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '6px' },
-  summaryVal: { fontSize: '22px', fontWeight: '500', color: '#111' },
+  summaryCard: { background: '#fff', border: '1px solid #D8D8D2', borderRadius: '12px', padding: '14px 16px', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' },
+  summaryLabel: { fontSize: '10px', fontWeight: '600', color: '#666', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '6px' },
+  summaryVal: { fontSize: '26px', fontWeight: '600', color: '#111' },
   filterBar: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1rem', flexWrap: 'wrap' as const },
-  searchInput: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '0.5px solid #e5e5e5', borderRadius: '8px', padding: '8px 12px', outline: 'none', background: '#fff', color: '#111', flex: '1', minWidth: '200px' },
-  filterSelect: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '0.5px solid #e5e5e5', borderRadius: '8px', padding: '8px 12px', outline: 'none', background: '#fff', color: '#111', cursor: 'pointer' },
-  totalBadge: { fontSize: '13px', color: '#666', background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '8px', padding: '8px 12px', marginLeft: 'auto', whiteSpace: 'nowrap' as const },
-  tableWrap: { background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '12px', overflow: 'visible' },
+  searchInput: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '1px solid #C8C8C2', borderRadius: '8px', padding: '8px 12px', outline: 'none', background: '#fff', color: '#111', flex: '1', minWidth: '200px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },
+  filterSelect: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '1px solid #C8C8C2', borderRadius: '8px', padding: '8px 12px', outline: 'none', background: '#fff', color: '#111', cursor: 'pointer' },
+  totalBadge: { fontSize: '13px', color: '#555', background: '#fff', border: '1px solid #C8C8C2', borderRadius: '8px', padding: '8px 12px', marginLeft: 'auto', whiteSpace: 'nowrap' as const, fontWeight: '500' },
+  tableWrap: { background: '#fff', border: '1px solid #D0D0CA', borderRadius: '12px', overflow: 'visible', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' },
   table: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '13px' },
-  thead: { background: '#f5f5f3' },
-  th: { padding: '10px 12px', textAlign: 'left' as const, fontSize: '10px', fontWeight: '500', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.08em', borderBottom: '0.5px solid #e5e5e5', whiteSpace: 'nowrap' as const },
-  tr: { borderBottom: '0.5px solid #f0f0ee' },
+  thead: { background: '#1E2A3A' },
+  th: { padding: '11px 12px', textAlign: 'left' as const, fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', borderBottom: '1px solid #2A3A4E', whiteSpace: 'nowrap' as const },
+  tr: { borderBottom: '0.5px solid #E8E8E2' },
   td: { padding: '10px 12px', verticalAlign: 'middle' as const },
   emptyState: { padding: '3rem', textAlign: 'center' as const, color: '#888', fontSize: '14px' },
-  badge: { fontSize: '10px', fontWeight: '500', padding: '2px 8px', borderRadius: '20px', whiteSpace: 'nowrap' as const },
-  monoCell: { fontSize: '12px', fontFamily: 'monospace', color: '#666', background: '#f5f5f3', padding: '2px 6px', borderRadius: '4px' },
-  smallCell: { fontSize: '12px', color: '#666' },
+  badge: { fontSize: '11px', fontWeight: '500', padding: '3px 9px', borderRadius: '20px', whiteSpace: 'nowrap' as const },
+  monoCell: { fontSize: '12px', fontFamily: 'monospace', color: '#444', background: '#F0F0EA', padding: '2px 6px', borderRadius: '4px', border: '0.5px solid #D8D8D2' },
+  smallCell: { fontSize: '12px', color: '#555' },
   editBtn: { background: 'none', border: '0.5px solid #e5e5e5', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', color: '#888', fontSize: '14px' },
-  deleteBtn: { background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', padding: '4px', opacity: 0.4, transition: 'opacity 0.15s' },
+  deleteBtn: { background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', padding: '4px', opacity: 0.3, transition: 'opacity 0.15s' },
   contextMenu: { position: 'fixed' as const, background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '8px', zIndex: 9999, minWidth: '120px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' },
   contextItem: { padding: '8px 14px', fontSize: '13px', color: '#111', cursor: 'pointer', borderBottom: '0.5px solid #f0f0ee' },
 }
