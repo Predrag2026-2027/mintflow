@@ -20,7 +20,7 @@ interface ParsedRow {
   reference_number: string
   model: string
   account_number: string
-  source_format: 'raiffeisen' | 'truist' | 'boa' | 'amex'
+  source_format: 'raiffeisen' | 'truist' | 'boa' | 'amex' | 'wio'
 }
 
 interface AIProposal {
@@ -65,9 +65,10 @@ interface ImportRow {
 const PAYMENT_METHODS = ['Wire transfer', 'ACH transfer', 'Cash', 'Check', 'Credit card', 'Direct debit', 'Other']
 const REVENUE_STREAMS = ['Social Growth', 'Aimfox', 'Outsourced Services', 'VAT Claimed', 'Interest Received', 'Loans', 'Credit', 'Other']
 
-function detectFormat(content: string, fileName: string): 'raiffeisen' | 'truist' | 'boa' | 'amex' | 'unknown' {
+function detectFormat(content: string, fileName: string): 'raiffeisen' | 'truist' | 'boa' | 'amex' | 'wio' | 'unknown' {
   if (fileName.toLowerCase().endsWith('.xlsx') || fileName.toLowerCase().endsWith('.xls')) return 'amex'
   const firstLine = content.split('\n')[0] || ''
+  if (firstLine.includes('Account name') && firstLine.includes('Account IBAN') && firstLine.includes('Transaction type')) return 'wio'
   if (firstLine.includes('Br. ra') || firstLine.includes('Datum obrade') || firstLine.startsWith('265-') || firstLine.startsWith('160-') || firstLine.startsWith('170-')) return 'raiffeisen'
   if (firstLine.includes('Posted Date') && firstLine.includes('Transaction Date') && firstLine.includes('Merchant name')) return 'truist'
   if (firstLine.includes('Description') && firstLine.includes('Summary Amt')) return 'boa'
@@ -241,6 +242,81 @@ function parseAmex(workbook: XLSX.WorkBook): ParsedRow[] {
   return rows
 }
 
+// ── Wio Bank CSV parser ──────────────────────────────────
+function parseWio(content: string): ParsedRow[] {
+  const lines = content.split('\n').filter(l => l.trim())
+  if (lines.length < 2) return []
+
+  const parseCSVLine = (line: string): string[] => {
+    const result: string[] = []
+    let current = ''
+    let inQuotes = false
+    for (let i = 0; i < line.length; i++) {
+      if (line[i] === '"') { inQuotes = !inQuotes }
+      else if (line[i] === ',' && !inQuotes) { result.push(current.trim()); current = '' }
+      else { current += line[i] }
+    }
+    result.push(current.trim())
+    return result
+  }
+
+  const rows: ParsedRow[] = []
+  // Cols: 0=Account name, 1=Account type, 2=Account IBAN, 3=Account number,
+  //       4=Card number, 5=Account currency, 6=Transaction type, 7=Date (DD/MM/YYYY),
+  //       8=Ref. number, 9=Description, 10=Amount, 11=Balance, 12=Original ref. number, 13=Notes
+
+  lines.slice(1).forEach((line, index) => {
+    if (!line.trim()) return
+    const cols = parseCSVLine(line.replace(/\r/g, ''))
+    if (cols.length < 11) return
+
+    const currency = cols[5]?.trim() || 'AED'
+    const txType = cols[6]?.trim() || ''
+    const rawDate = cols[7]?.trim() || ''
+    const refNum = cols[8]?.trim() || ''
+    const description = cols[9]?.trim() || ''
+    const rawAmount = parseFloat(cols[10]?.replace(/,/g, '') || '0') || 0
+    const notes = cols[13]?.trim() || ''
+
+    if (rawAmount === 0) return
+
+    // Skip currency exchange internal entries (they are internal conversions)
+    if (txType === 'Currency exchange') return
+
+    // Date: DD/MM/YYYY → DD.MM.YYYY
+    const dateParts = rawDate.split('/')
+    const date = dateParts.length === 3 ? `${dateParts[0]}.${dateParts[1]}.${dateParts[2]}` : rawDate
+
+    // Positive = credit (money in), Negative = debit (money out)
+    const debit = rawAmount < 0 ? Math.abs(rawAmount) : null
+    const credit = rawAmount > 0 ? rawAmount : null
+
+    // Partner name: extract from description or notes
+    let partnerName = description
+    if (description.toLowerCase().startsWith('to ')) partnerName = description.slice(3)
+    else if (description.toLowerCase().startsWith('from ')) partnerName = description.slice(5)
+
+    // Use notes as additional description context
+    const fullDesc = notes && notes !== 'N/A' && notes !== description ? `${description} — ${notes}` : description
+
+    rows.push({
+      id: `row_${index}`,
+      source_format: 'wio' as any,
+      date,
+      statement_number: refNum,
+      currency,
+      debit,
+      credit,
+      partner_name: partnerName.slice(0, 80),
+      description: fullDesc.slice(0, 200),
+      reference_number: refNum,
+      model: '',
+      account_number: cols[3]?.trim() || '',
+    })
+  })
+  return rows
+}
+
 function formatDate(d: string): string {
   if (!d) return ''
   const parts = d.split('.')
@@ -273,6 +349,7 @@ const FORMAT_LABELS: Record<string, string> = {
   truist: '🇺🇸 Truist',
   boa: '🇺🇸 Bank of America',
   amex: '💳 American Express',
+  wio: '🇦🇪 Wio Bank',
 }
 
 export default function BulkImport({ onClose, onImported }: Props) {
@@ -367,6 +444,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
         if (format === 'raiffeisen') parsed = parseRaiffeisen(text)
         else if (format === 'truist') parsed = parseTruist(text)
         else if (format === 'boa') parsed = parseBOA(text)
+        else if (format === 'wio') parsed = parseWio(text)
         if (parsed.length === 0) { setParseError('No transactions found in file.'); return }
         setRows(parsed.map(makeImportRow))
       }
