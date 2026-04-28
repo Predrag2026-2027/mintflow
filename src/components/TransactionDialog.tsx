@@ -63,7 +63,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   const [partnerAccounts, setPartnerAccounts] = useState<any[]>([])
   const [selectedAccountId, setSelectedAccountId] = useState('')
 
-  // Step 3 (Type & classification)
+  // Step 3
   const [txType, setTxType] = useState<'invoice_payment' | 'direct' | 'passthrough'>('invoice_payment')
   const [ptDirection, setPtDirection] = useState<'in' | 'out'>('out')
   const [ptPeriodMonth, setPtPeriodMonth] = useState(new Date().toISOString().slice(0, 7))
@@ -86,11 +86,16 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   const [note, setNote] = useState('')
   const [tags, setTags] = useState<string[]>([])
 
-  // By value split
+  // Revenue stream by-value split
   const [aimfoxVal, setAimfoxVal] = useState('')
   const [sgVal, setSgVal] = useState('')
 
-  // Step 2 (Amount)
+  // OPEX / Performance split
+  const [opexType, setOpexType] = useState('opex')
+  const [opexVal, setOpexVal] = useState('')
+  const [performanceVal, setPerformanceVal] = useState('')
+
+  // Step 2
   const [amount, setAmount] = useState('')
   const [exRate, setExRate] = useState('')
   const [isIndexed, setIsIndexed] = useState(false)
@@ -106,6 +111,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   const totalAllocated = linkedInvoices.reduce((s, i) => s + (i.allocated_usd || 0), 0)
   const unallocated = usdAmount - totalAllocated
 
+  // Revenue stream split handlers
   const handleAimfoxChange = (val: string) => {
     setAimfoxVal(val)
     const af = parseFloat(val) || 0
@@ -113,7 +119,6 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
     if (total > 0 && af >= 0 && af <= total) setSgVal((total - af).toFixed(2))
     else setSgVal('')
   }
-
   const handleSgChange = (val: string) => {
     setSgVal(val)
     const sg = parseFloat(val) || 0
@@ -122,8 +127,28 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
     else setAimfoxVal('')
   }
 
+  // OPEX / Performance split handlers
+  const handleOpexChange = (val: string) => {
+    setOpexVal(val)
+    const op = parseFloat(val) || 0
+    const total = parseFloat(amount) || 0
+    if (total > 0 && op >= 0 && op <= total) setPerformanceVal((total - op).toFixed(2))
+    else setPerformanceVal('')
+  }
+  const handlePerformanceChange = (val: string) => {
+    setPerformanceVal(val)
+    const perf = parseFloat(val) || 0
+    const total = parseFloat(amount) || 0
+    if (total > 0 && perf >= 0 && perf <= total) setOpexVal((total - perf).toFixed(2))
+    else setOpexVal('')
+  }
+
   useEffect(() => {
     if (revAlloc === 'byval') { setAimfoxVal(''); setSgVal('') }
+  }, [amount]) // eslint-disable-line
+
+  useEffect(() => {
+    if (opexType === 'split') { setOpexVal(''); setPerformanceVal('') }
   }, [amount]) // eslint-disable-line
 
   const splitTotal = (parseFloat(aimfoxVal) || 0) + (parseFloat(sgVal) || 0)
@@ -131,6 +156,12 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   const splitPct = parseFloat(amount) > 0
     ? { af: ((parseFloat(aimfoxVal) || 0) / parseFloat(amount) * 100).toFixed(1), sg: ((parseFloat(sgVal) || 0) / parseFloat(amount) * 100).toFixed(1) }
     : { af: '0', sg: '0' }
+
+  const opexSplitTotal = (parseFloat(opexVal) || 0) + (parseFloat(performanceVal) || 0)
+  const opexSplitOk = opexType !== 'split' || Math.abs(opexSplitTotal - (parseFloat(amount) || 0)) < 0.01
+  const opexPct = parseFloat(amount) > 0
+    ? { op: ((parseFloat(opexVal) || 0) / parseFloat(amount) * 100).toFixed(1), perf: ((parseFloat(performanceVal) || 0) / parseFloat(amount) * 100).toFixed(1) }
+    : { op: '0', perf: '0' }
 
   const expenseCategories = plCategories.filter(c => c.type !== 'revenue')
   const getPlSubs = (catId: string) => plSubcategories.filter(s => s.category_id === catId)
@@ -155,6 +186,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
         if (!plCatId) e.plCat = 'P&L Category is required'
         if (!deptId) e.dept = 'Department is required'
         if (revAlloc === 'byval' && !splitOk) e.split = 'Split values must sum to total amount'
+        if (opexType === 'split' && !opexSplitOk) e.opexSplit = 'OPEX split values must sum to total amount'
       }
       if (directSubtype === 'revenue' && !revStream) e.revStream = 'Revenue stream is required'
     }
@@ -163,7 +195,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
 
   useEffect(() => {
     setErrors(runValidation())
-  }, [companyId, bankId, currency, txDate, amount, exRate, txType, linkedInvoices, directSubtype, plCatId, deptId, revStream, revAlloc, aimfoxVal, sgVal]) // eslint-disable-line
+  }, [companyId, bankId, currency, txDate, amount, exRate, txType, linkedInvoices, directSubtype, plCatId, deptId, revStream, revAlloc, aimfoxVal, sgVal, opexType, opexVal, performanceVal]) // eslint-disable-line
 
   useEffect(() => {
     const load = async () => {
@@ -212,15 +244,11 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
     fetchOpenInvoices()
   }, [companyId])
 
-  // Load partner accounts when partner changes
   useEffect(() => {
     if (!partnerId) { setPartnerAccounts([]); setSelectedAccountId(''); return }
     const load = async () => {
       const { data } = await supabase
-        .from('partner_accounts')
-        .select('*')
-        .eq('partner_id', partnerId)
-        .eq('currency', 'RSD')
+        .from('partner_accounts').select('*').eq('partner_id', partnerId).eq('currency', 'RSD')
         .order('is_primary', { ascending: false })
       if (data && data.length > 0) {
         setPartnerAccounts(data)
@@ -229,11 +257,8 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
         setAccNum(primary.account_number || '')
         setModel(primary.model || '')
         if (!refNum) setRefNum(primary.reference_number || '')
-        setShowBankFields(true) // auto-otvori sekciju kada postoje računi
-      } else {
-        setPartnerAccounts([])
-        setSelectedAccountId('')
-      }
+        setShowBankFields(true)
+      } else { setPartnerAccounts([]); setSelectedAccountId('') }
     }
     load()
   }, [partnerId]) // eslint-disable-line
@@ -265,6 +290,9 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
     setAccNum(transaction.account_number || '')
     setModel(transaction.model || '')
     setRefNum(transaction.reference_number || '')
+    setOpexType(transaction.opex_type || 'opex')
+    setOpexVal(transaction.opex_amount?.toString() || '')
+    setPerformanceVal(transaction.performance_amount?.toString() || '')
   }, [transaction])
 
   useEffect(() => {
@@ -273,21 +301,18 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
       if (cat) setPlCatId(cat.id)
     }
   }, [transaction, plCategories])
-
   useEffect(() => {
     if (transaction && plSubcategories.length > 0 && plCatId) {
       const sub = plSubcategories.find(s => s.name === transaction.pl_subcategory && s.category_id === plCatId)
       if (sub) setPlSubId(sub.id)
     }
   }, [transaction, plSubcategories, plCatId])
-
   useEffect(() => {
     if (transaction && departments.length > 0) {
       const dept = departments.find(d => d.name === transaction.department)
       if (dept) setDeptId(dept.id)
     }
   }, [transaction, departments])
-
   useEffect(() => {
     if (transaction && deptSubcategories.length > 0 && deptId) {
       const sub = deptSubcategories.find(s => s.name === transaction.dept_subcategory && s.department_id === deptId)
@@ -298,7 +323,6 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   const filteredPartners = partners.filter(p =>
     !partnerSearch || p.name.toLowerCase().includes(partnerSearch.toLowerCase())
   )
-
   const filteredOpenInvoices = openInvoices.filter(inv => {
     if (!invoiceSearch) return true
     return (inv.partner_name || '').toLowerCase().includes(invoiceSearch.toLowerCase()) ||
@@ -313,42 +337,32 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   const touchStep = (n: number) => {
     if (n === 1) setTouched(p => ({ ...p, companyId: true, bankId: true, currency: true, txDate: true }))
     if (n === 2) setTouched(p => ({ ...p, amount: true, exRate: true }))
-    if (n === 3) setTouched(p => ({ ...p, linkedInvoices: true, plCat: true, dept: true, revStream: true, split: true }))
+    if (n === 3) setTouched(p => ({ ...p, linkedInvoices: true, plCat: true, dept: true, revStream: true, split: true, opexSplit: true }))
   }
-
   const stepHasError = (n: number) => {
     const stepFields: Record<number, string[]> = {
       1: ['companyId', 'bankId', 'currency', 'txDate'],
       2: ['amount', 'exRate'],
-      3: ['linkedInvoices', 'plCat', 'dept', 'revStream', 'split'],
+      3: ['linkedInvoices', 'plCat', 'dept', 'revStream', 'split', 'opexSplit'],
     }
     return (stepFields[n] || []).some(f => !!errors[f])
   }
 
   const isInvoiceLinked = (id: string) => linkedInvoices.some(l => l.invoice_id === id)
-
   const addInvoiceLink = (inv: any) => {
     if (isInvoiceLinked(inv.id)) return
     const remaining = inv.remaining_usd ?? inv.amount_usd ?? 0
     const suggested = Math.min(remaining, Math.max(0, usdAmount - totalAllocated))
     setLinkedInvoices(prev => [...prev, {
-      invoice_id: inv.id,
-      invoice_number: inv.invoice_number || '—',
-      partner_name: inv.partner_name || '—',
-      invoice_date: inv.invoice_date,
-      due_date: inv.due_date,
-      currency: inv.currency,
-      amount: inv.amount,
-      amount_usd: inv.amount_usd,
-      remaining_usd: remaining,
-      allocated_usd: Math.max(0, suggested),
+      invoice_id: inv.id, invoice_number: inv.invoice_number || '—',
+      partner_name: inv.partner_name || '—', invoice_date: inv.invoice_date,
+      due_date: inv.due_date, currency: inv.currency, amount: inv.amount,
+      amount_usd: inv.amount_usd, remaining_usd: remaining, allocated_usd: Math.max(0, suggested),
     }])
     touch('linkedInvoices')
   }
-
   const removeInvoiceLink = (invId: string) => setLinkedInvoices(prev => prev.filter(l => l.invoice_id !== invId))
   const updateAllocated = (invId: string, val: number) => setLinkedInvoices(prev => prev.map(l => l.invoice_id === invId ? { ...l, allocated_usd: val } : l))
-
   const handleAccountSelect = (accountId: string) => {
     setSelectedAccountId(accountId)
     const acc = partnerAccounts.find((a: any) => a.id === accountId)
@@ -360,12 +374,10 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
     setFetchingRate(true)
     try {
       const rateData = await getRate(currency, txDate, isIndexed)
-      setExRate(rateData.rate.toString())
-      setRateSource(rateData.source)
+      setExRate(rateData.rate.toString()); setRateSource(rateData.source)
     } catch {
       const fallbacks: Record<string, number> = { RSD: 117.0, EUR: 1.08, AED: 0.272 }
-      setExRate(fallbacks[currency]?.toString() || '')
-      setRateSource('Fallback')
+      setExRate(fallbacks[currency]?.toString() || ''); setRateSource('Fallback')
     }
     setFetchingRate(false)
   }
@@ -388,16 +400,18 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
     if (revAlloc === 'sg100') return '100% Social Growth'
     if (revAlloc === 'af100') return '100% Aimfox'
     if (revAlloc === 'shared') return 'Shared 50/50'
-    if (revAlloc === 'byval') {
-      const af = parseFloat(aimfoxVal) || 0
-      const sg = parseFloat(sgVal) || 0
-      return `By value — Aimfox: ${currency} ${af.toFixed(2)} / SG: ${currency} ${sg.toFixed(2)}`
-    }
+    if (revAlloc === 'byval') return `By value — AF: ${currency} ${parseFloat(aimfoxVal || '0').toFixed(2)} / SG: ${currency} ${parseFloat(sgVal || '0').toFixed(2)}`
     return '—'
   }
 
+  const opexLabel = () => {
+    if (opexType === 'opex') return '100% OPEX'
+    if (opexType === 'performance') return '100% Performance'
+    return `Split — OPEX: ${currency} ${parseFloat(opexVal || '0').toFixed(2)} / Perf: ${currency} ${parseFloat(performanceVal || '0').toFixed(2)}`
+  }
+
   const handlePost = async () => {
-    setTouched({ companyId: true, bankId: true, currency: true, txDate: true, linkedInvoices: true, plCat: true, dept: true, revStream: true, amount: true, exRate: true, split: true })
+    setTouched({ companyId: true, bankId: true, currency: true, txDate: true, linkedInvoices: true, plCat: true, dept: true, revStream: true, amount: true, exRate: true, split: true, opexSplit: true })
     const e = runValidation()
     if (Object.keys(e).length > 0) { setShowValidationSummary(true); return }
     setSaving(true)
@@ -410,61 +424,44 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
       const isDirectWithPL = txType === 'direct'
       const aimfoxAmount = revAlloc === 'byval' ? (parseFloat(aimfoxVal) || 0) : null
       const sgAmount = revAlloc === 'byval' ? (parseFloat(sgVal) || 0) : null
+      const opexAmount = opexType === 'split' ? (parseFloat(opexVal) || 0) : null
+      const perfAmount = opexType === 'split' ? (parseFloat(performanceVal) || 0) : null
+
       const payload = {
-        company_id: companyId || null,
-        bank_id: bankId || null,
-        partner_id: finalPartnerId || null,
-        transaction_date: txDate,
-        statement_number: statement || null,
-        type: txType,
+        company_id: companyId || null, bank_id: bankId || null,
+        partner_id: finalPartnerId || null, transaction_date: txDate,
+        statement_number: statement || null, type: txType,
         tx_subtype: txType === 'direct' ? directSubtype : null,
-        currency,
-        amount: parseFloat(amount),
-        exchange_rate: parseFloat(exRate) || null,
-        amount_usd: usdAmount,
-        is_indexed: isIndexed,
-        pl_impact: isDirectWithPL,
+        currency, amount: parseFloat(amount),
+        exchange_rate: parseFloat(exRate) || null, amount_usd: usdAmount,
+        is_indexed: isIndexed, pl_impact: isDirectWithPL,
         pl_category: isDirectWithPL ? (plCatName || null) : null,
         pl_subcategory: isDirectWithPL ? (plSubName || null) : null,
         department: isDirectWithPL ? (deptName || null) : null,
         dept_subcategory: isDirectWithPL ? (deptSubName || null) : null,
         expense_description: isDirectWithPL ? (expDesc || null) : null,
         revenue_stream: isDirectWithPL ? (revStream || null) : null,
-        rev_alloc_type: revAlloc,
-        dept_split_type: deptSplit,
-        rev_alloc_aimfox: aimfoxAmount,
-        rev_alloc_sg: sgAmount,
-        account_number: accNum || null,
-        model: model || null,
-        reference_number: refNum || null,
-        note: note || null,
-        tags: tags.length > 0 ? tags : null,
-        status: 'posted',
+        rev_alloc_type: revAlloc, dept_split_type: deptSplit,
+        rev_alloc_aimfox: aimfoxAmount, rev_alloc_sg: sgAmount,
+        opex_type: isDirectWithPL && directSubtype === 'expense' ? opexType : null,
+        opex_amount: opexAmount, performance_amount: perfAmount,
+        account_number: accNum || null, model: model || null,
+        reference_number: refNum || null, note: note || null,
+        tags: tags.length > 0 ? tags : null, status: 'posted',
       }
+
       if (txType === 'passthrough') {
-        // Postuj u passthrough tabelu
         const ptPayload = {
-          company_id: companyId || null,
-          bank_id: bankId || null,
-          partner_id: finalPartnerId || null,
-          transaction_date: txDate,
-          direction: ptDirection,
-          period_month: ptPeriodMonth || null,
-          currency,
-          amount: parseFloat(amount),
-          exchange_rate: parseFloat(exRate) || null,
-          amount_usd: usdAmount,
-          note: note || null,
-          status: 'unpaired',
-          account_number: accNum || null,
-          model: model || null,
-          reference_number: refNum || null,
+          company_id: companyId || null, bank_id: bankId || null,
+          partner_id: finalPartnerId || null, transaction_date: txDate,
+          direction: ptDirection, period_month: ptPeriodMonth || null,
+          currency, amount: parseFloat(amount),
+          exchange_rate: parseFloat(exRate) || null, amount_usd: usdAmount,
+          note: note || null, status: 'unpaired',
+          account_number: accNum || null, model: model || null, reference_number: refNum || null,
         }
-        if (transaction?.id) {
-          await supabase.from('passthrough').update(ptPayload).eq('id', transaction.id)
-        } else {
-          await supabase.from('passthrough').insert(ptPayload)
-        }
+        if (transaction?.id) await supabase.from('passthrough').update(ptPayload).eq('id', transaction.id)
+        else await supabase.from('passthrough').insert(ptPayload)
       } else {
         let txId: string
         if (transaction?.id) {
@@ -477,10 +474,8 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
         if (txType === 'invoice_payment' && linkedInvoices.length > 0 && txId) {
           for (const link of linkedInvoices) {
             await supabase.from('invoice_transaction_links').upsert({
-              invoice_id: link.invoice_id,
-              transaction_id: txId,
-              allocated_amount: link.allocated_usd,
-              allocated_amount_usd: link.allocated_usd,
+              invoice_id: link.invoice_id, transaction_id: txId,
+              allocated_amount: link.allocated_usd, allocated_amount_usd: link.allocated_usd,
             }, { onConflict: 'invoice_id,transaction_id' })
             const { data: invStatus } = await supabase.from('v_invoice_status').select('calculated_status').eq('id', link.invoice_id).single()
             if (invStatus) await supabase.from('invoices').update({ status: invStatus.calculated_status }).eq('id', link.invoice_id)
@@ -502,6 +497,75 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
         <div style={{ fontFamily: 'Georgia,serif', fontSize: '20px', color: '#111' }}>{transaction ? 'Transaction updated!' : 'Transaction posted!'}</div>
         <div style={{ fontSize: '13px', color: '#888' }}>{txType === 'invoice_payment' ? `${linkedInvoices.length} invoice(s) updated.` : 'Posted to P&L and cash flow.'}</div>
       </div>
+    </div>
+  )
+
+  // ── OPEX/Performance split panel (reusable JSX) ──────
+  const opexPanel = (
+    <div style={s.section}>
+      <div style={s.sectionTitle}>Expense type — OPEX vs Performance</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+        {[
+          { id: 'opex', label: '🏢 100% OPEX', sub: 'Fixed operational cost', color: '#185FA5', bg: '#E6F1FB' },
+          { id: 'performance', label: '🚀 100% Performance', sub: 'Revenue-driven cost', color: '#BA7517', bg: '#FAEEDA' },
+          { id: 'split', label: '⚖️ Split by value', sub: 'Custom allocation', color: '#555', bg: '#f0f0ee' },
+        ].map(a => (
+          <div key={a.id}
+            style={{ ...s.allocBtn, ...(opexType === a.id ? { border: `2px solid ${a.color}`, background: a.bg } : {}) }}
+            onClick={() => { setOpexType(a.id); setOpexVal(''); setPerformanceVal('') }}>
+            <div style={{ fontSize: '11px', fontWeight: '600', color: opexType === a.id ? a.color : '#111' }}>{a.label}</div>
+            <div style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>{a.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {opexType === 'split' && (
+        <div style={{ marginTop: '14px', background: '#f9f9f7', borderRadius: '10px', padding: '14px', border: '0.5px solid #e5e5e5' }}>
+          <div style={{ fontSize: '11px', color: '#888', fontWeight: '500', marginBottom: '10px', textTransform: 'uppercase' as const, letterSpacing: '0.07em' }}>
+            Split by value — total: {amount ? `${parseFloat(amount).toLocaleString()} ${currency}` : '—'}
+          </div>
+          <div style={s.row2}>
+            <div style={s.field}>
+              <label style={s.lbl}>OPEX ({currency || '—'})</label>
+              <input type="number" style={{ ...s.input, ...(fieldErr('opexSplit') ? s.inputError : {}) }}
+                value={opexVal} onChange={e => handleOpexChange(e.target.value)}
+                placeholder="0.00" min="0" max={amount} />
+              {opexVal && parseFloat(amount) > 0 && (
+                <div style={{ fontSize: '10px', color: '#185FA5', marginTop: '2px' }}>{opexPct.op}% of total</div>
+              )}
+            </div>
+            <div style={s.field}>
+              <label style={s.lbl}>Performance ({currency || '—'})</label>
+              <input type="number" style={{ ...s.input, ...(fieldErr('opexSplit') ? s.inputError : {}) }}
+                value={performanceVal} onChange={e => handlePerformanceChange(e.target.value)}
+                placeholder="0.00" min="0" max={amount} />
+              {performanceVal && parseFloat(amount) > 0 && (
+                <div style={{ fontSize: '10px', color: '#BA7517', marginTop: '2px' }}>{opexPct.perf}% of total</div>
+              )}
+            </div>
+          </div>
+          {opexVal && performanceVal && parseFloat(amount) > 0 && (
+            <div style={{ marginTop: '10px', background: '#fff', borderRadius: '8px', padding: '10px 12px', border: '0.5px solid #e5e5e5' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
+                <span style={{ color: '#888' }}>OPEX</span>
+                <span style={{ fontWeight: '500', color: '#185FA5' }}>{parseFloat(opexVal).toLocaleString()} {currency}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '8px' }}>
+                <span style={{ color: '#888' }}>Performance</span>
+                <span style={{ fontWeight: '500', color: '#BA7517' }}>{parseFloat(performanceVal).toLocaleString()} {currency}</span>
+              </div>
+              <div style={{ height: '6px', borderRadius: '3px', background: '#e5e5e5', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${opexPct.op}%`, background: '#185FA5', borderRadius: '3px', display: 'inline-block' }} />
+                <div style={{ height: '100%', width: `${opexPct.perf}%`, background: '#BA7517', borderRadius: '3px', display: 'inline-block' }} />
+              </div>
+              {!opexSplitOk
+                ? <div style={{ fontSize: '11px', color: '#A32D2D', marginTop: '6px' }}>⚠️ Sum ({opexSplitTotal.toLocaleString()} {currency}) ≠ total ({parseFloat(amount).toLocaleString()} {currency})</div>
+                : <div style={{ fontSize: '11px', color: '#1D9E75', marginTop: '6px' }}>✓ Split is valid</div>
+              }
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 
@@ -552,7 +616,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
 
         <div style={s.body}>
 
-          {/* ── STEP 1 — Basic information ── */}
+          {/* ── STEP 1 ── */}
           {step === 1 && (
             <>
               <div style={s.section}>
@@ -642,18 +706,11 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                       {partnerAccounts.length > 1 ? (
                         <select style={s.select} value={selectedAccountId} onChange={e => handleAccountSelect(e.target.value)}>
                           {partnerAccounts.map((acc: any) => (
-                            <option key={acc.id} value={acc.id}>
-                              {acc.account_number}{acc.bank_name ? ` — ${acc.bank_name}` : ''}{acc.is_primary ? ' ★' : ''}
-                            </option>
+                            <option key={acc.id} value={acc.id}>{acc.account_number}{acc.bank_name ? ` — ${acc.bank_name}` : ''}{acc.is_primary ? ' ★' : ''}</option>
                           ))}
                         </select>
                       ) : (
                         <input style={s.input} value={accNum} onChange={e => setAccNum(e.target.value)} placeholder="Partner account" />
-                      )}
-                      {partnerAccounts.length > 0 && (
-                        <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '2px' }}>
-                          {partnerAccounts.length} račun{partnerAccounts.length > 1 ? 'a' : ''} pronađeno
-                        </div>
                       )}
                     </div>
                     <div style={s.field}><label style={s.lbl}>Model</label><input style={s.input} value={model} onChange={e => setModel(e.target.value)} placeholder="e.g. 97" /></div>
@@ -666,7 +723,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
             </>
           )}
 
-          {/* ── STEP 2 — Amount & currency ── */}
+          {/* ── STEP 2 ── */}
           {step === 2 && (
             <div style={s.section}>
               <div style={s.sectionTitle}>Amount & currency conversion</div>
@@ -707,7 +764,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
             </div>
           )}
 
-          {/* ── STEP 3 — Type & classification ── */}
+          {/* ── STEP 3 ── */}
           {step === 3 && (
             <>
               <div style={s.section}>
@@ -733,27 +790,24 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
 
               {txType === 'passthrough' && (
                 <div style={s.section}>
-                  <div style={{ ...s.infoBox, background: '#FFFBEB', borderColor: '#E6B432', color: '#7A5A00', marginBottom: '16px' }}>
-                    🔄 Pass-through transakcija nema P&L uticaj. Evidentira se kao IN ili OUT i čeka uparivanje sa suprotnim unosom.
-                  </div>
                   <div style={s.row2}>
                     <div style={s.field}>
-                      <label style={s.lbl}>Smer <span style={s.req}>*</span></label>
+                      <label style={s.lbl}>Direction <span style={s.req}>*</span></label>
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <div style={{ ...s.typeChip, flex: 1, ...(ptDirection === 'in' ? { border: '2px solid #1D9E75', background: '#E1F5EE', color: '#085041', fontWeight: '500' } : {}) }}
-                          onClick={() => setPtDirection('in')}>📥 IN — Uplata</div>
+                          onClick={() => setPtDirection('in')}>📥 IN</div>
                         <div style={{ ...s.typeChip, flex: 1, ...(ptDirection === 'out' ? { border: '2px solid #E24B4A', background: '#FCEBEB', color: '#A32D2D', fontWeight: '500' } : {}) }}
-                          onClick={() => setPtDirection('out')}>📤 OUT — Isplata</div>
+                          onClick={() => setPtDirection('out')}>📤 OUT</div>
                       </div>
                     </div>
                     <div style={s.field}>
-                      <label style={s.lbl}>Period (mesec)</label>
+                      <label style={s.lbl}>Period</label>
                       <input type="month" style={s.input} value={ptPeriodMonth} onChange={e => setPtPeriodMonth(e.target.value)} />
                     </div>
                   </div>
                   <div style={s.field}>
-                    <label style={s.lbl}>Napomena</label>
-                    <textarea style={{ ...s.textarea, marginTop: '4px' }} value={note} onChange={e => setNote(e.target.value)} placeholder="Opis pass-through transakcije..." />
+                    <label style={s.lbl}>Note</label>
+                    <textarea style={{ ...s.textarea, marginTop: '4px' }} value={note} onChange={e => setNote(e.target.value)} placeholder="Pass-through description..." />
                   </div>
                 </div>
               )}
@@ -843,9 +897,6 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                       <div style={{ ...s.typeChip, ...(directSubtype === 'expense' ? s.typeChipExpense : {}) }} onClick={() => setDirectSubtype('expense')}>📤 Expense</div>
                       <div style={{ ...s.typeChip, ...(directSubtype === 'revenue' ? s.typeChipRevenue : {}) }} onClick={() => setDirectSubtype('revenue')}>📥 Revenue</div>
                     </div>
-                    <div style={{ ...s.infoBox, background: '#FFF3CD', borderColor: '#E5B96A', color: '#633806' }}>
-                      ⚠️ Direct transactions impact P&L immediately. If an invoice arrives later, you can reconcile it.
-                    </div>
                   </div>
 
                   {directSubtype === 'expense' && (
@@ -926,53 +977,40 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                         {revAlloc === 'byval' && (
                           <div style={{ marginTop: '14px', background: '#f5f5f3', borderRadius: '10px', padding: '14px', border: '0.5px solid #e5e5e5' }}>
                             <div style={{ fontSize: '11px', color: '#888', fontWeight: '500', marginBottom: '10px', textTransform: 'uppercase' as const, letterSpacing: '0.07em' }}>
-                              Split po vrednosti — ukupno: {amount ? `${parseFloat(amount).toLocaleString('sr-RS')} ${currency}` : '—'}
+                              Split by value — total: {amount ? `${parseFloat(amount).toLocaleString()} ${currency}` : '—'}
                             </div>
                             <div style={s.row2}>
                               <div style={s.field}>
                                 <label style={s.lbl}>Aimfox ({currency || '—'})</label>
                                 <input type="number" style={{ ...s.input, ...(fieldErr('split') ? s.inputError : {}) }}
                                   value={aimfoxVal} onChange={e => handleAimfoxChange(e.target.value)} placeholder="0.00" min="0" max={amount} />
-                                {aimfoxVal && parseFloat(amount) > 0 && (
-                                  <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '2px' }}>{splitPct.af}% od ukupnog</div>
-                                )}
+                                {aimfoxVal && parseFloat(amount) > 0 && <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '2px' }}>{splitPct.af}% of total</div>}
                               </div>
                               <div style={s.field}>
                                 <label style={s.lbl}>Social Growth ({currency || '—'})</label>
                                 <input type="number" style={{ ...s.input, ...(fieldErr('split') ? s.inputError : {}) }}
                                   value={sgVal} onChange={e => handleSgChange(e.target.value)} placeholder="0.00" min="0" max={amount} />
-                                {sgVal && parseFloat(amount) > 0 && (
-                                  <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '2px' }}>{splitPct.sg}% od ukupnog</div>
-                                )}
+                                {sgVal && parseFloat(amount) > 0 && <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '2px' }}>{splitPct.sg}% of total</div>}
                               </div>
                             </div>
-                            <div style={{ marginTop: '10px', background: '#fff', borderRadius: '8px', padding: '10px 12px', border: '0.5px solid #e5e5e5' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
-                                <span style={{ color: '#888' }}>Aimfox</span>
-                                <span style={{ fontWeight: '500', color: '#0C447C' }}>{aimfoxVal ? `${parseFloat(aimfoxVal).toLocaleString('sr-RS')} ${currency}` : '—'}</span>
-                              </div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '8px' }}>
-                                <span style={{ color: '#888' }}>Social Growth</span>
-                                <span style={{ fontWeight: '500', color: '#0F6E56' }}>{sgVal ? `${parseFloat(sgVal).toLocaleString('sr-RS')} ${currency}` : '—'}</span>
-                              </div>
-                              {aimfoxVal && sgVal && parseFloat(amount) > 0 && (
+                            {aimfoxVal && sgVal && (
+                              <div style={{ marginTop: '8px', background: '#fff', borderRadius: '8px', padding: '10px 12px', border: '0.5px solid #e5e5e5' }}>
                                 <div style={{ height: '6px', borderRadius: '3px', background: '#e5e5e5', overflow: 'hidden' }}>
-                                  <div style={{ height: '100%', width: `${splitPct.af}%`, background: '#0C447C', borderRadius: '3px', display: 'inline-block' }} />
-                                  <div style={{ height: '100%', width: `${splitPct.sg}%`, background: '#1D9E75', borderRadius: '3px', display: 'inline-block' }} />
+                                  <div style={{ height: '100%', width: `${splitPct.af}%`, background: '#0C447C', display: 'inline-block' }} />
+                                  <div style={{ height: '100%', width: `${splitPct.sg}%`, background: '#1D9E75', display: 'inline-block' }} />
                                 </div>
-                              )}
-                              {aimfoxVal && sgVal && !splitOk && (
-                                <div style={{ fontSize: '11px', color: '#A32D2D', marginTop: '6px' }}>
-                                  ⚠️ Zbir ({splitTotal.toLocaleString('sr-RS')} {currency}) ne odgovara ukupnom ({parseFloat(amount).toLocaleString('sr-RS')} {currency})
-                                </div>
-                              )}
-                              {aimfoxVal && sgVal && splitOk && (
-                                <div style={{ fontSize: '11px', color: '#1D9E75', marginTop: '6px' }}>✓ Split je ispravan</div>
-                              )}
-                            </div>
+                                {!splitOk
+                                  ? <div style={{ fontSize: '11px', color: '#A32D2D', marginTop: '6px' }}>⚠️ Sum ≠ total</div>
+                                  : <div style={{ fontSize: '11px', color: '#1D9E75', marginTop: '6px' }}>✓ Split valid</div>
+                                }
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
+
+                      {/* ── OPEX / Performance split ── */}
+                      {opexPanel}
                     </>
                   )}
 
@@ -1038,13 +1076,12 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                   ['Type', txType === 'invoice_payment' ? 'Invoice payment' : `Direct (${directSubtype})`],
                 ]},
                 ...(txType === 'invoice_payment' && linkedInvoices.length > 0 ? [{ title: 'Linked invoices', rows: linkedInvoices.map(l => [`${l.partner_name} (${l.invoice_number})`, `$${l.allocated_usd.toFixed(2)} allocated`]) }] : []),
-                ...(txType === 'direct' ? [{ title: 'P&L classification', rows: [
+                ...(txType === 'direct' && directSubtype === 'expense' ? [{ title: 'P&L & expense type', rows: [
                   ['P&L Category', plCatName || '—'],
-                  ['P&L Sub-category', plSubName || '—'],
                   ['Department', deptName || '—'],
-                  ['Dept. Sub-category', deptSubName || '—'],
-                  ['Description', expDesc || revStream || '—'],
+                  ['Description', expDesc || '—'],
                   ['Rev. stream alloc.', revAllocLabel()],
+                  ['Expense type', opexLabel()],
                 ]}] : []),
                 { title: 'Amounts', rows: [
                   ['Original amount', amount ? `${parseFloat(amount).toLocaleString()} ${currency}` : '—'],
