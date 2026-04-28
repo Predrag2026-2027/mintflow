@@ -12,18 +12,20 @@ const Icon = ({ children }: { children: React.ReactNode }) => (
 )
 
 const ICONS: Record<string, React.ReactNode> = {
-  dashboard: <Icon><rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1.2"/><rect x="9" y="1.5" width="5.5" height="5.5" rx="1.2"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="1.2"/><rect x="9" y="9" width="5.5" height="5.5" rx="1.2"/></Icon>,
+  dashboard:    <Icon><rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1.2"/><rect x="9" y="1.5" width="5.5" height="5.5" rx="1.2"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="1.2"/><rect x="9" y="9" width="5.5" height="5.5" rx="1.2"/></Icon>,
   transactions: <Icon><path d="M2 5h12M10.5 2l3.5 3-3.5 3"/><path d="M14 11H2M5.5 8l-3.5 3 3.5 3"/></Icon>,
-  pl: <Icon><path d="M2.5 12V8.5M5.5 12V5M8.5 12V7M11.5 12V3M14.5 12V6"/></Icon>,
-  cashflow: <Icon><path d="M1 10C2.5 7 4.5 6 8 6s5.5 2 7 0"/><path d="M1 14C2.5 11 4.5 10 8 10s5.5 2 7 0"/></Icon>,
-  reports: <Icon><rect x="2.5" y="1.5" width="11" height="13" rx="1.5"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3"/></Icon>,
-  partners: <Icon><circle cx="5.5" cy="5" r="2.5"/><path d="M1 13.5c0-2.5 2-4.5 4.5-4.5s4.5 2 4.5 4.5"/><circle cx="12" cy="5" r="2"/><path d="M14.5 13c0-1.9-1.1-3.5-2.5-4"/></Icon>,
-  settings: <Icon><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.6 3.6l1.3 1.3M11.1 11.1l1.3 1.3M3.6 12.4l1.3-1.3M11.1 4.9l1.3-1.3"/></Icon>,
+  revenue:      <Icon><path d="M2 12l4-4 3 3 5-6"/><circle cx="13.5" cy="4.5" r="1.5"/></Icon>,
+  pl:           <Icon><path d="M2.5 12V8.5M5.5 12V5M8.5 12V7M11.5 12V3M14.5 12V6"/></Icon>,
+  cashflow:     <Icon><path d="M1 10C2.5 7 4.5 6 8 6s5.5 2 7 0"/><path d="M1 14C2.5 11 4.5 10 8 10s5.5 2 7 0"/></Icon>,
+  reports:      <Icon><rect x="2.5" y="1.5" width="11" height="13" rx="1.5"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3"/></Icon>,
+  partners:     <Icon><circle cx="5.5" cy="5" r="2.5"/><path d="M1 13.5c0-2.5 2-4.5 4.5-4.5s4.5 2 4.5 4.5"/><circle cx="12" cy="5" r="2"/><path d="M14.5 13c0-1.9-1.1-3.5-2.5-4"/></Icon>,
+  settings:     <Icon><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.6 3.6l1.3 1.3M11.1 11.1l1.3 1.3M3.6 12.4l1.3-1.3M11.1 4.9l1.3-1.3"/></Icon>,
 }
 
 const NAV_ITEMS: { key: Page; label: string }[] = [
   { key: 'dashboard',    label: 'Dashboard' },
   { key: 'transactions', label: 'Transactions' },
+  { key: 'revenue',      label: 'Revenue' },
   { key: 'pl',           label: 'P&L' },
   { key: 'cashflow',     label: 'Cash Flow' },
   { key: 'reports',      label: 'Reports' },
@@ -63,17 +65,25 @@ export default function Sidebar() {
       <nav style={s.nav}>
         {NAV_ITEMS.map(item => {
           const active = page === item.key
+          const isRevenue = item.key === 'revenue'
           return (
             <button
               key={item.key}
               onClick={() => setPage(item.key)}
               style={{
                 ...s.navItem,
-                background: active ? 'rgba(0,212,126,0.10)' : 'transparent',
+                background: active
+                  ? isRevenue ? 'rgba(157,151,255,0.12)' : 'rgba(0,212,126,0.10)'
+                  : 'transparent',
                 color: active ? '#fff' : 'rgba(255,255,255,0.44)',
               }}
             >
-              <span style={{ color: active ? '#00D47E' : 'rgba(255,255,255,0.30)', display: 'flex' }}>
+              <span style={{
+                color: active
+                  ? isRevenue ? '#9D97FF' : '#00D47E'
+                  : 'rgba(255,255,255,0.30)',
+                display: 'flex'
+              }}>
                 {ICONS[item.key]}
               </span>
               <span style={{ fontSize: '13px', fontWeight: active ? '500' : '400' }}>
