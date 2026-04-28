@@ -1,7 +1,4 @@
 import React, { useState, useEffect } from 'react'
-import { useAuth } from '../contexts/AuthContext'
-import { NavContext } from '../App'
-import type { Page } from '../App'
 import { supabase } from '../supabase'
 import { fmtUSD } from '../utils/formatters'
 
@@ -41,9 +38,6 @@ const COLL_STATUS_COLORS: Record<string, { bg: string; color: string }> = {
 }
 
 export default function Revenue() {
-  const { user, signOut } = useAuth()
-  const { setPage } = React.useContext(NavContext)
-
   const [subTab, setSubTab] = useState<'entries' | 'collections'>('entries')
   const [showMenu, setShowMenu] = useState<string | null>(null)
 
@@ -64,12 +58,6 @@ export default function Revenue() {
   const [entries, setEntries] = useState<any[]>([])
   const [collections, setCollections] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-
-  const pageMap: Record<string, Page> = {
-    'Dashboard': 'dashboard', 'Transactions': 'transactions',
-    'Revenue': 'revenue', 'P&L': 'pl', 'Cash Flow': 'cashflow',
-    'Reports': 'reports', 'Partners': 'partners', 'Settings': 'settings',
-  }
 
   const fetchEntries = async () => {
     setLoading(true)
@@ -137,37 +125,13 @@ export default function Revenue() {
 
   return (
     <div style={s.root} onClick={() => setShowMenu(null)}>
-
-      {/* Nav */}
-      <nav style={s.nav}>
-        <div style={s.navLogo}>
-          <svg width="22" height="22" viewBox="0 0 36 36" fill="none">
-            <polygon points="18,2 34,30 2,30" fill="none" stroke="#1D9E75" strokeWidth="2" />
-            <circle cx="18" cy="2" r="2.5" fill="#1D9E75" />
-            <circle cx="34" cy="30" r="2" fill="#5DCAA5" />
-            <circle cx="2" cy="30" r="2" fill="#9FE1CB" />
-          </svg>
-          <span style={s.navLogoText}>Mint<span style={{ color: '#5DCAA5' }}>flow</span></span>
-        </div>
-        <div style={s.navLinks}>
-          {['Dashboard', 'Transactions', 'Revenue', 'P&L', 'Cash Flow', 'Reports', 'Partners', 'Settings'].map(l => (
-            <span key={l} style={l === 'Revenue' ? s.navLinkActive : s.navLink} onClick={() => setPage(pageMap[l] as Page)}>{l}</span>
-          ))}
-        </div>
-        <div style={s.navRight}>
-          <div style={s.navAvatar}>{user?.email?.substring(0, 2).toUpperCase()}</div>
-          <span style={s.navEmail}>{user?.email}</span>
-          <button style={s.navSignout} onClick={signOut}>Sign out</button>
-        </div>
-      </nav>
-
       <div style={s.body}>
 
         {/* Page header */}
         <div style={s.pageHeader}>
           <div>
             <div style={s.pageTitle}>Revenue</div>
-            <div style={s.pageSub}>Potraživanja i uplate po brendovima i payment procesorima</div>
+            <div style={s.pageSub}>Receivables and processor collections by brand and stream</div>
           </div>
           <div style={s.btnGroup}>
             <button style={s.btnEntry} onClick={() => { setEditEntry(null); setShowEntryDialog(true) }}>📈 New entry</button>
@@ -226,11 +190,11 @@ export default function Revenue() {
         {/* Sub-tabs */}
         <div style={s.subTabBar}>
           <button style={{ ...s.subTab, ...(subTab === 'entries' ? s.subTabActive : {}) }} onClick={() => setSubTab('entries')}>
-            Entries — potraživanja
+            Entries — receivables
             <span style={{ ...s.subTabCount, ...(subTab === 'entries' ? { background: 'rgba(157,151,255,0.2)', color: '#9D97FF' } : {}) }}>{entries.length}</span>
           </button>
           <button style={{ ...s.subTab, ...(subTab === 'collections' ? s.subTabActive : {}) }} onClick={() => setSubTab('collections')}>
-            Collections — uplate procesora
+            Collections — processor payouts
             <span style={{ ...s.subTabCount, ...(subTab === 'collections' ? { background: 'rgba(157,151,255,0.2)', color: '#9D97FF' } : {}) }}>{collections.length}</span>
           </button>
         </div>
@@ -407,7 +371,7 @@ export default function Revenue() {
         )}
       </div>
 
-      {/* Dialogs — Korak 3, 4, 5 */}
+      {/* Dialogs — Steps 3, 4, 5 */}
       {showEntryDialog && (
         <RevenueEntryDialog
           entry={editEntry}
@@ -433,7 +397,7 @@ export default function Revenue() {
   )
 }
 
-// ── Placeholder dialogi — Korak 3, 4, 5 ──────────────────
+// ── Placeholder dialogs — Steps 3, 4, 5 ───────────────────
 function RevenueEntryDialog({ entry, onClose }: any) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
@@ -442,9 +406,9 @@ function RevenueEntryDialog({ entry, onClose }: any) {
         <div style={{ fontSize: '18px', fontWeight: '500', color: '#DCE9F6', marginBottom: '8px' }}>Revenue Entry</div>
         <div style={{ fontSize: '13px', color: '#7A9BB8', marginBottom: '8px' }}>{entry ? 'Edit entry' : 'New entry'}</div>
         <div style={{ fontSize: '12px', color: 'rgba(157,151,255,0.8)', background: 'rgba(157,151,255,0.08)', border: '1px solid rgba(157,151,255,0.2)', borderRadius: '8px', padding: '10px 16px', marginBottom: '24px' }}>
-          Korak 3 — dolazi uskoro
+          Step 3 — coming soon
         </div>
-        <button onClick={onClose} style={{ background: '#9D97FF', color: '#060E1A', border: 'none', borderRadius: '8px', padding: '9px 24px', cursor: 'pointer', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '600' }}>Zatvori</button>
+        <button onClick={onClose} style={{ background: '#9D97FF', color: '#060E1A', border: 'none', borderRadius: '8px', padding: '9px 24px', cursor: 'pointer', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '600' }}>Close</button>
       </div>
     </div>
   )
@@ -458,9 +422,9 @@ function RevenueCollectionDialog({ collection, onClose }: any) {
         <div style={{ fontSize: '18px', fontWeight: '500', color: '#DCE9F6', marginBottom: '8px' }}>Revenue Collection</div>
         <div style={{ fontSize: '13px', color: '#7A9BB8', marginBottom: '8px' }}>{collection ? 'Edit collection' : 'New collection'}</div>
         <div style={{ fontSize: '12px', color: 'rgba(0,212,126,0.8)', background: 'rgba(0,212,126,0.08)', border: '1px solid rgba(0,212,126,0.2)', borderRadius: '8px', padding: '10px 16px', marginBottom: '24px' }}>
-          Korak 4 — dolazi uskoro
+          Step 4 — coming soon
         </div>
-        <button onClick={onClose} style={{ background: '#00D47E', color: '#060E1A', border: 'none', borderRadius: '8px', padding: '9px 24px', cursor: 'pointer', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '600' }}>Zatvori</button>
+        <button onClick={onClose} style={{ background: '#00D47E', color: '#060E1A', border: 'none', borderRadius: '8px', padding: '9px 24px', cursor: 'pointer', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '600' }}>Close</button>
       </div>
     </div>
   )
@@ -474,9 +438,9 @@ function RevenueReconcileDialog({ entry, onClose }: any) {
         <div style={{ fontSize: '18px', fontWeight: '500', color: '#DCE9F6', marginBottom: '8px' }}>Match Collection</div>
         <div style={{ fontSize: '13px', color: '#7A9BB8', marginBottom: '8px' }}>Entry: <strong style={{ color: '#DCE9F6' }}>{entry?.brand} · {entry?.period_month}</strong></div>
         <div style={{ fontSize: '12px', color: 'rgba(78,168,255,0.8)', background: 'rgba(78,168,255,0.08)', border: '1px solid rgba(78,168,255,0.2)', borderRadius: '8px', padding: '10px 16px', marginBottom: '24px' }}>
-          Korak 5 — dolazi uskoro
+          Step 5 — coming soon
         </div>
-        <button onClick={onClose} style={{ background: '#185FA5', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 24px', cursor: 'pointer', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '600' }}>Zatvori</button>
+        <button onClick={onClose} style={{ background: '#185FA5', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 24px', cursor: 'pointer', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '600' }}>Close</button>
       </div>
     </div>
   )
@@ -484,16 +448,6 @@ function RevenueReconcileDialog({ entry, onClose }: any) {
 
 const s: Record<string, React.CSSProperties> = {
   root: { minHeight: '100vh', background: '#060E1A', fontFamily: "'Inter', system-ui, sans-serif" },
-  nav: { background: '#0a1628', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1.5rem', height: '52px', position: 'sticky', top: 0, zIndex: 100 },
-  navLogo: { display: 'flex', alignItems: 'center', gap: '8px' },
-  navLogoText: { fontFamily: 'Georgia,serif', fontSize: '18px', fontWeight: '400', color: '#fff' },
-  navLinks: { display: 'flex', gap: '2px' },
-  navLink: { fontSize: '13px', color: 'rgba(255,255,255,0.48)', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' },
-  navLinkActive: { fontSize: '13px', color: '#9D97FF', fontWeight: '500', padding: '6px 12px', borderRadius: '6px', background: 'rgba(157,151,255,0.1)', cursor: 'pointer' },
-  navRight: { display: 'flex', alignItems: 'center', gap: '10px' },
-  navAvatar: { width: '30px', height: '30px', borderRadius: '50%', background: '#1D9E75', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '600', color: '#fff' },
-  navEmail: { fontSize: '12px', color: 'rgba(255,255,255,0.5)' },
-  navSignout: { background: 'none', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.4)', fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '5px 12px', borderRadius: '6px', cursor: 'pointer' },
   body: { padding: '24px 28px' },
   pageHeader: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.5rem' },
   pageTitle: { fontFamily: 'Georgia,serif', fontSize: '26px', fontWeight: '400', color: '#DCE9F6', marginBottom: '4px' },
