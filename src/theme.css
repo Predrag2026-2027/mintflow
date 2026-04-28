@@ -1,51 +1,50 @@
 /* ============================================================
    Mintflow Design System — Theme Tokens
-   Carbon variant (recommended starting point for migration)
+   Obsidian variant (dark, finance terminal aesthetic)
    ============================================================ */
 
 :root {
   /* ── Surfaces ─────────────────────────────── */
-  --page-bg:      #FAF9F7;
-  --sidebar-bg:   #111111;
-  --surface:      #FFFFFF;
-  --surface-2:    #F5F4F1;
-  --card-shadow:  0 1px 4px rgba(0,0,0,0.06);
+  --page-bg:      #060E1A;
+  --sidebar-bg:   #0A1525;
+  --surface:      #0D1B2C;
+  --surface-2:    #111F30;
+  --card-shadow:  0 4px 20px rgba(0,0,0,0.4);
 
   /* ── Borders ──────────────────────────────── */
-  --border:         #E8E7E2;
-  --border-strong:  #D0CFC9;
-  --sidebar-border: rgba(255,255,255,0.07);
+  --border:         rgba(255,255,255,0.075);
+  --border-strong:  rgba(255,255,255,0.14);
+  --sidebar-border: rgba(255,255,255,0.055);
 
   /* ── Text ─────────────────────────────────── */
-  --text-1: #111111;
-  --text-2: #555555;
-  --text-3: #AAAAAA;
+  --text-1: #DCE9F6;
+  --text-2: #7A9BB8;
+  --text-3: rgba(255,255,255,0.30);
 
   /* ── Sidebar nav ──────────────────────────── */
-  --nav-icon:         rgba(255,255,255,0.32);
-  --nav-icon-active:  #1D9E75;
+  --nav-icon:         rgba(255,255,255,0.30);
+  --nav-icon-active:  #00D47E;
   --nav-text:         rgba(255,255,255,0.44);
   --nav-text-active:  #FFFFFF;
-  --nav-active-bg:    rgba(255,255,255,0.09);
+  --nav-active-bg:    rgba(0,212,126,0.10);
 
   /* ── Semantic — Revenue / Positive ───────── */
-  --green:     #1D9E75;
-  --green-dk:  #0B5E49;
-  --green-bg:  #E1F5EE;
-  --green-mid: rgba(29,158,117,0.22);
+  --green:    #00D47E;
+  --green-dk: #009A5C;
+  --green-bg: rgba(0,212,126,0.12);
 
   /* ── Semantic — Expense / Negative ───────── */
-  --red:    #E24B4A;
-  --red-dk: #A32D2D;
-  --red-bg: #FCEBEB;
+  --red:    #FF5B5A;
+  --red-dk: #CC2929;
+  --red-bg: rgba(255,91,90,0.13);
 
   /* ── Semantic — Warning ───────────────────── */
-  --amber:    #BA7517;
-  --amber-bg: rgba(186,117,23,0.10);
+  --amber:    #F5A623;
+  --amber-bg: rgba(245,166,35,0.13);
 
   /* ── Semantic — Info ─────────────────────── */
-  --blue:    #185FA5;
-  --blue-bg: #E6F1FB;
+  --blue:    #4EA8FF;
+  --blue-bg: rgba(78,168,255,0.13);
 
   /* ── Entity colors ────────────────────────── */
   --entity-constel: #1D9E75;
@@ -57,15 +56,17 @@
   --font-display: 'DM Serif Display', Georgia, serif;
   --font-body:    'Inter', system-ui, sans-serif;
   --font-mono:    'DM Mono', 'Fira Mono', monospace;
+  --num-font:     'DM Mono', 'Fira Mono', monospace;
+  --num-size:     27px;
 
-  /* ── Spacing ──────────────────────────────── */
+  /* ── Layout — unchanged ───────────────────── */
   --sidebar-width: 208px;
   --card-pad:      1.1rem 1.2rem;
   --page-pad:      24px 28px;
 
-  /* ── Radii ────────────────────────────────── */
+  /* ── Radii — slightly tighter ─────────────── */
   --radius-sm:   8px;
-  --radius-md:   12px;
+  --radius-md:   10px;
   --radius-full: 9999px;
 
   /* ── Transitions ──────────────────────────── */

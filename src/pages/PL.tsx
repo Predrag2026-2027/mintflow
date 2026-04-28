@@ -204,7 +204,7 @@ export default function PL() {
           {[
             { label: 'Total Revenue', value: fmtUSD(totalRevenue), color: '#0F6E56' },
             { label: 'Gross Profit', value: fmtUSD(grossProfit), color: grossProfit >= 0 ? '#0F6E56' : '#A32D2D' },
-            { label: 'Total Expenses', value: fmtUSD(totalExpenses), color: '#A32D2D' },
+            { label: 'Total Expenses', value: fmtUSD(totalExpenses), color: '#FF5B5A' },
             { label: 'Net Profit / Loss', value: fmtUSDSigned(netProfit), color: netProfit >= 0 ? '#0F6E56' : '#A32D2D', sub: `${margin.toFixed(1)}% margin` },
           ].map(card => (
             <div key={card.label} style={s.summaryCard}>
@@ -218,8 +218,8 @@ export default function PL() {
         {!loading && !hasData && (
           <div style={s.emptyState}>
             <div style={{ fontSize: '32px', marginBottom: '12px' }}>📊</div>
-            <div style={{ fontSize: '15px', fontWeight: '500', color: '#111', marginBottom: '6px' }}>No P&L data for this period</div>
-            <div style={{ fontSize: '13px', color: '#888' }}>Post invoices or direct transactions to see real P&L data here.</div>
+            <div style={{ fontSize: '15px', fontWeight: '500', color: '#DCE9F6', marginBottom: '6px' }}>No P&L data for this period</div>
+            <div style={{ fontSize: '13px', color: '#7A9BB8' }}>Post invoices or direct transactions to see real P&L data here.</div>
           </div>
         )}
 
@@ -241,13 +241,13 @@ export default function PL() {
                   🏗 By Department
                 </button>
               </div>
-              <div style={{ fontSize: '11px', color: '#888' }}>
+              <div style={{ fontSize: '11px', color: '#7A9BB8' }}>
                 {viewMode === 'category' ? 'Expenses grouped by P&L category' : 'Expenses grouped by department'}
               </div>
             </div>
 
             {loading ? (
-              <div style={{ padding: '40px', textAlign: 'center' as const, color: '#888', fontSize: '13px' }}>Loading P&L data...</div>
+              <div style={{ padding: '40px', textAlign: 'center' as const, color: '#7A9BB8', fontSize: '13px' }}>Loading P&L data...</div>
             ) : (
               <table style={s.table}>
                 <thead>
@@ -255,7 +255,7 @@ export default function PL() {
                     <th style={{ ...s.th, width: '50%' }}>Item</th>
                     <th style={{ ...s.th, textAlign: 'right' as const }}>Social Growth</th>
                     <th style={{ ...s.th, textAlign: 'right' as const }}>Aimfox</th>
-                    <th style={{ ...s.th, textAlign: 'right' as const, color: '#fff' }}>Total USD</th>
+                    <th style={{ ...s.th, textAlign: 'right' as const, color: 'rgba(255,255,255,0.30)' }}>Total USD</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -263,12 +263,12 @@ export default function PL() {
                   {/* ── REVENUE — isti za oba view-a ── */}
                   <tr style={s.catRow}><td colSpan={4} style={s.catCell}>REVENUE</td></tr>
                   {Object.keys(revenueByStream).length === 0
-                    ? <tr style={s.dataRow}><td style={{ ...s.td, color: '#aaa', fontStyle: 'italic' }} colSpan={4}>No revenue entries for this period</td></tr>
+                    ? <tr style={s.dataRow}><td style={{ ...s.td, color: 'rgba(255,255,255,0.30)', fontStyle: 'italic' }} colSpan={4}>No revenue entries for this period</td></tr>
                     : Object.entries(revenueByStream).map(([name, r]) => (
                       <tr key={name} style={s.dataRow}>
                         <td style={s.td}>{name}</td>
-                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(r.sg)}</td>
-                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(r.af)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#7A9BB8' }}>{fmtUSD(r.sg)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#7A9BB8' }}>{fmtUSD(r.af)}</td>
                         <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: '#0F6E56' }}>{fmtUSD(r.total)}</td>
                       </tr>
                     ))
@@ -283,21 +283,21 @@ export default function PL() {
                   {/* ── REDUCTIONS — isti za oba view-a ── */}
                   <tr style={s.catRow}><td colSpan={4} style={s.catCell}>REDUCTIONS</td></tr>
                   {Object.keys(reductionByName).length === 0
-                    ? <tr style={s.dataRow}><td style={{ ...s.td, color: '#aaa', fontStyle: 'italic' }} colSpan={4}>No reductions for this period</td></tr>
+                    ? <tr style={s.dataRow}><td style={{ ...s.td, color: 'rgba(255,255,255,0.30)', fontStyle: 'italic' }} colSpan={4}>No reductions for this period</td></tr>
                     : Object.entries(reductionByName).map(([name, r]) => (
                       <tr key={name} style={s.dataRow}>
                         <td style={s.td}>{name}</td>
-                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(r.sg)}</td>
-                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(r.af)}</td>
-                        <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: '#A32D2D' }}>{fmtUSD(r.total)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#7A9BB8' }}>{fmtUSD(r.sg)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, color: '#7A9BB8' }}>{fmtUSD(r.af)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: '#FF5B5A' }}>{fmtUSD(r.total)}</td>
                       </tr>
                     ))
                   }
                   <tr style={s.totalRow}>
                     <td style={s.totalCell}>TOTAL REDUCTIONS</td>
-                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmtUSD(totalReductionsSG)}</td>
-                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmtUSD(totalReductionsAF)}</td>
-                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmtUSD(totalReductions)}</td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#FF5B5A' }}>{fmtUSD(totalReductionsSG)}</td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#FF5B5A' }}>{fmtUSD(totalReductionsAF)}</td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#FF5B5A' }}>{fmtUSD(totalReductions)}</td>
                   </tr>
 
                   {/* ── GROSS PROFIT ── */}
@@ -323,20 +323,20 @@ export default function PL() {
                               <td colSpan={4} style={s.subCatCell}>{cat.name}</td>
                             </tr>
                             {Object.keys(items).length === 0
-                              ? <tr style={s.dataRow}><td style={{ ...s.td, paddingLeft: '2rem', color: '#aaa', fontStyle: 'italic' }} colSpan={4}>No entries</td></tr>
+                              ? <tr style={s.dataRow}><td style={{ ...s.td, paddingLeft: '2rem', color: 'rgba(255,255,255,0.30)', fontStyle: 'italic' }} colSpan={4}>No entries</td></tr>
                               : Object.entries(items).map(([name, item]) => (
                                 <tr key={name} style={s.dataRow}>
                                   <td style={{ ...s.td, paddingLeft: '2rem' }}>{name}</td>
-                                  <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(item.sg)}</td>
-                                  <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(item.af)}</td>
+                                  <td style={{ ...s.td, textAlign: 'right' as const, color: '#7A9BB8' }}>{fmtUSD(item.sg)}</td>
+                                  <td style={{ ...s.td, textAlign: 'right' as const, color: '#7A9BB8' }}>{fmtUSD(item.af)}</td>
                                   <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: item.total > 0 ? '#A32D2D' : '#888' }}>{fmtUSD(item.total)}</td>
                                 </tr>
                               ))
                             }
                             <tr style={s.subTotalRow}>
                               <td style={{ ...s.subTotalCell, paddingLeft: '1rem' }}>Total {cat.name}</td>
-                              <td style={{ ...s.subTotalCell, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(Object.values(items).reduce((s, i) => s + i.sg, 0))}</td>
-                              <td style={{ ...s.subTotalCell, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(Object.values(items).reduce((s, i) => s + i.af, 0))}</td>
+                              <td style={{ ...s.subTotalCell, textAlign: 'right' as const, color: '#7A9BB8' }}>{fmtUSD(Object.values(items).reduce((s, i) => s + i.sg, 0))}</td>
+                              <td style={{ ...s.subTotalCell, textAlign: 'right' as const, color: '#7A9BB8' }}>{fmtUSD(Object.values(items).reduce((s, i) => s + i.af, 0))}</td>
                               <td style={{ ...s.subTotalCell, textAlign: 'right' as const, color: catTotal > 0 ? '#A32D2D' : '#888' }}>{fmtUSD(catTotal)}</td>
                             </tr>
                           </React.Fragment>
@@ -348,7 +348,7 @@ export default function PL() {
                     <>
                       {Object.keys(departments).length === 0 ? (
                         <tr style={s.dataRow}>
-                          <td style={{ ...s.td, color: '#aaa', fontStyle: 'italic' }} colSpan={4}>No department expenses for this period</td>
+                          <td style={{ ...s.td, color: 'rgba(255,255,255,0.30)', fontStyle: 'italic' }} colSpan={4}>No department expenses for this period</td>
                         </tr>
                       ) : Object.entries(departments)
                           .sort(([, a], [, b]) => b.total - a.total)
@@ -368,17 +368,17 @@ export default function PL() {
                             .map(([sub, item]) => (
                             <tr key={sub} style={s.dataRow}>
                               <td style={{ ...s.td, paddingLeft: '2rem' }}>{sub}</td>
-                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(item.sg)}</td>
-                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(item.af)}</td>
-                              <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: '#A32D2D' }}>{fmtUSD(item.total)}</td>
+                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#7A9BB8' }}>{fmtUSD(item.sg)}</td>
+                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#7A9BB8' }}>{fmtUSD(item.af)}</td>
+                              <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: '#FF5B5A' }}>{fmtUSD(item.total)}</td>
                             </tr>
                           ))}
                           {/* Department subtotal */}
                           <tr style={s.subTotalRow}>
                             <td style={{ ...s.subTotalCell, paddingLeft: '1rem' }}>Total {dept}</td>
-                            <td style={{ ...s.subTotalCell, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(Object.values(data.subcategories).reduce((s, i) => s + i.sg, 0))}</td>
-                            <td style={{ ...s.subTotalCell, textAlign: 'right' as const, color: '#666' }}>{fmtUSD(Object.values(data.subcategories).reduce((s, i) => s + i.af, 0))}</td>
-                            <td style={{ ...s.subTotalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmtUSD(data.total)}</td>
+                            <td style={{ ...s.subTotalCell, textAlign: 'right' as const, color: '#7A9BB8' }}>{fmtUSD(Object.values(data.subcategories).reduce((s, i) => s + i.sg, 0))}</td>
+                            <td style={{ ...s.subTotalCell, textAlign: 'right' as const, color: '#7A9BB8' }}>{fmtUSD(Object.values(data.subcategories).reduce((s, i) => s + i.af, 0))}</td>
+                            <td style={{ ...s.subTotalCell, textAlign: 'right' as const, color: '#FF5B5A' }}>{fmtUSD(data.total)}</td>
                           </tr>
                         </React.Fragment>
                       ))}
@@ -387,17 +387,17 @@ export default function PL() {
 
                   <tr style={s.totalRow}>
                     <td style={s.totalCell}>TOTAL EXPENSES</td>
-                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmtUSD(totalExpensesSG)}</td>
-                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmtUSD(totalExpensesAF)}</td>
-                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#A32D2D' }}>{fmtUSD(totalExpenses)}</td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#FF5B5A' }}>{fmtUSD(totalExpensesSG)}</td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#FF5B5A' }}>{fmtUSD(totalExpensesAF)}</td>
+                    <td style={{ ...s.totalCell, textAlign: 'right' as const, color: '#FF5B5A' }}>{fmtUSD(totalExpenses)}</td>
                   </tr>
 
                   {/* ── NET PROFIT ── */}
                   <tr style={s.netRow}>
                     <td style={s.netCell}>NET PROFIT / LOSS</td>
-                    <td style={{ ...s.netCell, textAlign: 'right' as const, color: netProfitSG >= 0 ? '#5DCAA5' : '#F5A9A9' }}>{fmtUSDSigned(netProfitSG)}</td>
-                    <td style={{ ...s.netCell, textAlign: 'right' as const, color: netProfitAF >= 0 ? '#5DCAA5' : '#F5A9A9' }}>{fmtUSDSigned(netProfitAF)}</td>
-                    <td style={{ ...s.netCell, textAlign: 'right' as const, color: netProfit >= 0 ? '#5DCAA5' : '#F5A9A9' }}>{fmtUSDSigned(netProfit)}</td>
+                    <td style={{ ...s.netCell, textAlign: 'right' as const, color: netProfitSG >= 0 ? '#00D47E' : '#FF5B5A' }}>{fmtUSDSigned(netProfitSG)}</td>
+                    <td style={{ ...s.netCell, textAlign: 'right' as const, color: netProfitAF >= 0 ? '#00D47E' : '#FF5B5A' }}>{fmtUSDSigned(netProfitAF)}</td>
+                    <td style={{ ...s.netCell, textAlign: 'right' as const, color: netProfit >= 0 ? '#00D47E' : '#FF5B5A' }}>{fmtUSDSigned(netProfit)}</td>
                   </tr>
 
                 </tbody>
@@ -411,44 +411,44 @@ export default function PL() {
 }
 
 const s: Record<string, React.CSSProperties> = {
-  root: { minHeight: '100vh', background: '#FAF9F7', fontFamily: "'Inter', system-ui, sans-serif" },
+  root: { minHeight: '100vh', background: '#060E1A', fontFamily: "'Inter', system-ui, sans-serif" },
   body: { padding: '24px 28px' },
   pageHeader: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.5rem' },
-  pageTitle: { fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '24px', fontWeight: '400', color: '#111', marginBottom: '4px' },
-  pageSub: { fontSize: '13px', color: '#888' },
-  filterSelect: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '0.5px solid #e5e5e5', borderRadius: '8px', padding: '8px 12px', outline: 'none', background: '#fff', color: '#111', cursor: 'pointer' },
+  pageTitle: { fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '24px', fontWeight: '400', color: '#DCE9F6', marginBottom: '4px' },
+  pageSub: { fontSize: '13px', color: '#7A9BB8' },
+  filterSelect: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '8px', padding: '8px 12px', outline: 'none', background: '#0D1B2C', color: '#DCE9F6', cursor: 'pointer' },
   summaryGrid: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '1.5rem' },
-  summaryCard: { background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '12px', padding: '1rem 1.25rem' },
-  summaryLabel: { fontSize: '11px', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '8px' },
+  summaryCard: { background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '10px', padding: '1rem 1.25rem' },
+  summaryLabel: { fontSize: '11px', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '8px' },
   summaryValue: { fontSize: '22px', fontWeight: '500' },
-  emptyState: { background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '12px', padding: '60px', textAlign: 'center' as const },
-  tableWrap: { background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '12px', overflow: 'hidden' },
+  emptyState: { background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '10px', padding: '60px', textAlign: 'center' as const },
+  tableWrap: { background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '10px', overflow: 'hidden' },
   // Toggle
-  toggleBar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '0.5px solid #e5e5e5', background: '#fafaf9' },
-  toggleGroup: { display: 'flex', gap: '4px', background: '#f0f0ee', borderRadius: '8px', padding: '3px' },
-  toggleBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '12px', fontWeight: '500', padding: '6px 14px', borderRadius: '6px', border: 'none', background: 'transparent', color: '#888', cursor: 'pointer', transition: 'all 0.15s' },
-  toggleBtnActive: { background: '#fff', color: '#111', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
+  toggleBar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.075)', background: '#111F30' },
+  toggleGroup: { display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.06)', borderRadius: '8px', padding: '3px' },
+  toggleBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '12px', fontWeight: '500', padding: '6px 14px', borderRadius: '6px', border: 'none', background: 'transparent', color: 'rgba(255,255,255,0.44)', cursor: 'pointer', transition: 'all 0.15s' },
+  toggleBtnActive: { background: 'rgba(255,255,255,0.12)', color: '#DCE9F6', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' },
   // Table
   table: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '13px' },
-  theadRow: { background: '#0a1628' },
-  th: { padding: '10px 16px', textAlign: 'left' as const, fontSize: '10px', fontWeight: '500', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' as const, letterSpacing: '0.1em' },
-  catRow: { background: '#f0f0ee' },
-  catCell: { padding: '8px 16px', fontSize: '11px', fontWeight: '500', color: '#444', textTransform: 'uppercase' as const, letterSpacing: '0.1em' },
-  subCatRow: { background: '#fafaf9' },
-  subCatCell: { padding: '7px 16px', fontSize: '12px', fontWeight: '500', color: '#666', borderTop: '0.5px solid #e5e5e5' },
+  theadRow: { background: '#060E1A' },
+  th: { padding: '10px 16px', textAlign: 'left' as const, fontSize: '10px', fontWeight: '500', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase' as const, letterSpacing: '0.1em' },
+  catRow: { background: 'rgba(255,255,255,0.04)' },
+  catCell: { padding: '8px 16px', fontSize: '11px', fontWeight: '500', color: '#7A9BB8', textTransform: 'uppercase' as const, letterSpacing: '0.1em' },
+  subCatRow: { background: '#0D1B2C' },
+  subCatCell: { padding: '7px 16px', fontSize: '12px', fontWeight: '500', color: '#7A9BB8', borderTop: '0.5px solid rgba(255,255,255,0.05)' },
   // Department rows
-  deptRow: { background: '#E6F1FB', borderTop: '1px solid #C5DCF5' },
-  deptCell: { padding: '9px 16px', fontSize: '12px', fontWeight: '600', color: '#0C447C', display: 'flex', alignItems: 'center', gap: '8px' },
+  deptRow: { background: 'rgba(78,168,255,0.08)', borderTop: '1px solid rgba(78,168,255,0.2)' },
+  deptCell: { padding: '9px 16px', fontSize: '12px', fontWeight: '600', color: '#4EA8FF', display: 'flex', alignItems: 'center', gap: '8px' },
   deptIcon: { fontSize: '14px' },
-  deptBadge: { marginLeft: 'auto', fontSize: '12px', fontWeight: '600', color: '#A32D2D', background: '#FCEBEB', padding: '2px 8px', borderRadius: '12px' },
-  dataRow: { borderBottom: '0.5px solid #f0f0ee' },
-  td: { padding: '8px 16px', color: '#333', fontSize: '13px' },
-  totalRow: { background: '#f5f5f3', borderTop: '1px solid #e5e5e5' },
-  totalCell: { padding: '10px 16px', fontSize: '12px', fontWeight: '500', color: '#111' },
-  subTotalRow: { background: '#fafaf9', borderTop: '0.5px solid #e5e5e5' },
-  subTotalCell: { padding: '7px 16px', fontSize: '11px', fontWeight: '500', color: '#666' },
-  grossRow: { background: '#E1F5EE', borderTop: '2px solid #1D9E75' },
-  grossCell: { padding: '12px 16px', fontSize: '13px', fontWeight: '500', color: '#085041' },
-  netRow: { background: '#0a1628', borderTop: '2px solid #0a1628' },
-  netCell: { padding: '14px 16px', fontSize: '14px', fontWeight: '500', color: '#fff' },
+  deptBadge: { marginLeft: 'auto', fontSize: '12px', fontWeight: '600', color: '#FF5B5A', background: 'rgba(255,91,90,0.13)', padding: '2px 8px', borderRadius: '12px' },
+  dataRow: { borderBottom: '0.5px solid rgba(255,255,255,0.05)' },
+  td: { padding: '8px 16px', color: '#DCE9F6', fontSize: '13px' },
+  totalRow: { background: '#111F30', borderTop: '1px solid rgba(255,255,255,0.10)' },
+  totalCell: { padding: '10px 16px', fontSize: '12px', fontWeight: '500', color: '#DCE9F6' },
+  subTotalRow: { background: '#0D1B2C', borderTop: '0.5px solid rgba(255,255,255,0.05)' },
+  subTotalCell: { padding: '7px 16px', fontSize: '11px', fontWeight: '500', color: '#7A9BB8' },
+  grossRow: { background: 'rgba(0,212,126,0.08)', borderTop: '2px solid #00D47E' },
+  grossCell: { padding: '12px 16px', fontSize: '13px', fontWeight: '500', color: '#00D47E' },
+  netRow: { background: '#060E1A', borderTop: '2px solid rgba(255,255,255,0.14)' },
+  netCell: { padding: '14px 16px', fontSize: '14px', fontWeight: '500', color: '#DCE9F6' },
 }

@@ -41,20 +41,20 @@ function AreaChart({ months, revenues, expenses }: { months: string[]; revenues:
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow: 'visible' }}>
         <defs>
           <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#1D9E75" stopOpacity="0.22" />
-            <stop offset="100%" stopColor="#1D9E75" stopOpacity="0.02" />
+            <stop offset="0%" stopColor="#00D47E" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="#00D47E" stopOpacity="0.02" />
           </linearGradient>
           <linearGradient id="expGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#E24B4A" stopOpacity="0.18" />
-            <stop offset="100%" stopColor="#E24B4A" stopOpacity="0.02" />
+            <stop offset="0%" stopColor="#FF5B5A" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="#FF5B5A" stopOpacity="0.02" />
           </linearGradient>
         </defs>
 
         {/* Grid lines */}
         {ticks.map((t, i) => (
           <g key={i}>
-            <line x1={padL} y1={t.y} x2={W - padR} y2={t.y} stroke="#E8E7E2" strokeWidth="1" />
-            <text x={padL - 6} y={t.y + 4} textAnchor="end" fontSize="9" fill="#ccc" fontFamily="system-ui">{fmt(t.v)}</text>
+            <line x1={padL} y1={t.y} x2={W - padR} y2={t.y} stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
+            <text x={padL - 6} y={t.y + 4} textAnchor="end" fontSize="9" fill="rgba(255,255,255,0.30)" fontFamily="system-ui">{fmt(t.v)}</text>
           </g>
         ))}
 
@@ -63,12 +63,12 @@ function AreaChart({ months, revenues, expenses }: { months: string[]; revenues:
         <path d={revArea} fill="url(#revGrad)" />
 
         {/* Lines */}
-        <polyline points={expPts} fill="none" stroke="#E24B4A" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" opacity="0.8" />
-        <polyline points={revPts} fill="none" stroke="#1D9E75" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <polyline points={expPts} fill="none" stroke="#FF5B5A" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" opacity="0.8" />
+        <polyline points={revPts} fill="none" stroke="#00D47E" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
 
         {/* Month labels */}
         {months.map((m, i) => (
-          <text key={m} x={xPos(i)} y={H - 4} textAnchor="middle" fontSize="9" fill={hovered === i ? '#555' : '#bbb'} fontFamily="system-ui" fontWeight={hovered === i ? '600' : '400'}>{m}</text>
+          <text key={m} x={xPos(i)} y={H - 4} textAnchor="middle" fontSize="9" fill={hovered === i ? '#DCE9F6' : 'rgba(255,255,255,0.30)'} fontFamily="system-ui" fontWeight={hovered === i ? '600' : '400'}>{m}</text>
         ))}
 
         {/* Hover zones + dots */}
@@ -76,9 +76,9 @@ function AreaChart({ months, revenues, expenses }: { months: string[]; revenues:
           <g key={`h${i}`}>
             {hovered === i && (
               <>
-                <line x1={xPos(i)} y1={padT} x2={xPos(i)} y2={padT + chartH} stroke="#e5e5e5" strokeWidth="1" strokeDasharray="3,2" />
-                <circle cx={xPos(i)} cy={yPos(revenues[i])} r="4" fill="#1D9E75" stroke="#fff" strokeWidth="2" />
-                <circle cx={xPos(i)} cy={yPos(expenses[i])} r="4" fill="#E24B4A" stroke="#fff" strokeWidth="2" />
+                <line x1={xPos(i)} y1={padT} x2={xPos(i)} y2={padT + chartH} stroke="rgba(255,255,255,0.10)" strokeWidth="1" strokeDasharray="3,2" />
+                <circle cx={xPos(i)} cy={yPos(revenues[i])} r="4" fill="#00D47E" stroke="#0D1B2C" strokeWidth="2" />
+                <circle cx={xPos(i)} cy={yPos(expenses[i])} r="4" fill="#FF5B5A" stroke="#0D1B2C" strokeWidth="2" />
                 {/* Tooltip */}
                 <rect x={Math.min(xPos(i) - 45, W - padR - 95)} y={padT + 4} width="90" height="42" rx="6" fill="#0D1B2A" opacity="0.88" />
                 <text x={Math.min(xPos(i), W - padR - 50)} y={padT + 17} textAnchor="middle" fontSize="9.5" fill="#5DCAA5" fontFamily="system-ui" fontWeight="600">{m}</text>
@@ -102,8 +102,8 @@ function AreaChart({ months, revenues, expenses }: { months: string[]; revenues:
         {/* Dots at ends */}
         {n > 0 && (
           <>
-            <circle cx={xPos(n - 1)} cy={yPos(revenues[n - 1])} r="3" fill="#1D9E75" stroke="#fff" strokeWidth="1.5" />
-            <circle cx={xPos(n - 1)} cy={yPos(expenses[n - 1])} r="3" fill="#E24B4A" stroke="#fff" strokeWidth="1.5" />
+            <circle cx={xPos(n - 1)} cy={yPos(revenues[n - 1])} r="3" fill="#00D47E" stroke="#0D1B2C" strokeWidth="1.5" />
+            <circle cx={xPos(n - 1)} cy={yPos(expenses[n - 1])} r="3" fill="#FF5B5A" stroke="#0D1B2C" strokeWidth="1.5" />
           </>
         )}
       </svg>
@@ -114,7 +114,7 @@ function AreaChart({ months, revenues, expenses }: { months: string[]; revenues:
 // ── Donut Chart ───────────────────────────────────────────
 function DonutChart({ segments }: { segments: { label: string; value: number; color: string }[] }) {
   const total = segments.reduce((s, seg) => s + seg.value, 0)
-  if (!total) return <div style={{ width: 120, height: 120, borderRadius: '50%', background: '#f0f0ee' }} />
+  if (!total) return <div style={{ width: 120, height: 120, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
   const r = 45
   const cx = 60
   const cy = 60
@@ -138,11 +138,11 @@ function DonutChart({ segments }: { segments: { label: string; value: number; co
   return (
     <svg width={120} height={120} viewBox="0 0 120 120">
       {arcs.map((arc, i) => (
-        <path key={i} d={arc.d} fill={arc.color} fillOpacity="0.9" stroke="#fff" strokeWidth="1.5" />
+        <path key={i} d={arc.d} fill={arc.color} fillOpacity="0.9" stroke="#0D1B2C" strokeWidth="1.5" />
       ))}
-      <circle cx={cx} cy={cy} r={28} fill="#fff" />
-      <text x={cx} y={cy - 4} textAnchor="middle" fontSize="10" fill="#888" fontFamily="system-ui">EXPENSES</text>
-      <text x={cx} y={cy + 10} textAnchor="middle" fontSize="9" fill="#aaa" fontFamily="system-ui">breakdown</text>
+      <circle cx={cx} cy={cy} r={28} fill="#0D1B2C" />
+      <text x={cx} y={cy - 4} textAnchor="middle" fontSize="10" fill="#7A9BB8" fontFamily="system-ui">EXPENSES</text>
+      <text x={cx} y={cy + 10} textAnchor="middle" fontSize="9" fill="rgba(255,255,255,0.30)" fontFamily="system-ui">breakdown</text>
     </svg>
   )
 }
@@ -153,10 +153,10 @@ function HBar({ label, value, max, color, sub }: { label: string; value: number;
   return (
     <div style={{ marginBottom: '10px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-        <span style={{ fontSize: '12px', color: '#444', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, maxWidth: '60%' }}>{label}</span>
-        <span style={{ fontSize: '12px', color: '#888', whiteSpace: 'nowrap' as const }}>{fmtUSD(value)}{sub ? ` · ${sub}` : ''}</span>
+        <span style={{ fontSize: '12px', color: '#DCE9F6', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, maxWidth: '60%' }}>{label}</span>
+        <span style={{ fontSize: '12px', color: '#7A9BB8', whiteSpace: 'nowrap' as const }}>{fmtUSD(value)}{sub ? ` · ${sub}` : ''}</span>
       </div>
-      <div style={{ height: '5px', background: '#f0f0ee', borderRadius: '3px', overflow: 'hidden' }}>
+      <div style={{ height: '5px', background: 'rgba(255,255,255,0.06)', borderRadius: '3px', overflow: 'hidden' }}>
         <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: '3px', transition: 'width 0.6s ease' }} />
       </div>
     </div>
@@ -342,7 +342,7 @@ export default function Dashboard() {
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '2rem' }}>
           <div>
             <div style={s.greetingDate}>{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).toUpperCase()}</div>
-            <h1 style={s.greetingTitle}>{greeting}, <span style={{ color: '#1D9E75', fontStyle: 'italic' }}>{username}</span></h1>
+            <h1 style={s.greetingTitle}>{greeting}, <span style={{ color: '#00D47E', fontStyle: 'italic' }}>{username}</span></h1>
           </div>
           {/* Period bar inline */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' as const }}>
@@ -356,7 +356,7 @@ export default function Dashboard() {
               ))}
             </div>
             <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setActiveShortcut('') }} style={s.dateInput} />
-            <span style={{ color: '#ccc', fontSize: '12px' }}>→</span>
+            <span style={{ color: 'rgba(255,255,255,0.30)', fontSize: '12px' }}>→</span>
             <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setActiveShortcut('') }} style={s.dateInput} />
           </div>
         </div>
@@ -368,12 +368,12 @@ export default function Dashboard() {
             return (
               <div key={e.id} style={{ ...s.entityChip, ...(active ? { ...s.entityChipActive, borderColor: e.color, background: e.bg } : {}) }}
                 onClick={() => setEntity(e.id)}>
-                <div style={{ ...s.entityDot, background: active ? e.color : '#ddd' }} />
+                <div style={{ ...s.entityDot, background: active ? e.color : 'rgba(255,255,255,0.15)' }} />
                 <div>
-                  <div style={{ fontSize: '13px', fontWeight: active ? '600' : '400', color: active ? '#111' : '#666' }}>{e.name}</div>
-                  <div style={{ fontSize: '10px', color: active ? e.color : '#bbb', fontWeight: '500' }}>{e.sub}</div>
+                  <div style={{ fontSize: '13px', fontWeight: active ? '600' : '400', color: active ? '#fff' : 'rgba(255,255,255,0.44)' }}>{e.name}</div>
+                  <div style={{ fontSize: '10px', color: active ? e.color : '#7A9BB8', fontWeight: '500' }}>{e.sub}</div>
                 </div>
-                <div style={{ ...s.entityBadgePill, background: active ? e.color : '#f0f0ee', color: active ? '#fff' : '#aaa' }}>{e.badge}</div>
+                <div style={{ ...s.entityBadgePill, background: active ? e.color : 'rgba(255,255,255,0.06)', color: active ? '#fff' : 'rgba(255,255,255,0.30)' }}>{e.badge}</div>
               </div>
             )
           })}
@@ -385,32 +385,32 @@ export default function Dashboard() {
             label="Total Revenue"
             value={loading ? '—' : fmtUSD(metrics.totalRevenue)}
             sub={`YTD ${activeEntity.name}`}
-            color="#1D9E75"
-            darkColor="#0B5E49"
+            color="#00D47E"
+            darkColor="#00D47E"
             sparklineData={sparkRevenue}
           />
           <MetricCard
             label="Total Expenses"
             value={loading ? '—' : fmtUSD(metrics.totalExpenses)}
             sub={metrics.totalRevenue > 0 ? `${((metrics.totalExpenses / metrics.totalRevenue) * 100).toFixed(0)}% of revenue` : 'No revenue'}
-            color="#E24B4A"
-            darkColor="#A32D2D"
+            color="#FF5B5A"
+            darkColor="#FF5B5A"
             sparklineData={sparkExpenses}
           />
           <MetricCard
             label="Net Profit / Loss"
             value={loading ? '—' : fmtUSDSigned(metrics.netProfit)}
             sub={`${margin.toFixed(1)}% margin`}
-            color={metrics.netProfit >= 0 ? '#1D9E75' : '#E24B4A'}
-            darkColor={metrics.netProfit >= 0 ? '#0B5E49' : '#A32D2D'}
+            color={metrics.netProfit >= 0 ? '#00D47E' : '#FF5B5A'}
+            darkColor={metrics.netProfit >= 0 ? '#00D47E' : '#FF5B5A'}
             sparklineData={monthlyData.map(m => m.revenue - m.expenses)}
           />
           <MetricCard
             label="Open Invoices"
             value={loading ? '—' : metrics.openInvoicesCount > 0 ? fmtUSD(metrics.unpaidInvoices) : '$0'}
             sub={`${metrics.openInvoicesCount} open${metrics.overdueCount > 0 ? ` · ${metrics.overdueCount} overdue` : ''}`}
-            color={metrics.overdueCount > 0 ? '#BA7517' : '#1D9E75'}
-            darkColor={metrics.overdueCount > 0 ? '#633806' : '#0B5E49'}
+            color={metrics.overdueCount > 0 ? '#F5A623' : '#00D47E'}
+            darkColor={metrics.overdueCount > 0 ? '#F5A623' : '#00D47E'}
             sparklineData={[]}
           />
         </div>
@@ -428,11 +428,11 @@ export default function Dashboard() {
                 <div style={{ display: 'flex', gap: '12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                     <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#1D9E75', opacity: 0.85 }} />
-                    <span style={{ fontSize: '11px', color: '#888' }}>Revenue</span>
+                    <span style={{ fontSize: '11px', color: '#7A9BB8' }}>Revenue</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                     <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#E24B4A', opacity: 0.7 }} />
-                    <span style={{ fontSize: '11px', color: '#888' }}>Expenses</span>
+                    <span style={{ fontSize: '11px', color: '#7A9BB8' }}>Expenses</span>
                   </div>
                 </div>
               </div>
@@ -468,8 +468,8 @@ export default function Dashboard() {
                       {expenseByCategory.map(cat => (
                         <div key={cat.label} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '7px' }}>
                           <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: cat.color, flexShrink: 0 }} />
-                          <span style={{ fontSize: '11px', color: '#555', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{cat.label}</span>
-                          <span style={{ fontSize: '11px', fontWeight: '500', color: '#333', whiteSpace: 'nowrap' as const }}>{fmtUSD(cat.value)}</span>
+                          <span style={{ fontSize: '11px', color: '#7A9BB8', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{cat.label}</span>
+                          <span style={{ fontSize: '11px', fontWeight: '500', color: '#DCE9F6', whiteSpace: 'nowrap' as const }}>{fmtUSD(cat.value)}</span>
                         </div>
                       ))}
                     </div>
@@ -481,7 +481,7 @@ export default function Dashboard() {
               <div style={s.card}>
                 <div style={s.cardHeader}>
                   <div style={s.cardTitle}>Top partners</div>
-                  <span style={{ fontSize: '10px', color: '#bbb' }}>by volume</span>
+                  <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.30)' }}>by volume</span>
                 </div>
                 {loading ? <div style={s.loadingBox}>Loading...</div> : topPartners.length === 0 ? (
                   <div style={s.emptyBox}>No partner data</div>
@@ -515,22 +515,22 @@ export default function Dashboard() {
                   <thead>
                     <tr>
                       {['Date', 'Partner', 'Type', 'Amount', 'USD'].map(h => (
-                        <th key={h} style={{ textAlign: 'left' as const, padding: '0 0 8px', fontSize: '9.5px', color: '#AAAAAA', fontWeight: '600', textTransform: 'uppercase' as const, letterSpacing: '0.09em' }}>{h}</th>
+                        <th key={h} style={{ textAlign: 'left' as const, padding: '0 0 8px', fontSize: '9.5px', color: 'rgba(255,255,255,0.30)', fontWeight: '600', textTransform: 'uppercase' as const, letterSpacing: '0.09em' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {recentActivity.map((t, i) => (
-                      <tr key={i} style={{ borderTop: '1px solid #E8E7E2' }}>
-                        <td style={{ padding: '8px 0', color: '#555', whiteSpace: 'nowrap' as const }}>{t.transaction_date}</td>
-                        <td style={{ padding: '8px 8px 8px 0', fontWeight: '500', color: '#111', maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{(t.partners as any)?.name || '—'}</td>
+                      <tr key={i} style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+                        <td style={{ padding: '8px 0', color: '#7A9BB8', whiteSpace: 'nowrap' as const }}>{t.transaction_date}</td>
+                        <td style={{ padding: '8px 8px 8px 0', fontWeight: '500', color: '#DCE9F6', maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{(t.partners as any)?.name || '—'}</td>
                         <td style={{ padding: '8px 8px 8px 0' }}>
-                          <span style={{ fontSize: '10px', fontWeight: '500', padding: '2px 7px', borderRadius: '20px', background: t.type === 'direct' ? '#E1F5EE' : '#E6F1FB', color: t.type === 'direct' ? '#085041' : '#0C447C' }}>
+                          <span style={{ fontSize: '10px', fontWeight: '500', padding: '2px 7px', borderRadius: '20px', background: t.type === 'direct' ? 'rgba(0,212,126,0.12)' : 'rgba(78,168,255,0.13)', color: t.type === 'direct' ? '#00D47E' : '#4EA8FF' }}>
                             {t.type === 'invoice_payment' ? 'Inv. pay' : t.type}
                           </span>
                         </td>
-                        <td style={{ padding: '8px 8px 8px 0', fontWeight: '500', color: '#111', whiteSpace: 'nowrap' as const }}>{(t.amount || 0).toLocaleString()} {t.currency}</td>
-                        <td style={{ padding: '8px 0', fontWeight: '500', color: '#1D9E75', whiteSpace: 'nowrap' as const }}>{fmtUSD(t.amount_usd || 0)}</td>
+                        <td style={{ padding: '8px 8px 8px 0', fontWeight: '500', color: '#DCE9F6', whiteSpace: 'nowrap' as const }}>{(t.amount || 0).toLocaleString()} {t.currency}</td>
+                        <td style={{ padding: '8px 0', fontWeight: '500', color: '#00D47E', whiteSpace: 'nowrap' as const }}>{fmtUSD(t.amount_usd || 0)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -564,15 +564,15 @@ export default function Dashboard() {
                 <div style={s.cardTitle}>At a glance</div>
               </div>
               {[
-                { label: 'Net margin', value: `${margin.toFixed(1)}%`, color: margin >= 0 ? '#0B5E49' : '#A32D2D' },
-                { label: 'Pass-through unpaired', value: String(metrics.unmatchedPassthrough), color: metrics.unmatchedPassthrough > 0 ? '#BA7517' : '#0B5E49' },
-                { label: 'Overdue invoices', value: String(metrics.overdueCount), color: metrics.overdueCount > 0 ? '#A32D2D' : '#0B5E49' },
-                { label: 'Open invoices', value: String(metrics.openInvoicesCount), color: '#555' },
-                { label: 'Expense categories', value: String(expenseByCategory.length), color: '#555' },
-                { label: 'Active partners', value: String(topPartners.length), color: '#555' },
+                { label: 'Net margin', value: `${margin.toFixed(1)}%`, color: margin >= 0 ? '#00D47E' : '#FF5B5A' },
+                { label: 'Pass-through unpaired', value: String(metrics.unmatchedPassthrough), color: metrics.unmatchedPassthrough > 0 ? '#F5A623' : '#00D47E' },
+                { label: 'Overdue invoices', value: String(metrics.overdueCount), color: metrics.overdueCount > 0 ? '#FF5B5A' : '#00D47E' },
+                { label: 'Open invoices', value: String(metrics.openInvoicesCount), color: '#7A9BB8' },
+                { label: 'Expense categories', value: String(expenseByCategory.length), color: '#7A9BB8' },
+                { label: 'Active partners', value: String(topPartners.length), color: '#7A9BB8' },
               ].map(item => (
-                <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #E8E7E2' }}>
-                  <span style={{ fontSize: '12px', color: '#888' }}>{item.label}</span>
+                <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                  <span style={{ fontSize: '12px', color: '#7A9BB8' }}>{item.label}</span>
                   <span style={{ fontSize: '13px', fontWeight: '600', color: loading ? '#ccc' : item.color }}>{loading ? '...' : item.value}</span>
                 </div>
               ))}
@@ -593,8 +593,8 @@ export default function Dashboard() {
               ].map(action => (
                 <button key={action.label} style={s.quickBtn} onClick={() => setPage(action.page)}>
                   <span style={{ fontSize: '15px' }}>{action.icon}</span>
-                  <span style={{ fontSize: '13px', color: '#333' }}>{action.label}</span>
-                  <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#ccc' }}>→</span>
+                  <span style={{ fontSize: '13px', color: '#DCE9F6' }}>{action.label}</span>
+                  <span style={{ marginLeft: 'auto', fontSize: '12px', color: 'rgba(255,255,255,0.30)' }}>→</span>
                 </button>
               ))}
             </div>
@@ -607,26 +607,26 @@ export default function Dashboard() {
 }
 
 const s: Record<string, React.CSSProperties> = {
-  root: { minHeight: '100vh', background: '#FAF9F7', fontFamily: "'Inter', system-ui, sans-serif" },
+  root: { minHeight: '100vh', background: '#060E1A', fontFamily: "'Inter', system-ui, sans-serif" },
   body: { padding: '24px 28px', maxWidth: '1400px', margin: '0 auto' },
-  greetingDate: { fontSize: '10px', color: '#AAAAAA', letterSpacing: '0.13em', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase' as const },
-  greetingTitle: { fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '28px', fontWeight: '400', color: '#111', margin: '0', lineHeight: '1.2' },
-  segmented: { display: 'flex', gap: '2px', background: '#E8E7E2', borderRadius: '9px', padding: '3px' },
-  shortcutBtn: { fontFamily: "'Inter', system-ui, sans-serif", fontSize: '11px', border: 'none', borderRadius: '6px', padding: '5px 11px', background: 'transparent', color: '#AAAAAA', cursor: 'pointer', whiteSpace: 'nowrap' as const, fontWeight: '500' },
-  shortcutActive: { background: '#fff', color: '#0B5E49', boxShadow: '0 1px 4px rgba(0,0,0,0.12)' },
-  dateInput: { fontFamily: "'Inter', system-ui, sans-serif", fontSize: '12px', border: '1px solid #E8E7E2', borderRadius: '7px', padding: '5px 9px', color: '#333', background: '#fff' },
+  greetingDate: { fontSize: '10px', color: 'rgba(255,255,255,0.30)', letterSpacing: '0.13em', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase' as const },
+  greetingTitle: { fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '28px', fontWeight: '400', color: '#DCE9F6', margin: '0', lineHeight: '1.2' },
+  segmented: { display: 'flex', gap: '2px', background: 'rgba(255,255,255,0.08)', borderRadius: '9px', padding: '3px' },
+  shortcutBtn: { fontFamily: "'Inter', system-ui, sans-serif", fontSize: '11px', border: 'none', borderRadius: '6px', padding: '5px 11px', background: 'transparent', color: 'rgba(255,255,255,0.44)', cursor: 'pointer', whiteSpace: 'nowrap' as const, fontWeight: '500' },
+  shortcutActive: { background: 'rgba(255,255,255,0.16)', color: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.12)' },
+  dateInput: { fontFamily: "'Inter', system-ui, sans-serif", fontSize: '12px', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '7px', padding: '5px 9px', color: '#DCE9F6', background: '#111F30' },
   entityRow: { display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' as const },
-  entityChip: { display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 14px', borderRadius: '9px', background: 'transparent', border: '1px solid #E8E7E2', cursor: 'pointer', flex: '1', minWidth: '150px', transition: 'border-color 0.15s, background 0.15s' },
-  entityChipActive: { border: '1.5px solid', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' },
+  entityChip: { display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 14px', borderRadius: '9px', background: 'transparent', border: '1px solid rgba(255,255,255,0.10)', cursor: 'pointer', flex: '1', minWidth: '150px', transition: 'border-color 0.15s, background 0.15s' },
+  entityChipActive: { border: '1.5px solid', boxShadow: '0 1px 4px rgba(0,0,0,0.3)' },
   entityDot: { width: '7px', height: '7px', borderRadius: '50%', flexShrink: 0 },
   entityBadgePill: { marginLeft: 'auto', fontSize: '9px', fontWeight: '700', padding: '2px 7px', borderRadius: '20px', letterSpacing: '0.06em', flexShrink: 0 },
   metricsRow: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '14px' },
   mainGrid: { display: 'grid', gridTemplateColumns: '1fr 280px', gap: '12px' },
-  card: { background: '#fff', borderRadius: '12px', padding: '1rem 1.2rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #E8E7E2' },
+  card: { background: '#0D1B2C', borderRadius: '10px', padding: '1rem 1.2rem', boxShadow: '0 4px 20px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.075)' },
   cardHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' },
-  cardTitle: { fontSize: '12px', fontWeight: '600', color: '#111', letterSpacing: '-0.01em' },
-  cardLink: { fontSize: '12px', color: '#1D9E75', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Inter', system-ui, sans-serif", padding: 0 },
-  loadingBox: { padding: '24px', textAlign: 'center' as const, color: '#AAAAAA', fontSize: '12px' },
-  emptyBox: { padding: '24px', textAlign: 'center' as const, color: '#AAAAAA', fontSize: '12px' },
-  quickBtn: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', background: '#F5F4F1', border: '1px solid #E8E7E2', borderRadius: '8px', padding: '8px 11px', fontFamily: "'Inter', system-ui, sans-serif", cursor: 'pointer', marginBottom: '5px', textAlign: 'left' as const, transition: 'background 0.15s' },
+  cardTitle: { fontSize: '12px', fontWeight: '600', color: '#DCE9F6', letterSpacing: '-0.01em' },
+  cardLink: { fontSize: '12px', color: '#00D47E', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Inter', system-ui, sans-serif", padding: 0 },
+  loadingBox: { padding: '24px', textAlign: 'center' as const, color: 'rgba(255,255,255,0.30)', fontSize: '12px' },
+  emptyBox: { padding: '24px', textAlign: 'center' as const, color: 'rgba(255,255,255,0.30)', fontSize: '12px' },
+  quickBtn: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '8px', padding: '8px 11px', fontFamily: "'Inter', system-ui, sans-serif", cursor: 'pointer', marginBottom: '5px', textAlign: 'left' as const, transition: 'background 0.15s' },
 }

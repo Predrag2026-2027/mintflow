@@ -36,10 +36,10 @@ export default function Partners() {
   })
 
   const typeColors: Record<string, { bg: string; color: string }> = {
-    vendor: { bg: '#FCEBEB', color: '#A32D2D' },
-    customer: { bg: '#E1F5EE', color: '#085041' },
-    both: { bg: '#E6F1FB', color: '#0C447C' },
-    company: { bg: '#F0F0EE', color: '#666' },
+    vendor: { bg: 'rgba(255,91,90,0.13)', color: '#FF5B5A' },
+    customer: { bg: 'rgba(0,212,126,0.12)', color: '#00D47E' },
+    both: { bg: 'rgba(78,168,255,0.13)', color: '#4EA8FF' },
+    company: { bg: 'rgba(255,255,255,0.06)', color: '#7A9BB8' },
   }
 
   const typeLabels: Record<string, string> = {
@@ -66,13 +66,13 @@ export default function Partners() {
           </div>
           <div style={s.summaryCard}>
             <div style={s.summaryLabel}>Vendors</div>
-            <div style={{ ...s.summaryVal, color: '#A32D2D' }}>
+            <div style={{ ...s.summaryVal, color: '#FF5B5A' }}>
               {partners.filter(p => p.type === 'vendor' || p.type === 'both').length}
             </div>
           </div>
           <div style={s.summaryCard}>
             <div style={s.summaryLabel}>Customers</div>
-            <div style={{ ...s.summaryVal, color: '#085041' }}>
+            <div style={{ ...s.summaryVal, color: '#00D47E' }}>
               {partners.filter(p => p.type === 'customer' || p.type === 'both').length}
             </div>
           </div>
@@ -101,8 +101,8 @@ export default function Partners() {
           ) : filtered.length === 0 ? (
             <div style={s.emptyState}>
               <div style={{ fontSize: '32px', marginBottom: '12px' }}>🤝</div>
-              <div style={{ fontSize: '15px', fontWeight: '500', color: '#111', marginBottom: '6px' }}>No partners yet</div>
-              <div style={{ fontSize: '13px', color: '#888', marginBottom: '20px' }}>Add your first vendor or customer.</div>
+              <div style={{ fontSize: '15px', fontWeight: '500', color: '#DCE9F6', marginBottom: '6px' }}>No partners yet</div>
+              <div style={{ fontSize: '13px', color: '#7A9BB8', marginBottom: '20px' }}>Add your first vendor or customer.</div>
               <button style={s.newBtn} onClick={() => setShowDialog(true)}>+ New partner</button>
             </div>
           ) : (
@@ -122,14 +122,14 @@ export default function Partners() {
               </thead>
               <tbody>
                 {filtered.map((p, i) => (
-                  <tr key={p.id} style={{ ...s.tr, background: i % 2 === 0 ? '#fff' : '#F7F7F4', cursor: 'pointer' }}
+                  <tr key={p.id} style={{ ...s.tr, background: i % 2 === 0 ? '#0D1B2C' : '#111F30', cursor: 'pointer' }}
                     onClick={() => { setEditPartner(p); setShowDialog(true) }}>
                     <td style={s.td}>
-                      <div style={{ fontWeight: '600', fontSize: '13px', color: '#0F6E56' }}>{p.name}</div>
-                      {p.address && <div style={{ fontSize: '11px', color: '#888', marginTop: '1px' }}>{p.address}</div>}
+                      <div style={{ fontWeight: '600', fontSize: '13px', color: '#00D47E' }}>{p.name}</div>
+                      {p.address && <div style={{ fontSize: '11px', color: '#7A9BB8', marginTop: '1px' }}>{p.address}</div>}
                     </td>
                     <td style={s.td}>
-                      <span style={{ ...s.badge, background: typeColors[p.type || 'vendor']?.bg || '#f0f0ee', color: typeColors[p.type || 'vendor']?.color || '#666' }}>
+                      <span style={{ ...s.badge, background: typeColors[p.type || 'vendor']?.bg || 'rgba(255,255,255,0.06)', color: typeColors[p.type || 'vendor']?.color || '#666' }}>
                         {typeLabels[p.type || 'vendor'] || p.type}
                       </span>
                     </td>
@@ -139,7 +139,7 @@ export default function Partners() {
                     <td style={s.td}><span style={s.smallCell}>{p.contact_email || '—'}</span></td>
                     <td style={s.td}><span style={s.smallCell}>{p.contact_phone || '—'}</span></td>
                     <td style={s.td}>
-                      <span style={{ ...s.badge, background: p.is_active !== false ? '#E1F5EE' : '#f0f0ee', color: p.is_active !== false ? '#085041' : '#888' }}>
+                      <span style={{ ...s.badge, background: p.is_active !== false ? 'rgba(0,212,126,0.12)' : 'rgba(255,255,255,0.06)', color: p.is_active !== false ? '#085041' : '#888' }}>
                         {p.is_active !== false ? 'Active' : 'Inactive'}
                       </span>
                     </td>
@@ -266,10 +266,10 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
   if (success) return (
     <div style={ds.overlay}>
       <div style={{ ...ds.dialog, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', minHeight: '180px' }}>
-        <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#E1F5EE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(0,212,126,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="2"><path d="M5 13l4 4L19 7" /></svg>
         </div>
-        <div style={{ fontFamily: 'Georgia,serif', fontSize: '18px', color: '#111' }}>
+        <div style={{ fontFamily: 'Georgia,serif', fontSize: '18px', color: '#DCE9F6' }}>
           {partner ? 'Partner updated!' : 'Partner added!'}
         </div>
       </div>
@@ -367,7 +367,7 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
                   <textarea style={ds.textarea} value={note} onChange={e => setNote(e.target.value)} placeholder="Additional notes..." />
                 </div>
                 <div style={{ ...ds.toggleRow, marginTop: '10px' }}>
-                  <span style={{ fontSize: '13px', color: '#111' }}>Active partner</span>
+                  <span style={{ fontSize: '13px', color: '#DCE9F6' }}>Active partner</span>
                   <label style={ds.toggle}>
                     <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
                     <span style={{ ...ds.toggleSlider, background: isActive ? '#1D9E75' : '#ddd' }} />
@@ -383,9 +383,9 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
               <div style={ds.sectionTitle}>Bank accounts</div>
 
               {loadingAccounts ? (
-                <div style={{ padding: '20px', textAlign: 'center' as const, color: '#888', fontSize: '13px' }}>Loading...</div>
+                <div style={{ padding: '20px', textAlign: 'center' as const, color: '#7A9BB8', fontSize: '13px' }}>Loading...</div>
               ) : accounts.length === 0 ? (
-                <div style={{ padding: '20px', textAlign: 'center' as const, color: '#aaa', fontSize: '13px', background: '#f5f5f3', borderRadius: '8px', marginBottom: '16px' }}>
+                <div style={{ padding: '20px', textAlign: 'center' as const, color: 'rgba(255,255,255,0.30)', fontSize: '13px', background: 'rgba(255,255,255,0.04)', borderRadius: '8px', marginBottom: '16px' }}>
                   No bank accounts yet.
                 </div>
               ) : (
@@ -394,23 +394,23 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
                     <div key={acc.id} style={{ ...ds.accountRow, ...(acc.is_primary ? ds.accountRowPrimary : {}) }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '13px', fontWeight: '500', color: '#111', fontFamily: 'monospace' }}>
+                          <span style={{ fontSize: '13px', fontWeight: '500', color: '#DCE9F6', fontFamily: 'monospace' }}>
                             {acc.account_number}
                           </span>
                           {acc.is_primary && (
-                            <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: '#E1F5EE', color: '#085041' }}>
+                            <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: 'rgba(0,212,126,0.12)', color: '#00D47E' }}>
                               ★ Primary
                             </span>
                           )}
-                          <span style={{ fontSize: '10px', padding: '1px 7px', borderRadius: '20px', background: '#f0f0ee', color: '#666' }}>
+                          <span style={{ fontSize: '10px', padding: '1px 7px', borderRadius: '20px', background: 'rgba(255,255,255,0.06)', color: '#7A9BB8' }}>
                             {acc.currency || 'RSD'}
                           </span>
                         </div>
                         {acc.bank_name && (
-                          <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>{acc.bank_name}</div>
+                          <div style={{ fontSize: '11px', color: '#7A9BB8', marginTop: '2px' }}>{acc.bank_name}</div>
                         )}
                         {acc.model && (
-                          <div style={{ fontSize: '11px', color: '#aaa' }}>Model: {acc.model}</div>
+                          <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.30)' }}>Model: {acc.model}</div>
                         )}
                       </div>
                       <div style={{ display: 'flex', gap: '6px' }}>
@@ -419,7 +419,7 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
                             ★ Set primary
                           </button>
                         )}
-                        <button style={{ ...ds.accountBtn, color: '#A32D2D', borderColor: '#F5A9A9' }} onClick={() => deleteAccount(acc.id)}>
+                        <button style={{ ...ds.accountBtn, color: '#FF5B5A', borderColor: '#F5A9A9' }} onClick={() => deleteAccount(acc.id)}>
                           Delete
                         </button>
                       </div>
@@ -429,8 +429,8 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
               )}
 
               {/* Add new account */}
-              <div style={{ background: '#f5f5f3', borderRadius: '10px', padding: '14px', border: '0.5px solid #e5e5e5' }}>
-                <div style={{ fontSize: '11px', fontWeight: '500', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.07em', marginBottom: '10px' }}>
+              <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '14px', border: '0.5px solid #e5e5e5' }}>
+                <div style={{ fontSize: '11px', fontWeight: '500', color: '#7A9BB8', textTransform: 'uppercase' as const, letterSpacing: '0.07em', marginBottom: '10px' }}>
                   Add new account
                 </div>
                 <div style={ds.row2}>
@@ -484,65 +484,65 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
 }
 
 const s: Record<string, React.CSSProperties> = {
-  root: { minHeight: '100vh', background: '#FAF9F7', fontFamily: "'Inter', system-ui, sans-serif" },
+  root: { minHeight: '100vh', background: '#060E1A', fontFamily: "'Inter', system-ui, sans-serif" },
   body: { padding: '24px 28px' },
   pageHeader: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.5rem' },
-  pageTitle: { fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '24px', fontWeight: '400', color: '#111', marginBottom: '4px' },
-  pageSub: { fontSize: '13px', color: '#666' },
-  newBtn: { background: '#1D9E75', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 18px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer', boxShadow: '0 2px 8px rgba(29,158,117,0.3)' },
+  pageTitle: { fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '24px', fontWeight: '400', color: '#DCE9F6', marginBottom: '4px' },
+  pageSub: { fontSize: '13px', color: '#7A9BB8' },
+  newBtn: { background: '#00D47E', color: '#060E1A', border: 'none', borderRadius: '8px', padding: '9px 18px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,212,126,0.3)' },
   summaryRow: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '1.5rem' },
-  summaryCard: { background: '#fff', border: '1px solid #D8D8D2', borderRadius: '12px', padding: '14px 16px', boxShadow: '0 2px 6px rgba(0,0,0,0.06)' },
-  summaryLabel: { fontSize: '10px', fontWeight: '600', color: '#666', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '6px' },
-  summaryVal: { fontSize: '26px', fontWeight: '600', color: '#111' },
+  summaryCard: { background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '10px', padding: '14px 16px', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' },
+  summaryLabel: { fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '6px' },
+  summaryVal: { fontSize: '26px', fontWeight: '600', color: '#DCE9F6' },
   filterBar: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1rem', flexWrap: 'wrap' as const },
-  searchInput: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '1px solid #C8C8C2', borderRadius: '8px', padding: '8px 12px', outline: 'none', background: '#fff', color: '#111', flex: '1', minWidth: '200px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },
-  filterSelect: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '1px solid #C8C8C2', borderRadius: '8px', padding: '8px 12px', outline: 'none', background: '#fff', color: '#111', cursor: 'pointer' },
-  totalBadge: { fontSize: '13px', color: '#555', background: '#fff', border: '1px solid #C8C8C2', borderRadius: '8px', padding: '8px 12px', marginLeft: 'auto', whiteSpace: 'nowrap' as const, fontWeight: '500' },
-  tableWrap: { background: '#fff', border: '1px solid #D0D0CA', borderRadius: '12px', overflow: 'visible', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' },
+  searchInput: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '8px', padding: '8px 12px', outline: 'none', background: '#0D1B2C', color: '#DCE9F6', flex: '1', minWidth: '200px' },
+  filterSelect: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '8px', padding: '8px 12px', outline: 'none', background: '#0D1B2C', color: '#DCE9F6', cursor: 'pointer' },
+  totalBadge: { fontSize: '13px', color: '#7A9BB8', background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '8px', padding: '8px 12px', marginLeft: 'auto', whiteSpace: 'nowrap' as const, fontWeight: '500' },
+  tableWrap: { background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '10px', overflow: 'visible', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' },
   table: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '13px' },
-  thead: { background: '#1E2A3A' },
-  th: { padding: '11px 12px', textAlign: 'left' as const, fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', borderBottom: '1px solid #2A3A4E', whiteSpace: 'nowrap' as const },
-  tr: { borderBottom: '0.5px solid #E8E8E2' },
+  thead: { background: '#060E1A' },
+  th: { padding: '11px 12px', textAlign: 'left' as const, fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', borderBottom: '1px solid rgba(255,255,255,0.075)', whiteSpace: 'nowrap' as const },
+  tr: { borderBottom: '0.5px solid rgba(255,255,255,0.05)' },
   td: { padding: '10px 12px', verticalAlign: 'middle' as const },
-  emptyState: { padding: '3rem', textAlign: 'center' as const, color: '#888', fontSize: '14px' },
+  emptyState: { padding: '3rem', textAlign: 'center' as const, color: '#7A9BB8', fontSize: '14px' },
   badge: { fontSize: '11px', fontWeight: '500', padding: '3px 9px', borderRadius: '20px', whiteSpace: 'nowrap' as const },
-  monoCell: { fontSize: '12px', fontFamily: 'monospace', color: '#444', background: '#F0F0EA', padding: '2px 6px', borderRadius: '4px', border: '0.5px solid #D8D8D2' },
-  smallCell: { fontSize: '12px', color: '#555' },
-  editBtn: { background: 'none', border: '0.5px solid #e5e5e5', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', color: '#888', fontSize: '14px' },
+  monoCell: { fontSize: '12px', fontFamily: 'monospace', color: '#7A9BB8', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', border: '0.5px solid rgba(255,255,255,0.10)' },
+  smallCell: { fontSize: '12px', color: '#7A9BB8' },
+  editBtn: { background: 'none', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', color: '#7A9BB8', fontSize: '14px' },
   deleteBtn: { background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', padding: '4px', opacity: 0.3, transition: 'opacity 0.15s' },
-  contextMenu: { position: 'fixed' as const, background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '8px', zIndex: 9999, minWidth: '120px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' },
-  contextItem: { padding: '8px 14px', fontSize: '13px', color: '#111', cursor: 'pointer', borderBottom: '0.5px solid #f0f0ee' },
+  contextMenu: { position: 'fixed' as const, background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '8px', zIndex: 9999, minWidth: '120px', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' },
+  contextItem: { padding: '8px 14px', fontSize: '13px', color: '#DCE9F6', cursor: 'pointer', borderBottom: '0.5px solid rgba(255,255,255,0.05)' },
 }
 
 const ds: Record<string, React.CSSProperties> = {
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-  dialog: { background: '#fff', borderRadius: '16px', width: '720px', maxWidth: '95vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-  header: { background: '#0a1628', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
-  headerTitle: { color: '#fff', fontSize: '15px', fontWeight: '500' },
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
+  dialog: { background: '#0D1B2C', borderRadius: '16px', width: '720px', maxWidth: '95vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.10)' },
+  header: { background: '#060E1A', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  headerTitle: { color: '#DCE9F6', fontSize: '15px', fontWeight: '500' },
   closeBtn: { background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '22px', cursor: 'pointer', padding: '0 4px', lineHeight: 1 },
-  tabBar: { display: 'flex', gap: '0', borderBottom: '0.5px solid #e5e5e5', background: '#fafaf9' },
-  tab: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '10px 20px', border: 'none', background: 'transparent', color: '#888', cursor: 'pointer', borderBottom: '2px solid transparent', display: 'flex', alignItems: 'center', gap: '6px' },
-  tabActive: { color: '#1D9E75', borderBottom: '2px solid #1D9E75', background: '#fff', fontWeight: '500' },
-  tabBadge: { fontSize: '10px', background: '#1D9E75', color: '#fff', borderRadius: '20px', padding: '1px 6px', fontWeight: '500' },
+  tabBar: { display: 'flex', gap: '0', borderBottom: '1px solid rgba(255,255,255,0.075)', background: '#111F30' },
+  tab: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '10px 20px', border: 'none', background: 'transparent', color: '#7A9BB8', cursor: 'pointer', borderBottom: '2px solid transparent', display: 'flex', alignItems: 'center', gap: '6px' },
+  tabActive: { color: '#00D47E', borderBottom: '2px solid #00D47E', background: 'transparent', fontWeight: '500' },
+  tabBadge: { fontSize: '10px', background: '#00D47E', color: '#060E1A', borderRadius: '20px', padding: '1px 6px', fontWeight: '500' },
   body: { padding: '1.5rem', overflowY: 'auto', flex: 1 },
-  footer: { padding: '1rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', justifyContent: 'flex-end', gap: '8px', background: '#f5f5f3' },
+  footer: { padding: '1rem 1.5rem', borderTop: '1px solid rgba(255,255,255,0.075)', display: 'flex', justifyContent: 'flex-end', gap: '8px', background: '#111F30' },
   section: { marginBottom: '1.5rem' },
-  sectionTitle: { fontSize: '11px', fontWeight: '500', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '10px', paddingBottom: '6px', borderBottom: '0.5px solid #e5e5e5' },
+  sectionTitle: { fontSize: '11px', fontWeight: '500', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '10px', paddingBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.075)' },
   row2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' },
   row3: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' },
   field: { display: 'flex', flexDirection: 'column' as const, gap: '4px' },
-  lbl: { fontSize: '11px', fontWeight: '500', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.07em' },
-  input: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 10px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#fff', color: '#111', outline: 'none' },
-  select: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 10px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#fff', color: '#111', outline: 'none' },
-  textarea: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 10px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#fff', color: '#111', outline: 'none', resize: 'vertical' as const, minHeight: '60px' },
-  typeChip: { flex: 1, padding: '8px 6px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#f5f5f3', fontSize: '12px', cursor: 'pointer', textAlign: 'center' as const, color: '#888' },
-  typeChipActive: { border: '2px solid #1D9E75', background: '#E1F5EE', color: '#085041', fontWeight: '500' },
-  toggleRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#f5f5f3', borderRadius: '8px', border: '0.5px solid #e5e5e5' },
+  lbl: { fontSize: '11px', fontWeight: '500', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase' as const, letterSpacing: '0.07em' },
+  input: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 10px', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '8px', background: '#111F30', color: '#DCE9F6', outline: 'none' },
+  select: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 10px', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '8px', background: '#111F30', color: '#DCE9F6', outline: 'none' },
+  textarea: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 10px', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '8px', background: '#111F30', color: '#DCE9F6', outline: 'none', resize: 'vertical' as const, minHeight: '60px' },
+  typeChip: { flex: 1, padding: '8px 6px', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', fontSize: '12px', cursor: 'pointer', textAlign: 'center' as const, color: '#7A9BB8' },
+  typeChipActive: { border: '2px solid #00D47E', background: 'rgba(0,212,126,0.12)', color: '#00D47E', fontWeight: '500' },
+  toggleRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.075)' },
   toggle: { position: 'relative' as const, width: '36px', height: '20px', cursor: 'pointer', flexShrink: 0 },
   toggleSlider: { position: 'absolute' as const, inset: 0, borderRadius: '10px', transition: 'background 0.2s', display: 'block' },
-  accountRow: { display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#fff' },
-  accountRowPrimary: { border: '1.5px solid #1D9E75', background: '#f0fdf8' },
-  accountBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '4px 10px', border: '0.5px solid #e5e5e5', borderRadius: '6px', background: 'transparent', color: '#666', cursor: 'pointer', whiteSpace: 'nowrap' as const },
-  btnGhost: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 16px', borderRadius: '8px', border: '0.5px solid #e5e5e5', background: 'transparent', color: '#666', cursor: 'pointer' },
-  btnPrimary: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 18px', borderRadius: '8px', border: 'none', background: '#1D9E75', color: '#fff', cursor: 'pointer', fontWeight: '500' },
+  accountRow: { display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '8px', background: '#111F30' },
+  accountRowPrimary: { border: '1.5px solid #00D47E', background: 'rgba(0,212,126,0.06)' },
+  accountBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '4px 10px', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '6px', background: 'transparent', color: '#7A9BB8', cursor: 'pointer', whiteSpace: 'nowrap' as const },
+  btnGhost: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.10)', background: 'transparent', color: '#7A9BB8', cursor: 'pointer' },
+  btnPrimary: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 18px', borderRadius: '8px', border: 'none', background: '#00D47E', color: '#060E1A', cursor: 'pointer', fontWeight: '500' },
 }

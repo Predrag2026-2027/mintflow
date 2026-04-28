@@ -312,7 +312,7 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
           <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '4px' }}>
             <div style={{ fontSize: '12px', color: '#633806', fontWeight: '500' }}>
               🏦 Hal E-Bank — nalog za prenos (TKDIS format)
-              {selected.size > 0 && <span style={{ marginLeft: '8px', color: '#888', fontWeight: '400' }}>({selected.size} selektovano)</span>}
+              {selected.size > 0 && <span style={{ marginLeft: '8px', color: '#7A9BB8', fontWeight: '400' }}>({selected.size} selektovano)</span>}
             </div>
             {bankAccounts.length === 0 ? (
               <div style={{ fontSize: '11px', color: '#A32D2D' }}>⚠️ Nije pronađen RSD račun kompanije</div>
@@ -355,11 +355,11 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
 
         <div style={ps.tableWrap}>
           {loading ? (
-            <div style={{ padding: '40px', textAlign: 'center' as const, color: '#888' }}>Loading...</div>
+            <div style={{ padding: '40px', textAlign: 'center' as const, color: '#7A9BB8' }}>Loading...</div>
           ) : filtered.length === 0 ? (
             <div style={{ padding: '60px', textAlign: 'center' as const }}>
               <div style={{ fontSize: '28px', marginBottom: '10px' }}>✅</div>
-              <div style={{ fontSize: '14px', fontWeight: '500', color: '#111' }}>Nema neplaćenih faktura!</div>
+              <div style={{ fontSize: '14px', fontWeight: '500', color: '#DCE9F6' }}>Nema neplaćenih faktura!</div>
             </div>
           ) : (
             <table style={ps.table}>
@@ -405,10 +405,10 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
                         </span>
                       </td>
                       <td style={ps.td}>
-                        <span style={{ fontSize: '13px', fontWeight: '500', color: '#111' }}>{inv.partners?.name || '—'}</span>
+                        <span style={{ fontSize: '13px', fontWeight: '500', color: '#DCE9F6' }}>{inv.partners?.name || '—'}</span>
                       </td>
                       <td style={ps.td}>
-                        <span style={{ fontSize: '11px', fontFamily: 'monospace', background: '#f5f5f3', padding: '2px 6px', borderRadius: '4px', color: '#666' }}>
+                        <span style={{ fontSize: '11px', fontFamily: 'monospace', background: '#111F30', padding: '2px 6px', borderRadius: '4px', color: '#7A9BB8' }}>
                           {inv.invoice_number || '—'}
                         </span>
                       </td>
@@ -429,7 +429,7 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
                       <td style={ps.td}>
                         {partnerAccounts.length > 1 ? (
                           <select
-                            style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '4px 6px', border: `0.5px solid ${hasAccount ? '#e5e5e5' : '#E24B4A'}`, borderRadius: '6px', background: '#fff', color: '#111', maxWidth: '200px', cursor: 'pointer' }}
+                            style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '4px 6px', border: `0.5px solid ${hasAccount ? '#e5e5e5' : '#E24B4A'}`, borderRadius: '6px', background: '#0D1B2C', color: '#DCE9F6', maxWidth: '200px', cursor: 'pointer' }}
                             value={partnerAccounts.find(a => a.account_number === selectedAcc?.account_number)?.id || ''}
                             onChange={e => handleAccountSelect(inv.id, e.target.value, partnerId)}
                           >
@@ -444,11 +444,11 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
                           <div>
                             {hasAccount ? (
                               <div>
-                                <div style={{ fontSize: '11px', fontFamily: 'monospace', color: '#111' }}>
+                                <div style={{ fontSize: '11px', fontFamily: 'monospace', color: '#DCE9F6' }}>
                                   {selectedAcc?.account_number || inv.account_number}
                                 </div>
                                 {selectedAcc?.bank_name && (
-                                  <div style={{ fontSize: '10px', color: '#888', marginTop: '1px' }}>
+                                  <div style={{ fontSize: '10px', color: '#7A9BB8', marginTop: '1px' }}>
                                     {selectedAcc.bank_name.substring(0, 30)}
                                   </div>
                                 )}
@@ -461,7 +461,7 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
                       </td>
                       <td style={ps.td}>
                         {days === null ? (
-                          <span style={{ fontSize: '11px', color: '#aaa' }}>Bez roka</span>
+                          <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.30)' }}>Bez roka</span>
                         ) : days < 0 ? (
                           <span style={{ fontSize: '11px', fontWeight: '600', color: '#A32D2D', background: '#FCEBEB', padding: '2px 8px', borderRadius: '20px' }}>
                             {Math.abs(days)}d kasni
@@ -606,7 +606,7 @@ export default function Reports() {
                 <span style={{ ...s.kpiTrend, color: k.up ? '#0F6E56' : '#A32D2D', background: k.up ? '#E1F5EE' : '#FCEBEB' }}>
                   {k.up ? '↑' : '↓'} {k.trend}
                 </span>
-                <span style={{ fontSize: '11px', color: '#aaa' }}>{k.sub}</span>
+                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.30)' }}>{k.sub}</span>
               </div>
             </div>
           ))}
@@ -677,51 +677,51 @@ export default function Reports() {
 }
 
 const s: Record<string, React.CSSProperties> = {
-  root: { minHeight: '100vh', background: '#FAF9F7', fontFamily: "'Inter', system-ui, sans-serif" },
+  root: { minHeight: '100vh', background: '#060E1A', fontFamily: "'Inter', system-ui, sans-serif" },
   body: { padding: '24px 28px' },
   pageHeader: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.5rem' },
-  pageTitle: { fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '24px', fontWeight: '400', color: '#111', marginBottom: '4px' },
-  pageSub: { fontSize: '13px', color: '#888' },
-  filterSelect: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '0.5px solid #e5e5e5', borderRadius: '8px', padding: '8px 12px', outline: 'none', background: '#fff', color: '#111', cursor: 'pointer' },
+  pageTitle: { fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '24px', fontWeight: '400', color: '#DCE9F6', marginBottom: '4px' },
+  pageSub: { fontSize: '13px', color: '#7A9BB8' },
+  filterSelect: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '8px', padding: '8px 12px', outline: 'none', background: '#0D1B2C', color: '#DCE9F6', cursor: 'pointer' },
   kpiGrid: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '1.5rem' },
-  kpiCard: { background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '12px', padding: '1rem 1.25rem' },
-  kpiLabel: { fontSize: '11px', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '8px' },
-  kpiValue: { fontSize: '22px', fontWeight: '500', color: '#111' },
+  kpiCard: { background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '10px', padding: '1rem 1.25rem' },
+  kpiLabel: { fontSize: '11px', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '8px' },
+  kpiValue: { fontSize: '22px', fontWeight: '500', color: '#DCE9F6' },
   kpiTrend: { display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '500', padding: '3px 8px', borderRadius: '20px' },
-  alertBox: { background: '#FAEEDA', border: '0.5px solid #E5B96A', borderRadius: '10px', padding: '14px 16px', marginBottom: '1.5rem' },
+  alertBox: { background: 'rgba(245,166,35,0.10)', border: '1px solid rgba(245,166,35,0.3)', borderRadius: '10px', padding: '14px 16px', marginBottom: '1.5rem' },
   alertRow: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' },
-  alertDot: { width: '6px', height: '6px', borderRadius: '50%', background: '#BA7517', flexShrink: 0 },
+  alertDot: { width: '6px', height: '6px', borderRadius: '50%', background: '#F5A623', flexShrink: 0 },
   categorySection: { marginBottom: '2rem' },
   categoryHeader: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' },
   categoryBadge: { fontSize: '11px', fontWeight: '500', padding: '3px 10px', borderRadius: '20px', textTransform: 'uppercase' as const, letterSpacing: '0.08em' },
-  categoryCount: { fontSize: '12px', color: '#888' },
+  categoryCount: { fontSize: '12px', color: '#7A9BB8' },
   reportsGrid: { display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '10px' },
-  reportCard: { background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '12px', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' },
-  reportCardActive: { border: '2px solid #1D9E75', background: '#E1F5EE' },
+  reportCard: { background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '10px', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' },
+  reportCardActive: { border: '2px solid #00D47E', background: 'rgba(0,212,126,0.06)' },
   reportIcon: { width: '44px', height: '44px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   reportInfo: { flex: 1 },
-  reportTitle: { fontSize: '14px', fontWeight: '500', color: '#111', marginBottom: '3px' },
-  reportDesc: { fontSize: '12px', color: '#888', lineHeight: 1.4 },
+  reportTitle: { fontSize: '14px', fontWeight: '500', color: '#DCE9F6', marginBottom: '3px' },
+  reportDesc: { fontSize: '12px', color: '#7A9BB8', lineHeight: 1.4 },
   reportActions: { display: 'flex', gap: '6px', flexShrink: 0 },
   reportBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '11px', fontWeight: '500', padding: '5px 12px', borderRadius: '6px', border: '1px solid', cursor: 'pointer' },
 }
 
 const ps: Record<string, React.CSSProperties> = {
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', zIndex: 1000 },
-  panel: { background: '#fff', width: '90vw', maxWidth: '1200px', height: '100vh', display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 24px rgba(0,0,0,0.15)' },
-  header: { background: '#0a1628', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 },
-  headerTitle: { color: '#fff', fontSize: '15px', fontWeight: '500' },
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', zIndex: 1000 },
+  panel: { background: '#0D1B2C', width: '90vw', maxWidth: '1200px', height: '100vh', display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 40px rgba(0,0,0,0.5)' },
+  header: { background: '#060E1A', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 },
+  headerTitle: { color: '#DCE9F6', fontSize: '15px', fontWeight: '500' },
   headerSub: { color: 'rgba(255,255,255,0.45)', fontSize: '12px', marginTop: '3px' },
   closeBtn: { background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '24px', cursor: 'pointer', lineHeight: 1, padding: '0 4px' },
-  toolbar: { display: 'flex', gap: '10px', padding: '12px 16px', borderBottom: '0.5px solid #e5e5e5', flexShrink: 0, flexWrap: 'wrap' as const },
-  searchInput: { flex: 1, fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '0.5px solid #e5e5e5', borderRadius: '8px', padding: '7px 12px', outline: 'none', minWidth: '180px' },
-  sel: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '0.5px solid #e5e5e5', borderRadius: '8px', padding: '7px 10px', outline: 'none', background: '#fff', cursor: 'pointer' },
-  exportBar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: '#FAEEDA', borderBottom: '0.5px solid #E5B96A', flexShrink: 0, flexWrap: 'wrap' as const, gap: '8px' },
-  exportBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '12px', fontWeight: '500', padding: '7px 16px', borderRadius: '8px', border: 'none', background: '#633806', color: '#fff', cursor: 'pointer' },
+  toolbar: { display: 'flex', gap: '10px', padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.075)', flexShrink: 0, flexWrap: 'wrap' as const },
+  searchInput: { flex: 1, fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '8px', padding: '7px 12px', outline: 'none', minWidth: '180px', background: '#111F30', color: '#DCE9F6' },
+  sel: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '8px', padding: '7px 10px', outline: 'none', background: '#111F30', color: '#DCE9F6', cursor: 'pointer' },
+  exportBar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: 'rgba(245,166,35,0.10)', borderBottom: '1px solid rgba(245,166,35,0.3)', flexShrink: 0, flexWrap: 'wrap' as const, gap: '8px' },
+  exportBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '12px', fontWeight: '500', padding: '7px 16px', borderRadius: '8px', border: 'none', background: '#F5A623', color: '#060E1A', cursor: 'pointer' },
   tableWrap: { flex: 1, overflowY: 'auto' as const },
   table: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '13px' },
-  thead: { background: '#f5f5f3', position: 'sticky' as const, top: 0, zIndex: 10 },
-  th: { padding: '10px 14px', textAlign: 'left' as const, fontSize: '10px', fontWeight: '500', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.08em', borderBottom: '0.5px solid #e5e5e5', whiteSpace: 'nowrap' as const },
-  tr: { borderBottom: '0.5px solid #f0f0ee' },
+  thead: { background: '#111F30', position: 'sticky' as const, top: 0, zIndex: 10 },
+  th: { padding: '10px 14px', textAlign: 'left' as const, fontSize: '10px', fontWeight: '500', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', borderBottom: '1px solid rgba(255,255,255,0.075)', whiteSpace: 'nowrap' as const },
+  tr: { borderBottom: '0.5px solid rgba(255,255,255,0.05)' },
   td: { padding: '10px 14px', verticalAlign: 'middle' as const },
 }

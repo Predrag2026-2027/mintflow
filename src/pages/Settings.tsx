@@ -208,7 +208,7 @@ function CompanyProfilesTab({ canEdit }: { canEdit: boolean }) {
   const currencyColor = (cur: string) => {
     if (cur === 'RSD') return { bg: '#FAEEDA', color: '#633806' }
     if (cur === 'USD') return { bg: '#E6F1FB', color: '#0C447C' }
-    if (cur === 'EUR') return { bg: '#E1F5EE', color: '#085041' }
+    if (cur === 'EUR') return { bg: 'rgba(0,212,126,0.12)', color: '#00D47E' }
     return { bg: '#FBEAF0', color: '#72243E' }
   }
 
@@ -232,7 +232,7 @@ function CompanyProfilesTab({ canEdit }: { canEdit: boolean }) {
                 onClick={() => setSelectedCompany(c)}>
                 <div>
                   <div style={s.itemName}>{c.name}</div>
-                  <div style={{ fontSize: '10px', color: '#aaa', marginTop: '2px' }}>
+                  <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.30)', marginTop: '2px' }}>
                     {profiles[c.id] ? '✓ Profile set' : 'No profile yet'}
                   </div>
                 </div>
@@ -249,7 +249,7 @@ function CompanyProfilesTab({ canEdit }: { canEdit: boolean }) {
               <div style={s.colHeader}>
                 <div style={s.colTitle}>🏢 {selectedCompany.name} — Legal information</div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  {saved && <span style={{ fontSize: '12px', color: '#1D9E75', fontWeight: '500' }}>✓ Saved!</span>}
+                  {saved && <span style={{ fontSize: '12px', color: '#00D47E', fontWeight: '500' }}>✓ Saved!</span>}
                   {canEdit && (
                     <button style={s.addBtn} onClick={saveProfile} disabled={saving}>
                       {saving ? 'Saving...' : 'Save changes'}
@@ -322,7 +322,7 @@ function CompanyProfilesTab({ canEdit }: { canEdit: boolean }) {
 
               {/* Existing accounts */}
               {companyBanks.length === 0 ? (
-                <div style={{ padding: '20px', textAlign: 'center' as const, color: '#aaa', fontSize: '13px' }}>
+                <div style={{ padding: '20px', textAlign: 'center' as const, color: 'rgba(255,255,255,0.30)', fontSize: '13px' }}>
                   No bank accounts yet. Add one below.
                 </div>
               ) : (
@@ -333,15 +333,15 @@ function CompanyProfilesTab({ canEdit }: { canEdit: boolean }) {
                       <div key={bank.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0', borderBottom: '0.5px solid #f0f0ee' }}>
                         <div style={{ flex: 1 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
-                            <span style={{ fontSize: '13px', fontWeight: '500', color: '#111' }}>{bank.bank_name}</span>
+                            <span style={{ fontSize: '13px', fontWeight: '500', color: '#DCE9F6' }}>{bank.bank_name}</span>
                             <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: cc.bg, color: cc.color }}>{bank.currency}</span>
                             {bank.is_primary && (
-                              <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: '#E1F5EE', color: '#085041' }}>★ Primary</span>
+                              <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: 'rgba(0,212,126,0.12)', color: '#00D47E' }}>★ Primary</span>
                             )}
                           </div>
-                          <div style={{ fontSize: '12px', color: '#666', fontFamily: 'monospace' }}>{bank.account_number}</div>
+                          <div style={{ fontSize: '12px', color: '#7A9BB8', fontFamily: 'monospace' }}>{bank.account_number}</div>
                           {(bank.swift || bank.iban) && (
-                            <div style={{ fontSize: '11px', color: '#aaa', marginTop: '2px' }}>
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.30)', marginTop: '2px' }}>
                               {bank.swift && `SWIFT: ${bank.swift}`}{bank.swift && bank.iban && ' · '}{bank.iban && `IBAN: ${bank.iban}`}
                             </div>
                           )}
@@ -366,7 +366,7 @@ function CompanyProfilesTab({ canEdit }: { canEdit: boolean }) {
               {/* Add new account */}
               {canEdit && (
                 <div style={{ padding: '14px 16px', borderTop: '0.5px solid #e5e5e5', background: '#fafaf9' }}>
-                  <div style={{ fontSize: '11px', fontWeight: '500', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '10px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '500', color: '#7A9BB8', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '10px' }}>
                     Add bank account
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px', gap: '8px', marginBottom: '8px' }}>
@@ -771,7 +771,7 @@ function DescriptionsTab({ canEdit }: { canEdit: boolean }) {
                 onClick={() => setSelectedSub(sub)}>
                 <div>
                   <div style={s.itemName}>{sub.name}</div>
-                  <div style={{ fontSize: '10px', color: '#aaa' }}>{sub.departments?.name}</div>
+                  <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.30)' }}>{sub.departments?.name}</div>
                 </div>
               </div>
             ))}
@@ -823,34 +823,34 @@ function DescriptionsTab({ canEdit }: { canEdit: boolean }) {
 }
 
 const s: Record<string, React.CSSProperties> = {
-  root: { minHeight: '100vh', background: '#FAF9F7', fontFamily: "'Inter', system-ui, sans-serif" },
+  root: { minHeight: '100vh', background: '#060E1A', fontFamily: "'Inter', system-ui, sans-serif" },
   body: { padding: '24px 28px' },
   pageHeader: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.5rem' },
-  pageTitle: { fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '24px', fontWeight: '400', color: '#111', marginBottom: '4px' },
-  pageSub: { fontSize: '13px', color: '#888' },
-  tabBar: { display: 'flex', gap: 0, borderBottom: '0.5px solid #e5e5e5', marginBottom: '1.5rem', overflowX: 'auto' as const },
-  tab: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '10px 20px', border: 'none', background: 'transparent', color: '#888', cursor: 'pointer', borderBottom: '2px solid transparent', marginBottom: '-0.5px', whiteSpace: 'nowrap' as const },
-  tabActive: { color: '#111', borderBottomColor: '#1D9E75', fontWeight: '500' },
-  readOnlyBanner: { background: '#FAEEDA', border: '0.5px solid #E5B96A', borderRadius: '8px', padding: '8px 14px', fontSize: '12px', color: '#633806', marginBottom: '16px' },
+  pageTitle: { fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '24px', fontWeight: '400', color: '#DCE9F6', marginBottom: '4px' },
+  pageSub: { fontSize: '13px', color: '#7A9BB8' },
+  tabBar: { display: 'flex', gap: 0, borderBottom: '1px solid rgba(255,255,255,0.075)', marginBottom: '1.5rem', overflowX: 'auto' as const },
+  tab: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '10px 20px', border: 'none', background: 'transparent', color: '#7A9BB8', cursor: 'pointer', borderBottom: '2px solid transparent', marginBottom: '-0.5px', whiteSpace: 'nowrap' as const },
+  tabActive: { color: '#DCE9F6', borderBottomColor: '#00D47E', fontWeight: '500' },
+  readOnlyBanner: { background: 'rgba(245,166,35,0.10)', border: '1px solid rgba(245,166,35,0.3)', borderRadius: '8px', padding: '8px 14px', fontSize: '12px', color: '#F5A623', marginBottom: '16px' },
   twoCol: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start' },
-  colPanel: { background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '12px', overflow: 'hidden' },
-  colHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '0.5px solid #e5e5e5', background: '#f5f5f3' },
-  colTitle: { fontSize: '13px', fontWeight: '500', color: '#111' },
-  colCount: { fontSize: '11px', fontWeight: '500', padding: '2px 8px', borderRadius: '10px', background: '#E1F5EE', color: '#085041' },
+  colPanel: { background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '10px', overflow: 'hidden' },
+  colHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.075)', background: '#111F30' },
+  colTitle: { fontSize: '13px', fontWeight: '500', color: '#DCE9F6' },
+  colCount: { fontSize: '11px', fontWeight: '500', padding: '2px 8px', borderRadius: '10px', background: 'rgba(0,212,126,0.12)', color: '#00D47E' },
   itemList: { maxHeight: '420px', overflowY: 'auto' as const },
-  itemRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', borderBottom: '0.5px solid #f5f5f3', cursor: 'pointer' },
-  itemRowActive: { background: '#f0fdf8', borderLeft: '3px solid #1D9E75' },
-  itemName: { fontSize: '13px', color: '#111' },
+  itemRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', borderBottom: '0.5px solid rgba(255,255,255,0.05)', cursor: 'pointer' },
+  itemRowActive: { background: 'rgba(0,212,126,0.06)', borderLeft: '3px solid #00D47E' },
+  itemName: { fontSize: '13px', color: '#DCE9F6' },
   itemActions: { display: 'flex', gap: '4px', flexShrink: 0 },
   iconBtn: { background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', padding: '2px 4px', borderRadius: '4px', opacity: 0.6 },
-  saveBtn: { background: '#1D9E75', border: 'none', cursor: 'pointer', fontSize: '12px', padding: '2px 8px', borderRadius: '4px', color: '#fff' },
-  inlineInput: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '4px 8px', border: '1px solid #1D9E75', borderRadius: '6px', outline: 'none', flex: 1, color: '#111' },
-  addRow: { display: 'flex', gap: '6px', padding: '10px 12px', borderTop: '0.5px solid #e5e5e5', background: '#fafaf9' },
-  addInput: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '7px 10px', border: '0.5px solid #e5e5e5', borderRadius: '8px', outline: 'none', flex: 1, color: '#111', background: '#fff' },
-  addBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '7px 14px', border: 'none', borderRadius: '8px', background: '#1D9E75', color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' as const },
-  emptyHint: { padding: '2rem', textAlign: 'center' as const, color: '#aaa', fontSize: '13px' },
-  loading: { padding: '2rem', textAlign: 'center' as const, color: '#888', fontSize: '14px' },
+  saveBtn: { background: '#00D47E', border: 'none', cursor: 'pointer', fontSize: '12px', padding: '2px 8px', borderRadius: '4px', color: '#060E1A' },
+  inlineInput: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '4px 8px', border: '1px solid #00D47E', borderRadius: '6px', outline: 'none', flex: 1, color: '#DCE9F6', background: '#111F30' },
+  addRow: { display: 'flex', gap: '6px', padding: '10px 12px', borderTop: '1px solid rgba(255,255,255,0.075)', background: '#111F30' },
+  addInput: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '7px 10px', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '8px', outline: 'none', flex: 1, color: '#DCE9F6', background: '#0D1B2C' },
+  addBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '7px 14px', border: 'none', borderRadius: '8px', background: '#00D47E', color: '#060E1A', cursor: 'pointer', whiteSpace: 'nowrap' as const },
+  emptyHint: { padding: '2rem', textAlign: 'center' as const, color: 'rgba(255,255,255,0.30)', fontSize: '13px' },
+  loading: { padding: '2rem', textAlign: 'center' as const, color: '#7A9BB8', fontSize: '14px' },
   formField: { display: 'flex', flexDirection: 'column' as const, gap: '4px' },
-  formLabel: { fontSize: '10px', fontWeight: '500', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.07em' },
-  formInput: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '7px 10px', border: '0.5px solid #e5e5e5', borderRadius: '8px', outline: 'none', color: '#111', background: '#fff' },
+  formLabel: { fontSize: '10px', fontWeight: '500', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase' as const, letterSpacing: '0.07em' },
+  formInput: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '7px 10px', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '8px', outline: 'none', color: '#DCE9F6', background: '#111F30' },
 }

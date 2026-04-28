@@ -130,7 +130,7 @@ export default function CashFlow() {
 
   const cashFlowSections = [
     {
-      section: 'Operating Activities', color: '#0F6E56', bg: '#E1F5EE',
+      section: 'Operating Activities', color: '#00D47E', bg: 'rgba(0,212,126,0.12)',
       items: [
         { name: 'Revenue received from customers', amount: operatingIn },
         { name: 'Payments to suppliers (invoices + direct)', amount: -operatingOut },
@@ -139,7 +139,7 @@ export default function CashFlow() {
       ]
     },
     {
-      section: 'Pass-through Flows', color: '#0C447C', bg: '#E6F1FB',
+      section: 'Pass-through Flows', color: '#4EA8FF', bg: 'rgba(78,168,255,0.13)',
       items: [
         { name: 'Pass-through inflows (IN)', amount: ptIn },
         { name: 'Pass-through outflows (OUT)', amount: -ptOut },
@@ -150,9 +150,9 @@ export default function CashFlow() {
   const sectionTotal = (items: { amount: number }[]) => items.reduce((s, i) => s + i.amount, 0)
 
   const currencyColor = (cur: string) => {
-    if (cur === 'USD') return { bg: '#E6F1FB', color: '#0C447C' }
-    if (cur === 'RSD') return { bg: '#FAEEDA', color: '#633806' }
-    if (cur === 'EUR') return { bg: '#E1F5EE', color: '#085041' }
+    if (cur === 'USD') return { bg: 'rgba(78,168,255,0.13)', color: '#4EA8FF' }
+    if (cur === 'RSD') return { bg: 'rgba(245,166,35,0.13)', color: '#F5A623' }
+    if (cur === 'EUR') return { bg: 'rgba(0,212,126,0.12)', color: '#00D47E' }
     return { bg: '#FBEAF0', color: '#72243E' }
   }
 
@@ -198,12 +198,12 @@ export default function CashFlow() {
         <div style={s.summaryGrid}>
           <div style={s.summaryCard}>
             <div style={s.summaryLabel}>Total inflows</div>
-            <div style={{ ...s.summaryValue, color: '#0F6E56' }}>{loading ? '...' : fmtUSD(totalInflows)}</div>
+            <div style={{ ...s.summaryValue, color: '#00D47E' }}>{loading ? '...' : fmtUSD(totalInflows)}</div>
             <div style={s.summarySub}>Revenue + pass-through IN</div>
           </div>
           <div style={s.summaryCard}>
             <div style={s.summaryLabel}>Total outflows</div>
-            <div style={{ ...s.summaryValue, color: '#A32D2D' }}>{loading ? '...' : fmtUSD(totalOutflows)}</div>
+            <div style={{ ...s.summaryValue, color: '#FF5B5A' }}>{loading ? '...' : fmtUSD(totalOutflows)}</div>
             <div style={s.summarySub}>Expenses + invoices + pass-through OUT</div>
           </div>
           <div style={s.summaryCard}>
@@ -225,8 +225,8 @@ export default function CashFlow() {
         {!loading && transactions.length === 0 && passthroughs.length === 0 && (
           <div style={s.emptyState}>
             <div style={{ fontSize: '32px', marginBottom: '12px' }}>💸</div>
-            <div style={{ fontSize: '15px', fontWeight: '500', color: '#111', marginBottom: '6px' }}>No cash flow data for this period</div>
-            <div style={{ fontSize: '13px', color: '#888' }}>Post transactions to see real cash flow data here.</div>
+            <div style={{ fontSize: '15px', fontWeight: '500', color: '#DCE9F6', marginBottom: '6px' }}>No cash flow data for this period</div>
+            <div style={{ fontSize: '13px', color: '#7A9BB8' }}>Post transactions to see real cash flow data here.</div>
           </div>
         )}
 
@@ -236,7 +236,7 @@ export default function CashFlow() {
               <div style={s.sectionLabel}>Cash flow statement</div>
               <div style={s.tableWrap}>
                 {loading ? (
-                  <div style={{ padding: '40px', textAlign: 'center' as const, color: '#888', fontSize: '13px' }}>Loading...</div>
+                  <div style={{ padding: '40px', textAlign: 'center' as const, color: '#7A9BB8', fontSize: '13px' }}>Loading...</div>
                 ) : (
                   <table style={s.table}>
                     <thead>
@@ -304,14 +304,14 @@ export default function CashFlow() {
                               <td style={s.td}>{tx.partners?.name || '—'}</td>
                               <td style={s.td}>{tx.banks?.name || '—'}</td>
                               <td style={s.td}>
-                                <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '20px', background: tx.type === 'direct' ? (tx.tx_subtype === 'revenue' ? '#E1F5EE' : '#FCEBEB') : '#E6F1FB', color: tx.type === 'direct' ? (tx.tx_subtype === 'revenue' ? '#085041' : '#A32D2D') : '#0C447C' }}>
+                                <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '20px', background: tx.type === 'direct' ? (tx.tx_subtype === 'revenue' ? 'rgba(0,212,126,0.12)' : 'rgba(255,91,90,0.13)') : 'rgba(78,168,255,0.13)', color: tx.type === 'direct' ? (tx.tx_subtype === 'revenue' ? '#085041' : '#A32D2D') : '#0C447C' }}>
                                   {tx.type === 'direct' ? (tx.tx_subtype === 'revenue' ? '📥 Direct IN' : '📤 Direct OUT') : '💳 Invoice payment'}
                                 </span>
                               </td>
                               <td style={{ ...s.td, textAlign: 'right' as const, color: isIn ? '#0F6E56' : '#A32D2D', fontWeight: '500' }}>
                                 {isIn ? '+' : '-'}{fmtAmount(tx.amount || 0, tx.currency || 'USD')}
                               </td>
-                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#888' }}>
+                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#7A9BB8' }}>
                                 {fmtUSD(tx.amount_usd || 0)}
                               </td>
                             </tr>
@@ -319,7 +319,7 @@ export default function CashFlow() {
                         })}
                         {transactions.length > 15 && (
                           <tr style={s.dataRow}>
-                            <td colSpan={6} style={{ ...s.td, textAlign: 'center' as const, color: '#aaa', fontStyle: 'italic' }}>
+                            <td colSpan={6} style={{ ...s.td, textAlign: 'center' as const, color: 'rgba(255,255,255,0.30)', fontStyle: 'italic' }}>
                               +{transactions.length - 15} more — go to Transactions tab to see all
                             </td>
                           </tr>
@@ -336,7 +336,7 @@ export default function CashFlow() {
               <div style={s.sectionLabel}>Bank accounts</div>
               <div style={s.accountsWrap}>
                 {filteredBanks.length === 0 ? (
-                  <div style={{ padding: '20px', textAlign: 'center' as const, color: '#aaa', fontSize: '13px', background: '#fff', borderRadius: '10px', border: '0.5px solid #e5e5e5' }}>
+                  <div style={{ padding: '20px', textAlign: 'center' as const, color: 'rgba(255,255,255,0.30)', fontSize: '13px', background: '#0D1B2C', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.075)' }}>
                     No bank accounts found.
                   </div>
                 ) : filteredBanks.map(bank => {
@@ -355,18 +355,18 @@ export default function CashFlow() {
                       <div style={s.accountBalances}>
                         <div>
                           <div style={s.balLabel}>Inflows</div>
-                          <div style={{ ...s.balValue, color: '#0F6E56' }}>{fmtUSD(flow.income)}</div>
+                          <div style={{ ...s.balValue, color: '#00D47E' }}>{fmtUSD(flow.income)}</div>
                         </div>
-                        <div style={{ fontSize: '14px', color: '#aaa', alignSelf: 'flex-end', paddingBottom: '2px' }}>→</div>
+                        <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.30)', alignSelf: 'flex-end', paddingBottom: '2px' }}>→</div>
                         <div>
                           <div style={s.balLabel}>Outflows</div>
-                          <div style={{ ...s.balValue, color: '#A32D2D' }}>{fmtUSD(flow.expense)}</div>
+                          <div style={{ ...s.balValue, color: '#FF5B5A' }}>{fmtUSD(flow.expense)}</div>
                         </div>
-                        <div style={{ ...s.diffBadge, background: flow.net >= 0 ? '#E1F5EE' : '#FCEBEB', color: flow.net >= 0 ? '#085041' : '#A32D2D' }}>
+                        <div style={{ ...s.diffBadge, background: flow.net >= 0 ? 'rgba(0,212,126,0.12)' : 'rgba(255,91,90,0.13)', color: flow.net >= 0 ? '#085041' : '#A32D2D' }}>
                           {fmtUSDSigned(flow.net)}
                         </div>
                       </div>
-                      <div style={{ fontSize: '11px', color: '#aaa', marginTop: '6px' }}>
+                      <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.30)', marginTop: '6px' }}>
                         {flow.txCount} transaction{flow.txCount !== 1 ? 's' : ''} in period
                       </div>
                     </div>
@@ -400,7 +400,7 @@ export default function CashFlow() {
                               {pt.direction === 'in' ? '+' : '-'}{fmtUSD(pt.amount_usd || 0)}
                             </td>
                             <td style={s.td}>
-                              <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '20px', background: pt.status === 'balanced' ? '#E1F5EE' : pt.status === 'paired' ? '#FAEEDA' : '#FCEBEB', color: pt.status === 'balanced' ? '#085041' : pt.status === 'paired' ? '#633806' : '#A32D2D' }}>
+                              <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '20px', background: pt.status === 'balanced' ? 'rgba(0,212,126,0.12)' : pt.status === 'paired' ? 'rgba(245,166,35,0.13)' : 'rgba(255,91,90,0.13)', color: pt.status === 'balanced' ? '#085041' : pt.status === 'paired' ? '#633806' : '#A32D2D' }}>
                                 {pt.status}
                               </span>
                             </td>
@@ -420,39 +420,39 @@ export default function CashFlow() {
 }
 
 const s: Record<string, React.CSSProperties> = {
-  root: { minHeight: '100vh', background: '#FAF9F7', fontFamily: "'Inter', system-ui, sans-serif" },
+  root: { minHeight: '100vh', background: '#060E1A', fontFamily: "'Inter', system-ui, sans-serif" },
   body: { padding: '24px 28px' },
   pageHeader: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.5rem' },
-  pageTitle: { fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '24px', fontWeight: '400', color: '#111', marginBottom: '4px' },
-  pageSub: { fontSize: '13px', color: '#888' },
-  filterSelect: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '0.5px solid #e5e5e5', borderRadius: '8px', padding: '8px 12px', outline: 'none', background: '#fff', color: '#111', cursor: 'pointer' },
+  pageTitle: { fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '24px', fontWeight: '400', color: '#DCE9F6', marginBottom: '4px' },
+  pageSub: { fontSize: '13px', color: '#7A9BB8' },
+  filterSelect: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '8px', padding: '8px 12px', outline: 'none', background: '#0D1B2C', color: '#DCE9F6', cursor: 'pointer' },
   summaryGrid: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '1.5rem' },
-  summaryCard: { background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '12px', padding: '1rem 1.25rem' },
-  summaryLabel: { fontSize: '11px', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '8px' },
+  summaryCard: { background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '10px', padding: '1rem 1.25rem' },
+  summaryLabel: { fontSize: '11px', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '8px' },
   summaryValue: { fontSize: '22px', fontWeight: '500' },
-  summarySub: { fontSize: '11px', color: '#888', marginTop: '4px' },
-  emptyState: { background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '12px', padding: '60px', textAlign: 'center' as const },
+  summarySub: { fontSize: '11px', color: '#7A9BB8', marginTop: '4px' },
+  emptyState: { background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '10px', padding: '60px', textAlign: 'center' as const },
   contentGrid: { display: 'grid', gridTemplateColumns: '1fr 320px', gap: '16px' },
-  sectionLabel: { fontSize: '11px', fontWeight: '500', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.1em', marginBottom: '10px' },
-  tableWrap: { background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '12px', overflow: 'hidden' },
+  sectionLabel: { fontSize: '11px', fontWeight: '500', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase' as const, letterSpacing: '0.1em', marginBottom: '10px' },
+  tableWrap: { background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '10px', overflow: 'hidden' },
   table: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '13px' },
-  theadRow: { background: '#0a1628' },
-  th: { padding: '10px 16px', textAlign: 'left' as const, fontSize: '10px', fontWeight: '500', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' as const, letterSpacing: '0.1em' },
+  theadRow: { background: '#060E1A' },
+  th: { padding: '10px 16px', textAlign: 'left' as const, fontSize: '10px', fontWeight: '500', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase' as const, letterSpacing: '0.1em' },
   catCell: { padding: '8px 16px', fontSize: '11px', fontWeight: '500', letterSpacing: '0.1em' },
-  dataRow: { borderBottom: '0.5px solid #f0f0ee' },
-  td: { padding: '9px 16px', color: '#333', fontSize: '13px' },
-  subTotalRow: { background: '#f5f5f3', borderTop: '0.5px solid #e5e5e5' },
-  subTotalCell: { padding: '8px 16px', fontSize: '12px', fontWeight: '500', color: '#666' },
-  netRow: { background: '#0a1628' },
-  netCell: { padding: '14px 16px', fontSize: '14px', fontWeight: '500', color: '#fff' },
+  dataRow: { borderBottom: '0.5px solid rgba(255,255,255,0.05)' },
+  td: { padding: '9px 16px', color: '#DCE9F6', fontSize: '13px' },
+  subTotalRow: { background: '#111F30', borderTop: '0.5px solid rgba(255,255,255,0.075)' },
+  subTotalCell: { padding: '8px 16px', fontSize: '12px', fontWeight: '500', color: '#7A9BB8' },
+  netRow: { background: '#060E1A' },
+  netCell: { padding: '14px 16px', fontSize: '14px', fontWeight: '500', color: '#DCE9F6' },
   accountsWrap: { display: 'flex', flexDirection: 'column' as const, gap: '8px' },
-  accountCard: { background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '10px', padding: '12px 14px' },
+  accountCard: { background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '10px', padding: '12px 14px' },
   accountHeader: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '10px' },
-  accountName: { fontSize: '13px', fontWeight: '500', color: '#111' },
-  accountCompany: { fontSize: '11px', color: '#888', marginTop: '2px' },
+  accountName: { fontSize: '13px', fontWeight: '500', color: '#DCE9F6' },
+  accountCompany: { fontSize: '11px', color: '#7A9BB8', marginTop: '2px' },
   currBadge: { fontSize: '10px', fontWeight: '500', padding: '2px 8px', borderRadius: '20px' },
   accountBalances: { display: 'flex', alignItems: 'center', gap: '10px' },
-  balLabel: { fontSize: '10px', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.06em', marginBottom: '3px' },
-  balValue: { fontSize: '13px', fontWeight: '500', color: '#111' },
+  balLabel: { fontSize: '10px', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase' as const, letterSpacing: '0.06em', marginBottom: '3px' },
+  balValue: { fontSize: '13px', fontWeight: '500', color: '#DCE9F6' },
   diffBadge: { fontSize: '11px', fontWeight: '500', padding: '3px 8px', borderRadius: '20px', marginLeft: 'auto' },
 }

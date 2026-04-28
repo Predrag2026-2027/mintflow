@@ -57,26 +57,26 @@ export default function MetricCard({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        background: '#fff',
-        borderRadius: '12px',
+        background: '#0D1B2C',
+        borderRadius: '10px',
         padding: '1rem 1.1rem 0.9rem',
-        border: '1px solid #E8E7E2',
+        border: '1px solid rgba(255,255,255,0.075)',
         borderTop: `2.5px solid ${color}`,
-        boxShadow: hovered ? '0 6px 20px rgba(0,0,0,0.10)' : '0 1px 4px rgba(0,0,0,0.06)',
+        boxShadow: hovered ? '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.10)' : '0 4px 20px rgba(0,0,0,0.4)',
         transform: hovered ? 'translateY(-2px)' : 'none',
         transition: 'transform 0.15s ease, box-shadow 0.15s ease',
         cursor: 'default',
       }}
     >
       {/* Label */}
-      <div style={{ fontSize: '10px', fontWeight: '600', color: '#AAAAAA', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>
+      <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px' }}>
         {label}
       </div>
 
       {/* Number + Sparkline */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '32px', fontWeight: '400', lineHeight: 1, color: darkColor, marginBottom: '6px', letterSpacing: '-0.01em' }}>
+          <div style={{ fontFamily: "'DM Mono', 'Fira Mono', monospace", fontSize: '27px', fontWeight: '400', lineHeight: 1, color: '#DCE9F6', marginBottom: '6px', letterSpacing: '-0.02em' }}>
             {value}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -89,7 +89,7 @@ export default function MetricCard({
                 {trendUp ? '↑' : '↓'} {Math.abs(trendPct)}%
               </span>
             )}
-            <span style={{ fontSize: '10px', color: '#AAAAAA' }}>{sub}</span>
+            <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.30)' }}>{sub}</span>
           </div>
         </div>
         <Sparkline data={sparklineData} color={color}/>

@@ -35,8 +35,8 @@ const NAV_ITEMS: { key: Page; label: string }[] = [
 export function LogoMark({ size = 26 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 36 36" fill="none">
-      <polygon points="18,2 34,30 2,30" fill="none" stroke="#1D9E75" strokeWidth="1.8"/>
-      <circle cx="18" cy="2" r="2.5" fill="#1D9E75"/>
+      <polygon points="18,2 34,30 2,30" fill="none" stroke="#00D47E" strokeWidth="1.8"/>
+      <circle cx="18" cy="2" r="2.5" fill="#00D47E"/>
       <circle cx="34" cy="30" r="2" fill="#5DCAA5"/>
       <circle cx="2" cy="30" r="2" fill="#9FE1CB"/>
     </svg>
@@ -55,7 +55,7 @@ export default function Sidebar() {
       <div style={s.logoRow}>
         <LogoMark size={26} />
         <span style={s.logoText}>
-          Mint<span style={{ color: '#1D9E75' }}>flow</span>
+          Mint<span style={{ color: '#00D47E' }}>flow</span>
         </span>
       </div>
 
@@ -69,11 +69,11 @@ export default function Sidebar() {
               onClick={() => setPage(item.key)}
               style={{
                 ...s.navItem,
-                background: active ? 'rgba(255,255,255,0.09)' : 'transparent',
+                background: active ? 'rgba(0,212,126,0.10)' : 'transparent',
                 color: active ? '#fff' : 'rgba(255,255,255,0.44)',
               }}
             >
-              <span style={{ color: active ? '#1D9E75' : 'rgba(255,255,255,0.32)', display: 'flex' }}>
+              <span style={{ color: active ? '#00D47E' : 'rgba(255,255,255,0.30)', display: 'flex' }}>
                 {ICONS[item.key]}
               </span>
               <span style={{ fontSize: '13px', fontWeight: active ? '500' : '400' }}>
@@ -106,7 +106,7 @@ const s: Record<string, React.CSSProperties> = {
   sidebar: {
     width: '208px',
     flexShrink: 0,
-    background: '#111111',
+    background: '#0A1525',
     borderRight: '1px solid rgba(255,255,255,0.07)',
     display: 'flex',
     flexDirection: 'column',
@@ -158,13 +158,13 @@ const s: Record<string, React.CSSProperties> = {
     width: '30px',
     height: '30px',
     borderRadius: '50%',
-    background: '#1D9E75',
+    background: '#00D47E',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: '11px',
     fontWeight: '600',
-    color: '#fff',
+    color: '#060E1A',
     flexShrink: 0,
   },
   userEmail: {

@@ -146,25 +146,25 @@ export default function Transactions() {
   }
 
   const invoiceStatusColors: Record<string, { bg: string; color: string }> = {
-    unpaid: { bg: '#FCEBEB', color: '#A32D2D' },
-    partial: { bg: '#FAEEDA', color: '#633806' },
-    paid: { bg: '#E1F5EE', color: '#085041' },
-    overpaid: { bg: '#E6F1FB', color: '#0C447C' },
-    overdue: { bg: '#2D0A0A', color: '#FF8A8A' },
-    reconciled: { bg: '#f0f0ee', color: '#666' },
+    unpaid: { bg: 'rgba(255,91,90,0.13)', color: '#FF5B5A' },
+    partial: { bg: 'rgba(245,166,35,0.13)', color: '#F5A623' },
+    paid: { bg: 'rgba(0,212,126,0.12)', color: '#00D47E' },
+    overpaid: { bg: 'rgba(78,168,255,0.13)', color: '#4EA8FF' },
+    overdue: { bg: 'rgba(255,91,90,0.20)', color: '#FF5B5A' },
+    reconciled: { bg: 'rgba(255,255,255,0.06)', color: '#7A9BB8' },
   }
 
   const txTypeColors: Record<string, { bg: string; color: string }> = {
-    invoice_payment: { bg: '#E6F1FB', color: '#0C447C' },
-    direct: { bg: '#E1F5EE', color: '#085041' },
-    transfer: { bg: '#FAEEDA', color: '#633806' },
-    intercompany: { bg: '#FBEAF0', color: '#72243E' },
+    invoice_payment: { bg: 'rgba(78,168,255,0.13)', color: '#4EA8FF' },
+    direct: { bg: 'rgba(0,212,126,0.12)', color: '#00D47E' },
+    transfer: { bg: 'rgba(245,166,35,0.13)', color: '#F5A623' },
+    intercompany: { bg: 'rgba(212,83,126,0.13)', color: '#D4537E' },
   }
 
   const ptStatusColors: Record<string, { bg: string; color: string }> = {
-    unpaired: { bg: '#FCEBEB', color: '#A32D2D' },
-    paired: { bg: '#FAEEDA', color: '#633806' },
-    balanced: { bg: '#E1F5EE', color: '#085041' },
+    unpaired: { bg: 'rgba(255,91,90,0.13)', color: '#FF5B5A' },
+    paired: { bg: 'rgba(245,166,35,0.13)', color: '#F5A623' },
+    balanced: { bg: 'rgba(0,212,126,0.12)', color: '#00D47E' },
   }
 
   const filteredInvoices = invoices.filter(inv => {
@@ -349,15 +349,15 @@ export default function Transactions() {
         <div style={s.tableWrap}>
           {loading ? (
             <div style={s.emptyState}>
-              <div style={{ fontSize: '14px', color: '#888' }}>Loading...</div>
+              <div style={{ fontSize: '14px', color: '#7A9BB8' }}>Loading...</div>
             </div>
           ) : (
             activeTab === 'invoices' && (
               filteredInvoices.length === 0 ? (
                 <div style={s.emptyState}>
                   <div style={{ fontSize: '32px', marginBottom: '12px' }}>📄</div>
-                  <div style={{ fontSize: '15px', fontWeight: '500', color: '#111', marginBottom: '6px' }}>No invoices yet</div>
-                  <div style={{ fontSize: '13px', color: '#888', marginBottom: '20px' }}>Click "New invoice" to add your first P&L entry.</div>
+                  <div style={{ fontSize: '15px', fontWeight: '500', color: '#DCE9F6', marginBottom: '6px' }}>No invoices yet</div>
+                  <div style={{ fontSize: '13px', color: '#7A9BB8', marginBottom: '20px' }}>Click "New invoice" to add your first P&L entry.</div>
                   <button style={s.btnInvoice} onClick={() => setShowInvoiceDialog(true)}>📄 New invoice</button>
                 </div>
               ) : (
@@ -383,7 +383,7 @@ export default function Transactions() {
                         new Date(inv.due_date) < new Date() &&
                         ['unpaid', 'partial'].includes(inv.calculated_status)
                       return (
-                        <tr key={inv.id} style={{ ...s.tr, background: i % 2 === 0 ? '#fff' : '#fafaf9' }}>
+                        <tr key={inv.id} style={{ ...s.tr, background: i % 2 === 0 ? '#0D1B2C' : '#111F30' }}>
                           <td style={s.td}><span style={s.dateCell}>{inv.invoice_date}</span></td>
                           <td style={s.td}>
                             <span style={{ ...s.dateCell, color: isOverdue ? '#A32D2D' : '#666', fontWeight: isOverdue ? '600' : '400' }}>
@@ -437,8 +437,8 @@ export default function Transactions() {
             filteredTransactions.length === 0 ? (
               <div style={s.emptyState}>
                 <div style={{ fontSize: '32px', marginBottom: '12px' }}>💳</div>
-                <div style={{ fontSize: '15px', fontWeight: '500', color: '#111', marginBottom: '6px' }}>No transactions yet</div>
-                <div style={{ fontSize: '13px', color: '#888', marginBottom: '20px' }}>Click "New transaction" or use Bulk import.</div>
+                <div style={{ fontSize: '15px', fontWeight: '500', color: '#DCE9F6', marginBottom: '6px' }}>No transactions yet</div>
+                <div style={{ fontSize: '13px', color: '#7A9BB8', marginBottom: '20px' }}>Click "New transaction" or use Bulk import.</div>
                 <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
                   <button style={s.btnTransaction} onClick={() => setShowTransactionDialog(true)}>💳 New transaction</button>
                   <button style={s.btnBulk} onClick={() => setShowBulkImport(true)}>📥 Bulk import</button>
@@ -463,7 +463,7 @@ export default function Transactions() {
                 </thead>
                 <tbody>
                   {filteredTransactions.map((t, i) => (
-                    <tr key={t.id} style={{ ...s.tr, background: i % 2 === 0 ? '#fff' : '#fafaf9' }}>
+                    <tr key={t.id} style={{ ...s.tr, background: i % 2 === 0 ? '#0D1B2C' : '#111F30' }}>
                       <td style={s.td}><span style={s.dateCell}>{t.transaction_date}</span></td>
                       <td style={s.td}><span style={s.partnerCell}>{t.partners?.name || '—'}</span></td>
                       <td style={s.td}>
@@ -475,7 +475,7 @@ export default function Transactions() {
                         <span style={s.catCell}>
                           {t.pl_impact
                             ? (t.pl_category || t.revenue_stream || '—')
-                            : <span style={{ color: '#aaa', fontSize: '11px' }}>via invoice</span>}
+                            : <span style={{ color: 'rgba(255,255,255,0.30)', fontSize: '11px' }}>via invoice</span>}
                         </span>
                       </td>
                       <td style={s.td}><span style={s.descCell}>{t.note || '—'}</span></td>
@@ -490,7 +490,7 @@ export default function Transactions() {
                       <td style={s.td}>
                         {t.pl_impact
                           ? <span style={{ ...s.badge, background: '#E1F5EE', color: '#085041' }}>✓ P&L</span>
-                          : <span style={{ ...s.badge, background: '#f0f0ee', color: '#aaa' }}>Cash only</span>}
+                          : <span style={{ ...s.badge, background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.30)' }}>Cash only</span>}
                       </td>
                       <td style={s.td} onClick={e => e.stopPropagation()}>
                         <div style={{ position: 'relative' }}>
@@ -517,8 +517,8 @@ export default function Transactions() {
             filteredPassthroughs.length === 0 ? (
               <div style={s.emptyState}>
                 <div style={{ fontSize: '32px', marginBottom: '12px' }}>⚡</div>
-                <div style={{ fontSize: '15px', fontWeight: '500', color: '#111', marginBottom: '6px' }}>No pass-through entries</div>
-                <div style={{ fontSize: '13px', color: '#888', marginBottom: '20px' }}>Click "Pass-through" to add an IN or OUT entry.</div>
+                <div style={{ fontSize: '15px', fontWeight: '500', color: '#DCE9F6', marginBottom: '6px' }}>No pass-through entries</div>
+                <div style={{ fontSize: '13px', color: '#7A9BB8', marginBottom: '20px' }}>Click "Pass-through" to add an IN or OUT entry.</div>
                 <button style={s.btnPassthrough} onClick={() => setShowPassthroughDialog(true)}>⚡ Pass-through</button>
               </div>
             ) : (
@@ -540,7 +540,7 @@ export default function Transactions() {
                 </thead>
                 <tbody>
                   {filteredPassthroughs.map((p, i) => (
-                    <tr key={p.id} style={{ ...s.tr, background: i % 2 === 0 ? '#fff' : '#fafaf9' }}>
+                    <tr key={p.id} style={{ ...s.tr, background: i % 2 === 0 ? '#0D1B2C' : '#111F30' }}>
                       <td style={s.td}><span style={s.dateCell}>{p.transaction_date}</span></td>
                       <td style={s.td}><span style={s.dateCell}>{p.period_month}</span></td>
                       <td style={s.td}><span style={s.partnerCell}>{p.partners?.name || '—'}</span></td>
@@ -621,49 +621,49 @@ export default function Transactions() {
 }
 
 const s: Record<string, React.CSSProperties> = {
-  root: { minHeight: '100vh', background: '#FAF9F7', fontFamily: "'Inter', system-ui, sans-serif" },
+  root: { minHeight: '100vh', background: '#060E1A', fontFamily: "'Inter', system-ui, sans-serif" },
   body: { padding: '24px 28px' },
   pageHeader: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.5rem' },
-  pageTitle: { fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '24px', fontWeight: '400', color: '#111', marginBottom: '4px' },
-  pageSub: { fontSize: '13px', color: '#888' },
+  pageTitle: { fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '24px', fontWeight: '400', color: '#DCE9F6', marginBottom: '4px' },
+  pageSub: { fontSize: '13px', color: '#7A9BB8' },
   btnGroup: { display: 'flex', gap: '8px' },
-  btnInvoice: { background: '#1D9E75', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 16px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer' },
-  btnTransaction: { background: '#0C447C', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 16px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer' },
-  btnPassthrough: { background: 'transparent', color: '#633806', border: '0.5px solid #E5B96A', borderRadius: '8px', padding: '9px 16px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer' },
-  btnBulk: { background: 'transparent', color: '#0C447C', border: '0.5px solid #0C447C', borderRadius: '8px', padding: '9px 16px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer' },
+  btnInvoice: { background: '#00D47E', color: '#060E1A', border: 'none', borderRadius: '8px', padding: '9px 16px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer' },
+  btnTransaction: { background: '#185FA5', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 16px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer' },
+  btnPassthrough: { background: 'transparent', color: '#F5A623', border: '0.5px solid rgba(245,166,35,0.4)', borderRadius: '8px', padding: '9px 16px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer' },
+  btnBulk: { background: 'transparent', color: '#4EA8FF', border: '0.5px solid rgba(78,168,255,0.4)', borderRadius: '8px', padding: '9px 16px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer' },
   summaryRow: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '1.5rem' },
-  summaryCard: { background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '12px', padding: '14px 16px' },
-  summaryCardAlert: { border: '0.5px solid #F5A9A9', background: '#FFF5F5' },
-  summaryCardWarn: { border: '0.5px solid #E5B96A', background: '#FFFAF0' },
-  summaryLabel: { fontSize: '10px', fontWeight: '500', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '6px' },
-  summaryVal: { fontSize: '22px', fontWeight: '500', color: '#111', marginBottom: '4px' },
-  summarySub: { fontSize: '11px', color: '#aaa' },
-  tabBar: { display: 'flex', alignItems: 'center', borderBottom: '0.5px solid #e5e5e5', marginBottom: '1rem' },
-  tab: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '10px 18px', border: 'none', background: 'transparent', color: '#888', cursor: 'pointer', borderBottom: '2px solid transparent', marginBottom: '-0.5px', display: 'flex', alignItems: 'center', gap: '6px' },
-  tabActive: { color: '#111', borderBottomColor: '#1D9E75', fontWeight: '500' },
-  tabCount: { fontSize: '10px', fontWeight: '500', padding: '1px 6px', borderRadius: '10px', background: '#f0f0ee', color: '#888' },
-  tabCountActive: { background: '#E1F5EE', color: '#085041' },
+  summaryCard: { background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '10px', padding: '14px 16px' },
+  summaryCardAlert: { border: '1px solid rgba(255,91,90,0.3)', background: 'rgba(255,91,90,0.07)' },
+  summaryCardWarn: { border: '1px solid rgba(245,166,35,0.3)', background: 'rgba(245,166,35,0.07)' },
+  summaryLabel: { fontSize: '10px', fontWeight: '500', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '6px' },
+  summaryVal: { fontSize: '22px', fontWeight: '500', color: '#DCE9F6', marginBottom: '4px' },
+  summarySub: { fontSize: '11px', color: '#7A9BB8' },
+  tabBar: { display: 'flex', alignItems: 'center', borderBottom: '0.5px solid rgba(255,255,255,0.075)', marginBottom: '1rem' },
+  tab: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '10px 18px', border: 'none', background: 'transparent', color: '#7A9BB8', cursor: 'pointer', borderBottom: '2px solid transparent', marginBottom: '-0.5px', display: 'flex', alignItems: 'center', gap: '6px' },
+  tabActive: { color: '#DCE9F6', borderBottomColor: '#00D47E', fontWeight: '500' },
+  tabCount: { fontSize: '10px', fontWeight: '500', padding: '1px 6px', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.30)' },
+  tabCountActive: { background: 'rgba(0,212,126,0.12)', color: '#00D47E' },
   filterBar: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1rem', flexWrap: 'wrap' as const },
-  searchInput: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '0.5px solid #e5e5e5', borderRadius: '8px', padding: '8px 12px', outline: 'none', background: '#fff', color: '#111', flex: '1', minWidth: '200px' },
-  filterSelect: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '0.5px solid #e5e5e5', borderRadius: '8px', padding: '8px 12px', outline: 'none', background: '#fff', color: '#111', cursor: 'pointer' },
-  totalBadge: { fontSize: '13px', color: '#666', background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '8px', padding: '8px 12px', marginLeft: 'auto', whiteSpace: 'nowrap' as const },
-  tableWrap: { background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '12px', overflow: 'visible' },
+  searchInput: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '8px', padding: '8px 12px', outline: 'none', background: '#0D1B2C', color: '#DCE9F6', flex: '1', minWidth: '200px' },
+  filterSelect: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '8px', padding: '8px 12px', outline: 'none', background: '#0D1B2C', color: '#DCE9F6', cursor: 'pointer' },
+  totalBadge: { fontSize: '13px', color: '#7A9BB8', background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '8px', padding: '8px 12px', marginLeft: 'auto', whiteSpace: 'nowrap' as const },
+  tableWrap: { background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '10px', overflow: 'visible' },
   table: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '13px' },
-  thead: { background: '#f5f5f3' },
-  th: { padding: '10px 12px', textAlign: 'left' as const, fontSize: '10px', fontWeight: '500', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.08em', borderBottom: '0.5px solid #e5e5e5', whiteSpace: 'nowrap' as const },
-  tr: { borderBottom: '0.5px solid #f0f0ee' },
-  td: { padding: '10px 12px', verticalAlign: 'middle' as const, color: '#111' },
+  thead: { background: '#111F30' },
+  th: { padding: '10px 12px', textAlign: 'left' as const, fontSize: '10px', fontWeight: '500', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', borderBottom: '1px solid rgba(255,255,255,0.075)', whiteSpace: 'nowrap' as const },
+  tr: { borderBottom: '0.5px solid rgba(255,255,255,0.05)' },
+  td: { padding: '10px 12px', verticalAlign: 'middle' as const, color: '#DCE9F6' },
   emptyState: { padding: '3rem', textAlign: 'center' as const },
-  dateCell: { fontSize: '12px', color: '#666', whiteSpace: 'nowrap' as const },
-  partnerCell: { fontSize: '13px', fontWeight: '500', color: '#111' },
-  invNumCell: { fontSize: '11px', color: '#888', fontFamily: 'monospace', background: '#f5f5f3', padding: '2px 6px', borderRadius: '4px' },
-  catCell: { fontSize: '11px', color: '#666' },
-  descCell: { fontSize: '11px', color: '#888', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, display: 'block' },
-  compCell: { fontSize: '11px', color: '#888' },
-  amtCell: { fontSize: '13px', fontWeight: '500', color: '#111', whiteSpace: 'nowrap' as const },
-  usdCell: { fontSize: '13px', fontWeight: '500', color: '#1D9E75', whiteSpace: 'nowrap' as const },
+  dateCell: { fontSize: '12px', color: '#7A9BB8', whiteSpace: 'nowrap' as const },
+  partnerCell: { fontSize: '13px', fontWeight: '500', color: '#DCE9F6' },
+  invNumCell: { fontSize: '11px', color: '#7A9BB8', fontFamily: 'monospace', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px' },
+  catCell: { fontSize: '11px', color: '#7A9BB8' },
+  descCell: { fontSize: '11px', color: '#7A9BB8', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, display: 'block' },
+  compCell: { fontSize: '11px', color: '#7A9BB8' },
+  amtCell: { fontSize: '13px', fontWeight: '500', color: '#DCE9F6', whiteSpace: 'nowrap' as const },
+  usdCell: { fontSize: '13px', fontWeight: '500', color: '#00D47E', whiteSpace: 'nowrap' as const },
   badge: { fontSize: '10px', fontWeight: '500', padding: '2px 8px', borderRadius: '20px', textTransform: 'capitalize' as const, whiteSpace: 'nowrap' as const },
-  editBtn: { background: 'none', border: '0.5px solid #e5e5e5', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', color: '#888', fontSize: '14px' },
-  contextMenu: { position: 'fixed' as const, background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '8px', zIndex: 9999, minWidth: '140px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' },
-  contextItem: { padding: '8px 14px', fontSize: '13px', color: '#111', cursor: 'pointer', borderBottom: '0.5px solid #f0f0ee' },
+  editBtn: { background: 'none', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', color: '#7A9BB8', fontSize: '14px' },
+  contextMenu: { position: 'fixed' as const, background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '8px', zIndex: 9999, minWidth: '140px', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' },
+  contextItem: { padding: '8px 14px', fontSize: '13px', color: '#DCE9F6', cursor: 'pointer', borderBottom: '0.5px solid rgba(255,255,255,0.05)' },
 }
