@@ -15,7 +15,6 @@ const BRANDS = [
   'EngagementBoost', 'Upgram', 'SocialFollow', 'Aimfox',
 ]
 
-const PROCESSORS = ['stripe_uae', 'stripe_us', 'braintree', 'paypal', 'wire', 'other']
 const PROCESSOR_LABELS: Record<string, string> = {
   stripe_uae: 'Stripe UAE', stripe_us: 'Stripe US',
   braintree: 'Braintree', paypal: 'PayPal',
