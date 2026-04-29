@@ -7,7 +7,7 @@ type SettingsTab = 'companies' | 'pl' | 'departments' | 'descriptions' | 'users'
 
 const CHARGEBEE_SITES = [
   'kicksta', 'aimfox', 'flocks', 'nitreo', 'kenji', 'upleap',
-  'socialfollow', 'engagementboostapp', 'upgram', 'stimsocial', 'jump-gram',
+  'engagementboostapp', 'upgram', 'stimsocial',
 ]
 
 const PROCESSORS = [
