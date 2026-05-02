@@ -78,6 +78,8 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
   const [banks, setBanks] = useState<any[]>([])
   const [allBanks, setAllBanks] = useState<any[]>([])
   const [openInvoices, setOpenInvoices] = useState<any[]>([])
+  const [partners, setPartners] = useState<any[]>([])
+  const [partnerSearch, setPartnerSearch] = useState<Record<string, string>>({})
   const [plCategories, setPlCategories] = useState<any[]>([])
   const [plSubcategories, setPlSubcategories] = useState<any[]>([])
   const [departments, setDepartments] = useState<any[]>([])
@@ -92,12 +94,13 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
   useEffect(() => {
     const load = async () => {
       const [
-        { data: comp }, { data: bnk },
+        { data: comp }, { data: bnk }, { data: part },
         { data: plCat }, { data: plSub },
         { data: dept }, { data: deptSub }, { data: expDesc },
       ] = await Promise.all([
         supabase.from('companies').select('*').order('name'),
         supabase.from('banks').select('*').order('name'),
+        supabase.from('partners').select('*').order('name'),
         supabase.from('pl_categories').select('id,name,sort_order').order('sort_order'),
         supabase.from('pl_subcategories').select('id,name,category_id,sort_order').order('sort_order'),
         supabase.from('departments').select('id,name,sort_order').order('sort_order'),
@@ -106,6 +109,7 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
       ])
       if (comp) setCompanies(comp)
       if (bnk) setAllBanks(bnk)
+      if (part) setPartners(part)
       if (plCat) setPlCategories(plCat)
       if (plSub) setPlSubcategories(plSub)
       if (dept) setDepartments(dept)
@@ -335,9 +339,27 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                       <input type="date" style={s.cellInput} value={row.date}
                         onChange={e => { e.stopPropagation(); updateRow(row.id, { date: e.target.value }) }}
                         onClick={e => e.stopPropagation()} />
-                      <input style={s.cellInput} value={row.partner_name}
-                        onChange={e => { e.stopPropagation(); updateRow(row.id, { partner_name: e.target.value }) }}
-                        onClick={e => e.stopPropagation()} placeholder="Partner name" />
+                      <div style={{ position: 'relative' as const }} onClick={e => e.stopPropagation()}>
+                        <input style={s.cellInput} value={partnerSearch[row.id] ?? row.partner_name}
+                          onChange={e => {
+                            setPartnerSearch(prev => ({ ...prev, [row.id]: e.target.value }))
+                            updateRow(row.id, { partner_name: e.target.value })
+                          }}
+                          placeholder="Partner name" />
+                        {(partnerSearch[row.id] ?? '').length > 0 && !partners.find(p => p.name === row.partner_name) && (
+                          <div style={{ position: 'absolute' as const, top: '100%', left: 0, right: 0, background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '6px', zIndex: 100, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', maxHeight: '140px', overflowY: 'auto' as const }}>
+                            {partners.filter(p => p.name.toLowerCase().includes((partnerSearch[row.id] ?? '').toLowerCase())).slice(0, 6).map(p => (
+                              <div key={p.id} style={{ padding: '6px 10px', fontSize: '12px', cursor: 'pointer', borderBottom: '0.5px solid #f5f5f3' }}
+                                onMouseDown={e => { e.preventDefault(); updateRow(row.id, { partner_name: p.name }); setPartnerSearch(prev => ({ ...prev, [row.id]: p.name })) }}>
+                                {p.name}
+                              </div>
+                            ))}
+                            {partners.filter(p => p.name.toLowerCase().includes((partnerSearch[row.id] ?? '').toLowerCase())).length === 0 && (
+                              <div style={{ padding: '6px 10px', fontSize: '12px', color: '#aaa' }}>New partner: "{partnerSearch[row.id]}"</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                       <input style={s.cellInput} value={row.description}
                         onChange={e => { e.stopPropagation(); updateRow(row.id, { description: e.target.value }) }}
                         onClick={e => e.stopPropagation()} placeholder="Description" />
