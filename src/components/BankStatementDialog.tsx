@@ -318,7 +318,6 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                 const isExpanded = expandedRow === row.id
                 const hasAmount = parseFloat(row.debit) > 0 || parseFloat(row.credit) > 0
                 const isValid = row.date && hasAmount
-                const isExpense = parseFloat(row.debit) > 0
                 const plSubs = getPlSubs(row.pl_category_id)
                 const deptSubs = getDeptSubs(row.department_id)
                 const expDescs = getExpDescs(row.dept_subcategory_id)
