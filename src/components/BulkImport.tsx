@@ -60,6 +60,9 @@ interface ImportRow {
   override_rev_alloc: string
   override_aimfox_val: string
   override_sg_val: string
+  override_opex_type: string
+  override_opex_val: string
+  override_performance_val: string
   override_partner_name: string
   override_note: string
 }
@@ -244,11 +247,9 @@ function parseAmex(workbook: XLSX.WorkBook): ParsedRow[] {
   return rows
 }
 
-// ── Wio Bank CSV parser ──────────────────────────────────
 function parseWio(content: string): ParsedRow[] {
   const lines = content.split('\n').filter(l => l.trim())
   if (lines.length < 2) return []
-
   const parseCSVLine = (line: string): string[] => {
     const result: string[] = []
     let current = ''
@@ -261,17 +262,11 @@ function parseWio(content: string): ParsedRow[] {
     result.push(current.trim())
     return result
   }
-
   const rows: ParsedRow[] = []
-  // Cols: 0=Account name, 1=Account type, 2=Account IBAN, 3=Account number,
-  //       4=Card number, 5=Account currency, 6=Transaction type, 7=Date (DD/MM/YYYY),
-  //       8=Ref. number, 9=Description, 10=Amount, 11=Balance, 12=Original ref. number, 13=Notes
-
   lines.slice(1).forEach((line, index) => {
     if (!line.trim()) return
     const cols = parseCSVLine(line.replace(/\r/g, ''))
     if (cols.length < 11) return
-
     const currency = cols[5]?.trim() || 'AED'
     const txType = cols[6]?.trim() || ''
     const rawDate = cols[7]?.trim() || ''
@@ -279,40 +274,22 @@ function parseWio(content: string): ParsedRow[] {
     const description = cols[9]?.trim() || ''
     const rawAmount = parseFloat(cols[10]?.replace(/,/g, '') || '0') || 0
     const notes = cols[13]?.trim() || ''
-
     if (rawAmount === 0) return
-
-    // Skip currency exchange internal entries (they are internal conversions)
     if (txType === 'Currency exchange') return
-
-    // Date: DD/MM/YYYY → DD.MM.YYYY
     const dateParts = rawDate.split('/')
     const date = dateParts.length === 3 ? `${dateParts[0]}.${dateParts[1]}.${dateParts[2]}` : rawDate
-
-    // Positive = credit (money in), Negative = debit (money out)
     const debit = rawAmount < 0 ? Math.abs(rawAmount) : null
     const credit = rawAmount > 0 ? rawAmount : null
-
-    // Partner name: extract from description or notes
     let partnerName = description
     if (description.toLowerCase().startsWith('to ')) partnerName = description.slice(3)
     else if (description.toLowerCase().startsWith('from ')) partnerName = description.slice(5)
-
-    // Use notes as additional description context
     const fullDesc = notes && notes !== 'N/A' && notes !== description ? `${description} — ${notes}` : description
-
     rows.push({
-      id: `row_${index}`,
-      source_format: 'wio' as any,
-      date,
-      statement_number: refNum,
-      currency,
-      debit,
-      credit,
+      id: `row_${index}`, source_format: 'wio' as any,
+      date, statement_number: refNum, currency, debit, credit,
       partner_name: partnerName.slice(0, 80),
       description: fullDesc.slice(0, 200),
-      reference_number: refNum,
-      model: '',
+      reference_number: refNum, model: '',
       account_number: cols[3]?.trim() || '',
     })
   })
@@ -343,6 +320,8 @@ function makeImportRow(parsed: ParsedRow): ImportRow {
     override_expense_description: '', override_revenue_stream: '',
     override_rev_alloc: 'sg100',
     override_aimfox_val: '', override_sg_val: '',
+    override_opex_type: 'opex',
+    override_opex_val: '', override_performance_val: '',
     override_partner_name: parsed.partner_name, override_note: '',
   }
 }
@@ -441,7 +420,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
       } else {
         const text = await file.text()
         const format = detectFormat(text, file.name)
-        if (format === 'unknown') { setParseError('Unknown file format. Supported: Raiffeisen/Intesa TXT, Truist CSV, Bank of America CSV, Amex XLSX.'); return }
+        if (format === 'unknown') { setParseError('Unknown file format.'); return }
         setDetectedFormat(format)
         let parsed: ParsedRow[] = []
         if (format === 'raiffeisen') parsed = parseRaiffeisen(text)
@@ -467,11 +446,9 @@ export default function BulkImport({ onClose, onImported }: Props) {
     setAnalyzing(true)
     setAnalyzeError('')
     setProgress(0)
-
     const supabaseUrl = process.env.REACT_APP_SUPABASE_URL
     const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY
     const rateCache: Record<string, number> = {}
-
     const rowsWithRates = await Promise.all(rows.map(async (row) => {
       const { currency, date, debit, credit } = row.parsed
       if (currency === 'USD') return row
@@ -493,23 +470,16 @@ export default function BulkImport({ onClose, onImported }: Props) {
       const amountUsd = convertToUSD(amount, currency, rate)
       return { ...row, parsed: { ...row.parsed, amount_usd: amountUsd, exchange_rate: rate } }
     }))
-
     setRows(rowsWithRates)
-
     const partnerNames = partners.map(p => p.name).join(', ')
     const batchSize = 5
     const snapshot = [...rowsWithRates]
     const result: ImportRow[] = snapshot.map(r => ({ ...r }))
-
     for (let i = 0; i < snapshot.length; i += batchSize) {
       const batch = snapshot.slice(i, i + batchSize)
       const batchPayload = batch.map(r => ({
-        row_id: r.parsed.id,
-        date: r.parsed.date,
-        partner: r.parsed.partner_name,
-        description: r.parsed.description,
-        debit: r.parsed.debit,
-        credit: r.parsed.credit,
+        row_id: r.parsed.id, date: r.parsed.date, partner: r.parsed.partner_name,
+        description: r.parsed.description, debit: r.parsed.debit, credit: r.parsed.credit,
         reference: r.parsed.reference_number,
       }))
       try {
@@ -573,11 +543,9 @@ export default function BulkImport({ onClose, onImported }: Props) {
     let done = 0
     const localPartners = [...partners]
     const rateCache: Record<string, number> = {}
-
     const getAmountUsd = async (p: any, amount: number): Promise<{ amount_usd: number; exchange_rate: number | null }> => {
       if (p.currency === 'USD') return { amount_usd: amount, exchange_rate: 1 }
       if ((p as any).amount_usd) return { amount_usd: (p as any).amount_usd, exchange_rate: (p as any).exchange_rate }
-      // Konvertuj ako nije već konvertovano
       const parts = (p.date || '').split('.')
       const isoDate = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : p.date
       const cacheKey = `${p.currency}_${isoDate}`
@@ -598,7 +566,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
       const p = row.parsed
       const isExpense = (p.debit || 0) > 0
       const amount = isExpense ? (p.debit || 0) : (p.credit || 0)
-
       let partnerId: string | null = null
       const nameToMatch = row.override_partner_name || p.partner_name
       if (nameToMatch) {
@@ -609,45 +576,32 @@ export default function BulkImport({ onClose, onImported }: Props) {
           if (newP) { partnerId = newP.id; localPartners.push(newP) }
         }
       }
-
-      // ── Pass-through → postuj u passthrough tabelu ──
       if (row.override_tx_type === 'passthrough') {
         const { amount_usd, exchange_rate } = await getAmountUsd(p, amount)
         await supabase.from('passthrough').insert({
-          company_id: company,
-          bank_id: bank,
-          partner_id: partnerId,
-          transaction_date: formatDate(p.date),
-          direction: row.override_pt_direction,
-          period_month: row.override_pt_period || null,
-          currency: p.currency,
-          amount,
-          exchange_rate,
-          amount_usd,
-          note: row.override_note || p.description || null,
-          account_number: p.account_number || null,
-          model: p.model || null,
-          reference_number: p.reference_number || null,
-          status: 'unpaired',
+          company_id: company, bank_id: bank, partner_id: partnerId,
+          transaction_date: formatDate(p.date), direction: row.override_pt_direction,
+          period_month: row.override_pt_period || null, currency: p.currency, amount,
+          exchange_rate, amount_usd, note: row.override_note || p.description || null,
+          account_number: p.account_number || null, model: p.model || null,
+          reference_number: p.reference_number || null, status: 'unpaired',
         })
         done++
         setProgress(Math.round((done / accepted.length) * 100))
         continue
       }
-
-      // ── Direct / Invoice payment → postuj u transactions tabelu ──
       const isDirectWithPL = row.override_tx_type === 'direct'
       const aimfoxAmount = row.override_rev_alloc === 'byval' ? (parseFloat(row.override_aimfox_val) || null) : null
       const sgAmount = row.override_rev_alloc === 'byval' ? (parseFloat(row.override_sg_val) || null) : null
+      const opexAmount = row.override_opex_type === 'split' ? (parseFloat(row.override_opex_val) || null) : null
+      const perfAmount = row.override_opex_type === 'split' ? (parseFloat(row.override_performance_val) || null) : null
       const { amount_usd, exchange_rate } = await getAmountUsd(p, amount)
       const { data: newTx } = await supabase.from('transactions').insert({
         company_id: company, bank_id: bank, partner_id: partnerId,
         transaction_date: formatDate(p.date), statement_number: p.statement_number || null,
         type: row.override_tx_type, tx_subtype: row.override_tx_subtype,
         payment_method: row.override_payment_method || null,
-        currency: p.currency, amount,
-        exchange_rate,
-        amount_usd,
+        currency: p.currency, amount, exchange_rate, amount_usd,
         pl_impact: isDirectWithPL,
         pl_category: isDirectWithPL ? (row.override_pl_category_name || null) : null,
         pl_subcategory: isDirectWithPL ? (row.override_pl_subcategory_name || null) : null,
@@ -656,13 +610,13 @@ export default function BulkImport({ onClose, onImported }: Props) {
         expense_description: isDirectWithPL ? (row.override_expense_description || null) : null,
         revenue_stream: isDirectWithPL ? (row.override_revenue_stream || null) : null,
         rev_alloc_type: row.override_rev_alloc || 'sg100',
-        rev_alloc_aimfox: aimfoxAmount,
-        rev_alloc_sg: sgAmount,
+        rev_alloc_aimfox: aimfoxAmount, rev_alloc_sg: sgAmount,
+        opex_type: isDirectWithPL && row.override_tx_subtype === 'expense' ? (row.override_opex_type || 'opex') : null,
+        opex_amount: opexAmount, performance_amount: perfAmount,
         account_number: p.account_number || null, model: p.model || null,
         reference_number: p.reference_number || null,
         note: row.override_note || p.description || null, status: 'posted',
       }).select().single()
-
       if (row.override_tx_type === 'invoice_payment' && row.override_linked_invoice_id && newTx?.id) {
         await supabase.from('invoice_transaction_links').insert({
           invoice_id: row.override_linked_invoice_id, transaction_id: newTx.id,
@@ -671,7 +625,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
         const { data: invStatus } = await supabase.from('v_invoice_status').select('calculated_status').eq('id', row.override_linked_invoice_id).single()
         if (invStatus) await supabase.from('invoices').update({ status: invStatus.calculated_status }).eq('id', row.override_linked_invoice_id)
       }
-
       done++
       setProgress(Math.round((done / accepted.length) * 100))
     }
@@ -724,7 +677,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
         <div style={s.header}>
           <div>
             <div style={s.headerTitle}>{step === 'upload' ? '📥 Bulk import — bank statement' : `📋 Review & post — ${rows.length} rows`}</div>
-            <div style={s.headerSub}>{step === 'upload' ? 'Supports: Raiffeisen/Intesa · Truist · Bank of America · Amex' : `${accepted} accepted · ${rejected} rejected · ${pending} pending`}</div>
+            <div style={s.headerSub}>{step === 'upload' ? 'Supports: Raiffeisen/Intesa · Truist · Bank of America · Amex · Wio' : `${accepted} accepted · ${rejected} rejected · ${pending} pending`}</div>
           </div>
           <button style={s.closeBtn} onClick={onClose}>×</button>
         </div>
@@ -751,7 +704,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
                   </div>
                 </div>
               </div>
-
               <div style={s.section}>
                 <div style={s.sectionTitle}>Upload file</div>
                 <div style={s.dropZone} onDrop={handleDrop} onDragOver={e => e.preventDefault()} onClick={() => fileRef.current?.click()}>
@@ -778,7 +730,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
                 </div>
                 {parseError && <div style={s.errorMsg}>⚠️ {parseError}</div>}
               </div>
-
               {rows.length > 0 && (
                 <div style={s.section}>
                   <div style={s.sectionTitle}>Parsed preview</div>
@@ -803,7 +754,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
                   </div>
                 </div>
               )}
-
               {analyzing && (
                 <div style={s.analyzingBox}>
                   <div style={{ fontSize: '13px', color: '#085041', marginBottom: '8px' }}>🤖 AI analyzing {rows.length} rows...</div>
@@ -848,9 +798,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px', flexWrap: 'wrap' as const }}>
                             <span style={{ fontSize: '13px', fontWeight: '500', color: '#111' }}>{row.override_partner_name || p.partner_name || '—'}</span>
                             {conf && row.proposal && <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: conf.bg, color: conf.color }}>{row.proposal.confidence}</span>}
-                            <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: typeBadge.bg, color: typeBadge.color }}>
-                              {typeBadge.label}
-                            </span>
+                            <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: typeBadge.bg, color: typeBadge.color }}>{typeBadge.label}</span>
                             <span style={{ fontSize: '10px', color: '#aaa' }}>{FORMAT_LABELS[p.source_format]}</span>
                           </div>
                           <div style={{ fontSize: '11px', color: '#888' }}>{p.date} · {p.description?.slice(0, 65)}{(p.description?.length || 0) > 65 ? '...' : ''}</div>
@@ -905,7 +853,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
                             </div>
                           </div>
 
-                          {/* Pass-through fields */}
                           {row.override_tx_type === 'passthrough' && (
                             <>
                               <div style={s.editSectionTitle}>Pass-through details</div>
@@ -935,7 +882,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
                             </>
                           )}
 
-                          {/* Direct fields */}
                           {row.override_tx_type !== 'passthrough' && (
                             <div style={{ ...s.editGrid2, marginTop: '8px' }}>
                               <div style={s.editField}>
@@ -1002,6 +948,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                   </select>
                                 </div>
                               </div>
+
                               <div style={s.editSectionTitle}>Department</div>
                               <div style={s.editGrid2}>
                                 <div style={s.editField}>
@@ -1022,6 +969,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                   </select>
                                 </div>
                               </div>
+
                               <div style={{ marginTop: '8px' }}>
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>Expense description</label>
@@ -1035,6 +983,8 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                   )}
                                 </div>
                               </div>
+
+                              {/* ── Revenue stream allocation ── */}
                               <div style={s.editSectionTitle}>Revenue stream allocation</div>
                               <div style={s.allocGrid}>
                                 {[{ id: 'sg100', label: '100% Social Growth', sub: 'Full allocation' }, { id: 'af100', label: '100% Aimfox', sub: 'Full allocation' }, { id: 'shared', label: 'Shared 50/50', sub: 'Both streams' }, { id: 'byval', label: 'By value', sub: 'Custom split' }].map(a => (
@@ -1044,6 +994,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                   </div>
                                 ))}
                               </div>
+
                               {row.override_rev_alloc === 'byval' && (() => {
                                 const total = (p.debit || 0)
                                 const af = parseFloat(row.override_aimfox_val) || 0
@@ -1054,50 +1005,89 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                 return (
                                   <div style={{ marginTop: '10px', background: '#f5f5f3', borderRadius: '8px', padding: '12px', border: '0.5px solid #e5e5e5' }}>
                                     <div style={{ fontSize: '10px', color: '#888', fontWeight: '500', marginBottom: '8px', textTransform: 'uppercase' as const, letterSpacing: '0.07em' }}>
-                                      Split po vrednosti · ukupno: {total > 0 ? `${total.toLocaleString('sr-RS')} ${p.currency}` : '—'}
+                                      Split by value · total: {total > 0 ? `${total.toLocaleString()} ${p.currency}` : '—'}
                                     </div>
                                     <div style={s.editGrid2}>
                                       <div style={s.editField}>
                                         <label style={s.editLbl}>Aimfox ({p.currency})</label>
-                                        <input type="number" style={{ ...s.editInput, border: !splitOk && af > 0 ? '1.5px solid #E24B4A' : '0.5px solid #e5e5e5' }}
-                                          value={row.override_aimfox_val}
-                                          onChange={e => {
-                                            const val = e.target.value
-                                            const afNum = parseFloat(val) || 0
-                                            updateRow(p.id, {
-                                              override_aimfox_val: val,
-                                              override_sg_val: total > 0 && afNum >= 0 && afNum <= total ? (total - afNum).toFixed(2) : row.override_sg_val
-                                            })
-                                          }}
-                                          placeholder="0.00" min="0" max={String(total)} />
+                                        <input type="number" style={s.editInput} value={row.override_aimfox_val}
+                                          onChange={e => { const val = e.target.value; const afNum = parseFloat(val) || 0; updateRow(p.id, { override_aimfox_val: val, override_sg_val: total > 0 && afNum >= 0 && afNum <= total ? (total - afNum).toFixed(2) : row.override_sg_val }) }}
+                                          placeholder="0.00" />
                                         {row.override_aimfox_val && total > 0 && <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '2px' }}>{afPct}%</div>}
                                       </div>
                                       <div style={s.editField}>
                                         <label style={s.editLbl}>Social Growth ({p.currency})</label>
-                                        <input type="number" style={{ ...s.editInput, border: !splitOk && sg > 0 ? '1.5px solid #E24B4A' : '0.5px solid #e5e5e5' }}
-                                          value={row.override_sg_val}
-                                          onChange={e => {
-                                            const val = e.target.value
-                                            const sgNum = parseFloat(val) || 0
-                                            updateRow(p.id, {
-                                              override_sg_val: val,
-                                              override_aimfox_val: total > 0 && sgNum >= 0 && sgNum <= total ? (total - sgNum).toFixed(2) : row.override_aimfox_val
-                                            })
-                                          }}
-                                          placeholder="0.00" min="0" max={String(total)} />
+                                        <input type="number" style={s.editInput} value={row.override_sg_val}
+                                          onChange={e => { const val = e.target.value; const sgNum = parseFloat(val) || 0; updateRow(p.id, { override_sg_val: val, override_aimfox_val: total > 0 && sgNum >= 0 && sgNum <= total ? (total - sgNum).toFixed(2) : row.override_aimfox_val }) }}
+                                          placeholder="0.00" />
                                         {row.override_sg_val && total > 0 && <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '2px' }}>{sgPct}%</div>}
                                       </div>
                                     </div>
                                     {af > 0 && sg > 0 && (
                                       <div style={{ marginTop: '8px' }}>
                                         <div style={{ height: '5px', borderRadius: '3px', background: '#e5e5e5', overflow: 'hidden', display: 'flex' }}>
-                                          <div style={{ height: '100%', width: `${afPct}%`, background: '#0C447C', borderRadius: '3px 0 0 3px' }} />
-                                          <div style={{ height: '100%', width: `${sgPct}%`, background: '#1D9E75', borderRadius: '0 3px 3px 0' }} />
+                                          <div style={{ height: '100%', width: `${afPct}%`, background: '#0C447C' }} />
+                                          <div style={{ height: '100%', width: `${sgPct}%`, background: '#1D9E75' }} />
                                         </div>
-                                        {splitOk
-                                          ? <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '4px' }}>✓ Split ispravan</div>
-                                          : <div style={{ fontSize: '10px', color: '#A32D2D', marginTop: '4px' }}>⚠ Zbir ({(af + sg).toLocaleString('sr-RS')}) ≠ ukupno ({total.toLocaleString('sr-RS')})</div>
-                                        }
+                                        {splitOk ? <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '4px' }}>✓ Split ispravan</div> : <div style={{ fontSize: '10px', color: '#A32D2D', marginTop: '4px' }}>⚠ Zbir ≠ ukupno</div>}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })()}
+
+                              {/* ── OPEX vs Performance ── */}
+                              <div style={s.editSectionTitle}>Expense type — OPEX vs Performance</div>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginTop: '6px' }}>
+                                {[
+                                  { id: 'opex', label: '🏢 100% OPEX', sub: 'Fixed operational', color: '#185FA5', bg: '#E6F1FB' },
+                                  { id: 'performance', label: '🚀 100% Performance', sub: 'Revenue-driven', color: '#BA7517', bg: '#FAEEDA' },
+                                  { id: 'split', label: '⚖️ Split by value', sub: 'Custom allocation', color: '#555', bg: '#f0f0ee' },
+                                ].map(a => (
+                                  <div key={a.id}
+                                    style={{ ...s.allocBtn, ...(row.override_opex_type === a.id ? { border: `2px solid ${a.color}`, background: a.bg } : {}) }}
+                                    onClick={() => updateRow(p.id, { override_opex_type: a.id, override_opex_val: '', override_performance_val: '' })}>
+                                    <div style={{ fontSize: '11px', fontWeight: '600', color: row.override_opex_type === a.id ? a.color : '#111' }}>{a.label}</div>
+                                    <div style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>{a.sub}</div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {row.override_opex_type === 'split' && (() => {
+                                const total = (p.debit || 0)
+                                const op = parseFloat(row.override_opex_val) || 0
+                                const perf = parseFloat(row.override_performance_val) || 0
+                                const splitOk = total > 0 && Math.abs(op + perf - total) < 0.01
+                                const opPct = total > 0 ? (op / total * 100).toFixed(1) : '0'
+                                const perfPct = total > 0 ? (perf / total * 100).toFixed(1) : '0'
+                                return (
+                                  <div style={{ marginTop: '10px', background: '#f5f5f3', borderRadius: '8px', padding: '12px', border: '0.5px solid #e5e5e5' }}>
+                                    <div style={{ fontSize: '10px', color: '#888', fontWeight: '500', marginBottom: '8px', textTransform: 'uppercase' as const, letterSpacing: '0.07em' }}>
+                                      Split by value · total: {total > 0 ? `${total.toLocaleString()} ${p.currency}` : '—'}
+                                    </div>
+                                    <div style={s.editGrid2}>
+                                      <div style={s.editField}>
+                                        <label style={s.editLbl}>OPEX ({p.currency})</label>
+                                        <input type="number" style={s.editInput} value={row.override_opex_val}
+                                          onChange={e => { const val = e.target.value; const opNum = parseFloat(val) || 0; updateRow(p.id, { override_opex_val: val, override_performance_val: total > 0 && opNum >= 0 && opNum <= total ? (total - opNum).toFixed(2) : row.override_performance_val }) }}
+                                          placeholder="0.00" />
+                                        {row.override_opex_val && total > 0 && <div style={{ fontSize: '10px', color: '#185FA5', marginTop: '2px' }}>{opPct}%</div>}
+                                      </div>
+                                      <div style={s.editField}>
+                                        <label style={s.editLbl}>Performance ({p.currency})</label>
+                                        <input type="number" style={s.editInput} value={row.override_performance_val}
+                                          onChange={e => { const val = e.target.value; const perfNum = parseFloat(val) || 0; updateRow(p.id, { override_performance_val: val, override_opex_val: total > 0 && perfNum >= 0 && perfNum <= total ? (total - perfNum).toFixed(2) : row.override_opex_val }) }}
+                                          placeholder="0.00" />
+                                        {row.override_performance_val && total > 0 && <div style={{ fontSize: '10px', color: '#BA7517', marginTop: '2px' }}>{perfPct}%</div>}
+                                      </div>
+                                    </div>
+                                    {op > 0 && perf > 0 && (
+                                      <div style={{ marginTop: '8px' }}>
+                                        <div style={{ height: '5px', borderRadius: '3px', background: '#e5e5e5', overflow: 'hidden', display: 'flex' }}>
+                                          <div style={{ height: '100%', width: `${opPct}%`, background: '#185FA5' }} />
+                                          <div style={{ height: '100%', width: `${perfPct}%`, background: '#BA7517' }} />
+                                        </div>
+                                        {splitOk ? <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '4px' }}>✓ Split ispravan</div> : <div style={{ fontSize: '10px', color: '#A32D2D', marginTop: '4px' }}>⚠ Zbir ≠ ukupno</div>}
                                       </div>
                                     )}
                                   </div>
