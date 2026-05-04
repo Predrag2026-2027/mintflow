@@ -216,15 +216,28 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
     setNbsError('')
     setNbsApplied(false)
     try {
-      const supabaseUrl = process.env.REACT_APP_SUPABASE_URL
-      const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY
-      const resp = await fetch(`${supabaseUrl}/functions/v1/lookup-pib?pib=${pib}`, {
-        headers: { 'Authorization': `Bearer ${supabaseAnonKey}`, 'apikey': supabaseAnonKey || '' }
-      })
+      // corsproxy.io — besplatan CORS proxy, radi iz browsera
+      const nbsUrl = `https://webservices.nbs.rs/CRSWeb/api/v1/subjectSearch?pib=${pib}`
+      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(nbsUrl)}`
+      const resp = await fetch(proxyUrl)
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
       const data = await resp.json()
-      if (data.error) { setNbsError(data.error); return }
-      if (!data.found) { setNbsError('Subjekt nije pronađen za ovaj PIB'); return }
-      setNbsResult(data)
+      const subject = data?.subjectList?.[0]
+      if (!subject) {
+        setNbsError('Subjekt nije pronađen za ovaj PIB')
+        return
+      }
+      const street = subject.address?.street || ''
+      const num = subject.address?.streetNumber || ''
+      setNbsResult({
+        found: true, source: 'NBS',
+        name: subject.subjectName || '',
+        tax_id: pib,
+        registration_number: subject.registrationNumber || '',
+        address: [street, num].filter(Boolean).join(' '),
+        city: subject.address?.city || '',
+        country: 'Serbia',
+      })
     } catch (err: any) {
       setNbsError('Greška pri pretrazi — pokušaj ponovo')
     }
