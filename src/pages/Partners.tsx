@@ -216,26 +216,34 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
     setNbsError('')
     setNbsApplied(false)
     try {
-      // corsproxy.io — besplatan CORS proxy, radi iz browsera
-      const nbsUrl = `https://webservices.nbs.rs/CRSWeb/api/v1/subjectSearch?pib=${pib}`
-      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(nbsUrl)}`
-      const resp = await fetch(proxyUrl)
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const data = await resp.json()
-      const subject = data?.subjectList?.[0]
-      if (!subject) {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+          messages: [{
+            role: 'user',
+            content: `Pronađi podatke o srpskoj firmi sa PIB-om ${pib} na sajtu apr.gov.rs ili webservices.nbs.rs. Vrati SAMO JSON objekat bez ikakvog teksta pre ili posle, u formatu: {"name":"...","registration_number":"...","address":"...","city":"..."}. Ako firma nije pronađena, vrati: {"not_found":true}`
+          }]
+        })
+      })
+      const data = await response.json()
+      const textBlock = data.content?.find((b: any) => b.type === 'text')
+      const raw = textBlock?.text?.replace(/```json|```/g, '').trim() || ''
+      const parsed = JSON.parse(raw)
+      if (parsed.not_found) {
         setNbsError('Subjekt nije pronađen za ovaj PIB')
         return
       }
-      const street = subject.address?.street || ''
-      const num = subject.address?.streetNumber || ''
       setNbsResult({
-        found: true, source: 'NBS',
-        name: subject.subjectName || '',
+        found: true, source: 'APR/NBS',
+        name: parsed.name || '',
         tax_id: pib,
-        registration_number: subject.registrationNumber || '',
-        address: [street, num].filter(Boolean).join(' '),
-        city: subject.address?.city || '',
+        registration_number: parsed.registration_number || '',
+        address: parsed.address || '',
+        city: parsed.city || '',
         country: 'Serbia',
       })
     } catch (err: any) {
