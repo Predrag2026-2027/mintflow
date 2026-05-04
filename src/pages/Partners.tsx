@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 
 export default function Partners() {
-
   const [partners, setPartners] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState('all')
   const [showDialog, setShowDialog] = useState(false)
   const [editPartner, setEditPartner] = useState<any>(null)
+  const [showMenu, setShowMenu] = useState<string | null>(null)
 
   const fetchPartners = async () => {
     setLoading(true)
@@ -41,13 +41,12 @@ export default function Partners() {
     both: { bg: 'rgba(78,168,255,0.13)', color: '#4EA8FF' },
     company: { bg: 'rgba(255,255,255,0.06)', color: '#7A9BB8' },
   }
-
   const typeLabels: Record<string, string> = {
     vendor: 'Vendor', customer: 'Customer', both: 'Both', company: 'Company',
   }
 
   return (
-    <div style={s.root}>
+    <div style={s.root} onClick={() => setShowMenu(null)}>
       <div style={s.body}>
         <div style={s.pageHeader}>
           <div>
@@ -170,10 +169,10 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
   const [success, setSuccess] = useState(false)
   const [activeTab, setActiveTab] = useState<'info' | 'accounts'>('info')
 
-  // Partner fields
   const [name, setName] = useState(partner?.name || '')
   const [type, setType] = useState(partner?.type || 'vendor')
   const [taxId, setTaxId] = useState(partner?.tax_id || '')
+  const [registrationNumber, setRegistrationNumber] = useState(partner?.registration_number || '')
   const [address, setAddress] = useState(partner?.address || '')
   const [city, setCity] = useState(partner?.city || '')
   const [country, setCountry] = useState(partner?.country || '')
@@ -182,6 +181,12 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
   const [contactPhone, setContactPhone] = useState(partner?.contact_phone || '')
   const [note, setNote] = useState(partner?.note || '')
   const [isActive, setIsActive] = useState(partner?.is_active !== false)
+
+  // NBS lookup state
+  const [nbsLoading, setNbsLoading] = useState(false)
+  const [nbsResult, setNbsResult] = useState<any>(null)
+  const [nbsError, setNbsError] = useState('')
+  const [nbsApplied, setNbsApplied] = useState(false)
 
   // Bank accounts
   const [accounts, setAccounts] = useState<any[]>([])
@@ -195,23 +200,51 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
   const fetchAccounts = async () => {
     if (!partner?.id) return
     setLoadingAccounts(true)
-    const { data } = await supabase
-      .from('partner_accounts')
-      .select('*')
-      .eq('partner_id', partner.id)
-      .order('is_primary', { ascending: false })
+    const { data } = await supabase.from('partner_accounts').select('*').eq('partner_id', partner.id).order('is_primary', { ascending: false })
     if (data) setAccounts(data)
     setLoadingAccounts(false)
   }
 
-  useEffect(() => {
-    if (partner?.id) fetchAccounts()
-  }, [partner?.id]) // eslint-disable-line
+  useEffect(() => { if (partner?.id) fetchAccounts() }, [partner?.id]) // eslint-disable-line
+
+  // Reset NBS result when taxId changes
+  useEffect(() => { setNbsResult(null); setNbsError(''); setNbsApplied(false) }, [taxId])
+
+  const lookupNBS = async () => {
+    const pib = taxId.trim()
+    if (!/^\d{9}$/.test(pib)) { setNbsError('PIB mora biti tačno 9 cifara'); return }
+    setNbsLoading(true)
+    setNbsResult(null)
+    setNbsError('')
+    setNbsApplied(false)
+    try {
+      const supabaseUrl = process.env.REACT_APP_SUPABASE_URL
+      const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY
+      const resp = await fetch(`${supabaseUrl}/functions/v1/lookup-pib?pib=${pib}`, {
+        headers: { 'Authorization': `Bearer ${supabaseAnonKey}`, 'apikey': supabaseAnonKey || '' }
+      })
+      const data = await resp.json()
+      if (data.error) { setNbsError(data.error); return }
+      if (!data.found) { setNbsError('Subjekt nije pronađen za ovaj PIB'); return }
+      setNbsResult(data)
+    } catch (err: any) {
+      setNbsError('Greška pri pretrazi — pokušaj ponovo')
+    }
+    setNbsLoading(false)
+  }
+
+  const applyNBSResult = () => {
+    if (!nbsResult) return
+    if (nbsResult.name) setName(nbsResult.name)
+    if (nbsResult.address) setAddress(nbsResult.address)
+    if (nbsResult.city) setCity(nbsResult.city)
+    if (nbsResult.country) setCountry(nbsResult.country)
+    if (nbsResult.registration_number) setRegistrationNumber(nbsResult.registration_number)
+    setNbsApplied(true)
+  }
 
   const setPrimary = async (accountId: string) => {
-    // Ukloni primary sa svih
     await supabase.from('partner_accounts').update({ is_primary: false }).eq('partner_id', partner.id)
-    // Postavi novi primary
     await supabase.from('partner_accounts').update({ is_primary: true }).eq('id', accountId)
     fetchAccounts()
   }
@@ -227,17 +260,11 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
     setAddingAccount(true)
     const isPrimary = accounts.length === 0
     await supabase.from('partner_accounts').insert({
-      partner_id: partner.id,
-      account_number: newAccNum.trim(),
-      bank_name: newBankName.trim() || null,
-      currency: newCurrency,
-      model: newModel.trim() || null,
-      is_primary: isPrimary,
+      partner_id: partner.id, account_number: newAccNum.trim(),
+      bank_name: newBankName.trim() || null, currency: newCurrency,
+      model: newModel.trim() || null, is_primary: isPrimary,
     })
-    setNewAccNum('')
-    setNewBankName('')
-    setNewModel('')
-    setNewCurrency('RSD')
+    setNewAccNum(''); setNewBankName(''); setNewModel(''); setNewCurrency('RSD')
     fetchAccounts()
     setAddingAccount(false)
   }
@@ -247,11 +274,11 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
     setSaving(true)
     const payload = {
       name: name.trim(), type,
-      tax_id: taxId || null, address: address || null,
-      city: city || null, country: country || null,
+      tax_id: taxId || null,
+      registration_number: registrationNumber || null,
+      address: address || null, city: city || null, country: country || null,
       contact_name: contactName || null, contact_email: contactEmail || null,
-      contact_phone: contactPhone || null, note: note || null,
-      is_active: isActive,
+      contact_phone: contactPhone || null, note: note || null, is_active: isActive,
     }
     if (partner?.id) {
       await supabase.from('partners').update(payload).eq('id', partner.id)
@@ -262,6 +289,8 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
     setTimeout(() => { setSuccess(false); onSaved() }, 1200)
     setSaving(false)
   }
+
+  const canLookup = /^\d{9}$/.test(taxId.trim())
 
   if (success) return (
     <div style={ds.overlay}>
@@ -284,7 +313,6 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
           <button style={ds.closeBtn} onClick={onClose}>×</button>
         </div>
 
-        {/* Tabs — samo za edit mode */}
         {partner?.id && (
           <div style={ds.tabBar}>
             <button style={{ ...ds.tab, ...(activeTab === 'info' ? ds.tabActive : {}) }} onClick={() => setActiveTab('info')}>
@@ -298,12 +326,92 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
         )}
 
         <div style={ds.body}>
-
-          {/* ── TAB: Basic info ── */}
           {activeTab === 'info' && (
             <>
               <div style={ds.section}>
                 <div style={ds.sectionTitle}>Basic info</div>
+
+                {/* PIB lookup — full width on top */}
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={ds.lbl}>PIB lookup — Narodna banka Srbije</label>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                    <input
+                      style={{ ...ds.input, flex: 1, fontFamily: 'monospace', letterSpacing: '0.08em' }}
+                      value={taxId}
+                      onChange={e => setTaxId(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                      placeholder="Unesite PIB (9 cifara)..."
+                      maxLength={9}
+                    />
+                    <button
+                      style={{
+                        fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500',
+                        padding: '8px 16px', borderRadius: '8px', border: 'none', cursor: canLookup ? 'pointer' : 'not-allowed',
+                        background: canLookup ? '#00D47E' : 'rgba(255,255,255,0.08)',
+                        color: canLookup ? '#060E1A' : '#7A9BB8',
+                        opacity: nbsLoading ? 0.7 : 1,
+                        whiteSpace: 'nowrap' as const,
+                        transition: 'all 0.15s',
+                      }}
+                      onClick={lookupNBS}
+                      disabled={!canLookup || nbsLoading}
+                    >
+                      {nbsLoading ? '🔍 Pretraga...' : '🏛 Pretraži NBS'}
+                    </button>
+                  </div>
+
+                  {/* NBS result banner */}
+                  {nbsResult && !nbsApplied && (
+                    <div style={{
+                      marginTop: '10px', background: 'rgba(0,212,126,0.08)',
+                      border: '1px solid rgba(0,212,126,0.3)', borderRadius: '10px', padding: '12px 14px',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+                        <div>
+                          <div style={{ fontSize: '12px', color: '#00D47E', fontWeight: '500', marginBottom: '4px' }}>
+                            ✓ Pronađen subjekt — izvor: {nbsResult.source}
+                          </div>
+                          <div style={{ fontSize: '14px', fontWeight: '600', color: '#DCE9F6', marginBottom: '2px' }}>
+                            {nbsResult.name}
+                          </div>
+                          {(nbsResult.address || nbsResult.city) && (
+                            <div style={{ fontSize: '12px', color: '#7A9BB8' }}>
+                              {[nbsResult.address, nbsResult.city].filter(Boolean).join(', ')}
+                            </div>
+                          )}
+                          {nbsResult.registration_number && (
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.30)', marginTop: '2px' }}>
+                              Mat. br: {nbsResult.registration_number}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          style={{
+                            fontFamily: 'system-ui,sans-serif', fontSize: '12px', fontWeight: '500',
+                            padding: '7px 14px', borderRadius: '7px', border: 'none',
+                            background: '#00D47E', color: '#060E1A', cursor: 'pointer',
+                            whiteSpace: 'nowrap' as const, flexShrink: 0,
+                          }}
+                          onClick={applyNBSResult}
+                        >
+                          ← Primeni podatke
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {nbsApplied && (
+                    <div style={{ marginTop: '8px', fontSize: '12px', color: '#00D47E' }}>
+                      ✓ Podaci su primenjeni
+                    </div>
+                  )}
+
+                  {nbsError && (
+                    <div style={{ marginTop: '8px', fontSize: '12px', color: '#FF5B5A' }}>
+                      ⚠ {nbsError}
+                    </div>
+                  )}
+                </div>
+
                 <div style={ds.row2}>
                   <div style={ds.field}>
                     <label style={ds.lbl}>Name <span style={{ color: '#E24B4A' }}>*</span></label>
@@ -320,16 +428,18 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
                     </div>
                   </div>
                 </div>
+
                 <div style={ds.row2}>
                   <div style={ds.field}>
-                    <label style={ds.lbl}>Tax ID / PIB</label>
-                    <input style={ds.input} value={taxId} onChange={e => setTaxId(e.target.value)} placeholder="e.g. 123456789" />
+                    <label style={ds.lbl}>Matični broj</label>
+                    <input style={{ ...ds.input, fontFamily: 'monospace' }} value={registrationNumber} onChange={e => setRegistrationNumber(e.target.value)} placeholder="e.g. 12345678" />
                   </div>
                   <div style={ds.field}>
                     <label style={ds.lbl}>Country</label>
                     <input style={ds.input} value={country} onChange={e => setCountry(e.target.value)} placeholder="e.g. Serbia" />
                   </div>
                 </div>
+
                 <div style={ds.row2}>
                   <div style={ds.field}>
                     <label style={ds.lbl}>Address</label>
@@ -377,11 +487,9 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
             </>
           )}
 
-          {/* ── TAB: Bank accounts ── */}
           {activeTab === 'accounts' && (
             <div style={ds.section}>
               <div style={ds.sectionTitle}>Bank accounts</div>
-
               {loadingAccounts ? (
                 <div style={{ padding: '20px', textAlign: 'center' as const, color: '#7A9BB8', fontSize: '13px' }}>Loading...</div>
               ) : accounts.length === 0 ? (
@@ -394,45 +502,23 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
                     <div key={acc.id} style={{ ...ds.accountRow, ...(acc.is_primary ? ds.accountRowPrimary : {}) }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '13px', fontWeight: '500', color: '#DCE9F6', fontFamily: 'monospace' }}>
-                            {acc.account_number}
-                          </span>
-                          {acc.is_primary && (
-                            <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: 'rgba(0,212,126,0.12)', color: '#00D47E' }}>
-                              ★ Primary
-                            </span>
-                          )}
-                          <span style={{ fontSize: '10px', padding: '1px 7px', borderRadius: '20px', background: 'rgba(255,255,255,0.06)', color: '#7A9BB8' }}>
-                            {acc.currency || 'RSD'}
-                          </span>
+                          <span style={{ fontSize: '13px', fontWeight: '500', color: '#DCE9F6', fontFamily: 'monospace' }}>{acc.account_number}</span>
+                          {acc.is_primary && <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: 'rgba(0,212,126,0.12)', color: '#00D47E' }}>★ Primary</span>}
+                          <span style={{ fontSize: '10px', padding: '1px 7px', borderRadius: '20px', background: 'rgba(255,255,255,0.06)', color: '#7A9BB8' }}>{acc.currency || 'RSD'}</span>
                         </div>
-                        {acc.bank_name && (
-                          <div style={{ fontSize: '11px', color: '#7A9BB8', marginTop: '2px' }}>{acc.bank_name}</div>
-                        )}
-                        {acc.model && (
-                          <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.30)' }}>Model: {acc.model}</div>
-                        )}
+                        {acc.bank_name && <div style={{ fontSize: '11px', color: '#7A9BB8', marginTop: '2px' }}>{acc.bank_name}</div>}
+                        {acc.model && <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.30)' }}>Model: {acc.model}</div>}
                       </div>
                       <div style={{ display: 'flex', gap: '6px' }}>
-                        {!acc.is_primary && (
-                          <button style={ds.accountBtn} onClick={() => setPrimary(acc.id)}>
-                            ★ Set primary
-                          </button>
-                        )}
-                        <button style={{ ...ds.accountBtn, color: '#FF5B5A', borderColor: '#F5A9A9' }} onClick={() => deleteAccount(acc.id)}>
-                          Delete
-                        </button>
+                        {!acc.is_primary && <button style={ds.accountBtn} onClick={() => setPrimary(acc.id)}>★ Set primary</button>}
+                        <button style={{ ...ds.accountBtn, color: '#FF5B5A', borderColor: '#F5A9A9' }} onClick={() => deleteAccount(acc.id)}>Delete</button>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
-
-              {/* Add new account */}
-              <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '14px', border: '0.5px solid #e5e5e5' }}>
-                <div style={{ fontSize: '11px', fontWeight: '500', color: '#7A9BB8', textTransform: 'uppercase' as const, letterSpacing: '0.07em', marginBottom: '10px' }}>
-                  Add new account
-                </div>
+              <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '14px', border: '0.5px solid rgba(255,255,255,0.10)' }}>
+                <div style={{ fontSize: '11px', fontWeight: '500', color: '#7A9BB8', textTransform: 'uppercase' as const, letterSpacing: '0.07em', marginBottom: '10px' }}>Add new account</div>
                 <div style={ds.row2}>
                   <div style={ds.field}>
                     <label style={ds.lbl}>Account number <span style={{ color: '#E24B4A' }}>*</span></label>
@@ -447,10 +533,7 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
                   <div style={ds.field}>
                     <label style={ds.lbl}>Currency</label>
                     <select style={ds.select} value={newCurrency} onChange={e => setNewCurrency(e.target.value)}>
-                      <option>RSD</option>
-                      <option>EUR</option>
-                      <option>USD</option>
-                      <option>AED</option>
+                      <option>RSD</option><option>EUR</option><option>USD</option><option>AED</option>
                     </select>
                   </div>
                   <div style={ds.field}>
@@ -458,11 +541,8 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
                     <input style={ds.input} value={newModel} onChange={e => setNewModel(e.target.value)} placeholder="e.g. 97" />
                   </div>
                 </div>
-                <button
-                  style={{ ...ds.btnPrimary, opacity: !newAccNum.trim() || addingAccount ? 0.6 : 1 }}
-                  onClick={addAccount}
-                  disabled={!newAccNum.trim() || addingAccount}
-                >
+                <button style={{ ...ds.btnPrimary, opacity: !newAccNum.trim() || addingAccount ? 0.6 : 1 }}
+                  onClick={addAccount} disabled={!newAccNum.trim() || addingAccount}>
                   {addingAccount ? 'Adding...' : '+ Add account'}
                 </button>
               </div>
@@ -508,10 +588,7 @@ const s: Record<string, React.CSSProperties> = {
   badge: { fontSize: '11px', fontWeight: '500', padding: '3px 9px', borderRadius: '20px', whiteSpace: 'nowrap' as const },
   monoCell: { fontSize: '12px', fontFamily: 'monospace', color: '#7A9BB8', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', border: '0.5px solid rgba(255,255,255,0.10)' },
   smallCell: { fontSize: '12px', color: '#7A9BB8' },
-  editBtn: { background: 'none', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', color: '#7A9BB8', fontSize: '14px' },
-  deleteBtn: { background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', padding: '4px', opacity: 0.3, transition: 'opacity 0.15s' },
-  contextMenu: { position: 'fixed' as const, background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '8px', zIndex: 9999, minWidth: '120px', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' },
-  contextItem: { padding: '8px 14px', fontSize: '13px', color: '#DCE9F6', cursor: 'pointer', borderBottom: '0.5px solid rgba(255,255,255,0.05)' },
+  deleteBtn: { background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', padding: '4px', opacity: 0.3 },
 }
 
 const ds: Record<string, React.CSSProperties> = {
