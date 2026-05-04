@@ -20,7 +20,7 @@ interface ParsedRow {
   reference_number: string
   model: string
   account_number: string
-  source_format: 'raiffeisen' | 'truist' | 'boa' | 'amex' | 'wio'
+  source_format: 'raiffeisen' | 'truist' | 'boa' | 'amex' | 'wio' | 'paypal'
 }
 
 interface AIProposal {
@@ -70,13 +70,14 @@ interface ImportRow {
 const PAYMENT_METHODS = ['Wire transfer', 'ACH transfer', 'Cash', 'Check', 'Credit card', 'Direct debit', 'Other']
 const REVENUE_STREAMS = ['Social Growth', 'Aimfox', 'Outsourced Services', 'VAT Claimed', 'Interest Received', 'Loans', 'Credit', 'Other']
 
-function detectFormat(content: string, fileName: string): 'raiffeisen' | 'truist' | 'boa' | 'amex' | 'wio' | 'unknown' {
+function detectFormat(content: string, fileName: string): 'raiffeisen' | 'truist' | 'boa' | 'amex' | 'wio' | 'paypal' | 'unknown' {
   if (fileName.toLowerCase().endsWith('.xlsx') || fileName.toLowerCase().endsWith('.xls')) return 'amex'
-  const firstLine = content.split('\n')[0] || ''
+  const firstLine = content.replace(/^\uFEFF/, '').split('\n')[0] || ''
   if (firstLine.includes('Account name') && firstLine.includes('Account IBAN') && firstLine.includes('Transaction type')) return 'wio'
   if (firstLine.includes('Br. ra') || firstLine.includes('Datum obrade') || firstLine.startsWith('265-') || firstLine.startsWith('160-') || firstLine.startsWith('170-')) return 'raiffeisen'
   if (firstLine.includes('Posted Date') && firstLine.includes('Transaction Date') && firstLine.includes('Merchant name')) return 'truist'
   if (firstLine.includes('Description') && firstLine.includes('Summary Amt')) return 'boa'
+  if (firstLine.includes('Transaction ID') && firstLine.includes('Balance Impact') && firstLine.includes('From Email Address')) return 'paypal'
   return 'unknown'
 }
 
@@ -247,6 +248,141 @@ function parseAmex(workbook: XLSX.WorkBook): ParsedRow[] {
   return rows
 }
 
+function parsePayPal(content: string): ParsedRow[] {
+  const lines = content.split('\n')
+  if (lines.length < 2) return []
+
+  const parseCSVLinePP = (line: string): string[] => {
+    const result: string[] = []
+    let current = ''
+    let inQuotes = false
+    for (let i = 0; i < line.length; i++) {
+      if (line[i] === '"') { inQuotes = !inQuotes }
+      else if (line[i] === ',' && !inQuotes) { result.push(current.trim()); current = '' }
+      else { current += line[i] }
+    }
+    result.push(current.trim())
+    return result
+  }
+
+  const headerLine = lines[0].replace(/^\uFEFF/, '')
+  const headerCols = parseCSVLinePP(headerLine)
+  const col = (name: string) => headerCols.findIndex(h => h.trim() === name)
+
+  const iDate = col('Date'), iName = col('Name'), iType = col('Type')
+  const iStatus = col('Status'), iCurrency = col('Currency')
+  const iGross = col('Gross'), iFee = col('Fee'), iNet = col('Net')
+  const iTxId = col('Transaction ID'), iRefTxId = col('Reference Txn ID')
+  const iInvoiceNum = col('Invoice Number'), iSubject = col('Subject')
+  const iNote = col('Note'), iBalanceImpact = col('Balance Impact')
+
+  const INCLUDE_TYPES = new Set([
+    'User Initiated Withdrawal', 'Mass Pay Payment', 'Mass Pay Reversal',
+    'General Payment', 'Subscription Payment',
+  ])
+
+  const parseAmt = (s: string): number => {
+    if (!s) return 0
+    return parseFloat(s.replace(/[",]/g, '').trim()) || 0
+  }
+
+  const rows: ParsedRow[] = []
+  let rowIndex = 0
+
+  lines.slice(1).forEach(line => {
+    if (!line.trim()) return
+    const cols = parseCSVLinePP(line.replace(/\r/g, ''))
+    if (cols.length < 10) return
+
+    const txType = cols[iType]?.trim() || ''
+    if (!INCLUDE_TYPES.has(txType)) return
+    if (cols[iStatus]?.trim() !== 'Completed') return
+
+    const rawDate = cols[iDate]?.trim() || ''
+    const dateParts = rawDate.split('/')
+    const date = dateParts.length === 3
+      ? `${dateParts[2]}-${dateParts[0].padStart(2, '0')}-${dateParts[1].padStart(2, '0')}`
+      : rawDate
+
+    const currency = cols[iCurrency]?.trim() || 'USD'
+    const gross = parseAmt(cols[iGross])
+    const fee = parseAmt(cols[iFee])
+    const net = parseAmt(cols[iNet])
+    const name = cols[iName]?.trim() || ''
+    const txId = cols[iTxId]?.trim() || ''
+    const refTxId = cols[iRefTxId]?.trim() || ''
+    const invoiceNum = cols[iInvoiceNum]?.trim() || ''
+    const subject = cols[iSubject]?.trim() || ''
+    const note = cols[iNote]?.trim() || ''
+    const balanceImpact = cols[iBalanceImpact]?.trim() || ''
+    const isCredit = balanceImpact === 'Credit'
+
+    const descParts = [subject, note, invoiceNum ? `Invoice: ${invoiceNum}` : '', refTxId ? `Ref: ${refTxId}` : ''].filter(Boolean)
+    const description = descParts.join(' | ')
+
+    const makeRow = (debit: number | null, credit: number | null, partner: string, desc: string, ref: string): ParsedRow => ({
+      id: `paypal_${rowIndex++}`,
+      source_format: 'paypal' as any,
+      date, statement_number: '', currency,
+      debit, credit,
+      partner_name: partner,
+      description: desc,
+      reference_number: ref,
+      model: '', account_number: '',
+    })
+
+    if (txType === 'User Initiated Withdrawal') {
+      const absGross = Math.abs(gross)
+      const absFee = Math.abs(fee)
+      if (absFee > 0) {
+        // Instant withdrawal — split into amount + fee
+        rows.push(makeRow(absGross, null, 'PayPal', `Instant withdrawal${description ? ' | ' + description : ''} | TX: ${txId}`, txId))
+        rows.push(makeRow(absFee, null, 'PayPal', `Instant withdrawal fee | TX: ${txId}`, txId))
+      } else {
+        rows.push(makeRow(Math.abs(net), null, 'PayPal', `Withdrawal${description ? ' | ' + description : ''} | TX: ${txId}`, txId))
+      }
+      return
+    }
+
+    if (txType === 'General Payment' && isCredit) {
+      rows.push(makeRow(null, Math.abs(net), name || 'PayPal customer',
+        `PayPal payment received${description ? ' | ' + description : ''} | TX: ${txId}`,
+        invoiceNum || txId))
+      return
+    }
+
+    if (txType === 'Mass Pay Payment') {
+      // Split into gross (payment) + fee (cost)
+      const absGross = Math.abs(gross)
+      const absFee = Math.abs(fee)
+      rows.push(makeRow(absGross, null, name || 'PayPal',
+        `Mass Pay Payment${description ? ' | ' + description : ''} | TX: ${txId}`,
+        refTxId || txId))
+      if (absFee > 0) {
+        rows.push(makeRow(absFee, null, 'PayPal',
+          `Mass Pay Fee${description ? ' | ' + description : ''} | TX: ${txId}`,
+          refTxId || txId))
+      }
+      return
+    }
+
+    if (txType === 'Mass Pay Reversal') {
+      // Reversal credit — show as credit (money returned), mark clearly as reversal
+      rows.push(makeRow(null, Math.abs(net), name || 'PayPal',
+        `⚠️ Mass Pay Reversal${description ? ' | ' + description : ''} | TX: ${txId}`,
+        refTxId || txId))
+      return
+    }
+
+    // General Payment (debit), Subscription Payment — net amount
+    rows.push(makeRow(Math.abs(net), null, name || 'PayPal',
+      `${txType}${description ? ' | ' + description : ''} | TX: ${txId}`,
+      refTxId || txId))
+  })
+
+  return rows
+}
+
 function parseWio(content: string): ParsedRow[] {
   const lines = content.split('\n').filter(l => l.trim())
   if (lines.length < 2) return []
@@ -332,6 +468,7 @@ const FORMAT_LABELS: Record<string, string> = {
   boa: '🇺🇸 Bank of America',
   amex: '💳 American Express',
   wio: '🇦🇪 Wio Bank',
+  paypal: '🅿️ PayPal',
 }
 
 export default function BulkImport({ onClose, onImported }: Props) {
@@ -427,6 +564,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
         else if (format === 'truist') parsed = parseTruist(text)
         else if (format === 'boa') parsed = parseBOA(text)
         else if (format === 'wio') parsed = parseWio(text)
+        else if (format === 'paypal') parsed = parsePayPal(text)
         if (parsed.length === 0) { setParseError('No transactions found in file.'); return }
         setRows(parsed.map(makeImportRow))
       }
