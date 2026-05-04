@@ -297,7 +297,11 @@ function parsePayPal(content: string): ParsedRow[] {
 
     const txType = cols[iType]?.trim() || ''
     if (!INCLUDE_TYPES.has(txType)) return
-    if (cols[iStatus]?.trim() !== 'Completed') return
+
+    const status = cols[iStatus]?.trim() || ''
+    // Withdrawals can appear as "Removed", Bank Deposits as "Pending" — include them
+    const allowedStatuses = new Set(['Completed', 'Removed', 'Pending'])
+    if (!allowedStatuses.has(status)) return
 
     const rawDate = cols[iDate]?.trim() || ''
     const dateParts = rawDate.split('/')
