@@ -658,9 +658,12 @@ export default function BulkImport({ onClose, onImported }: Props) {
             const isExpense = (snapshot[j].parsed.debit || 0) > 0
             const matchedCat = plCategories.find(c => c.name === proposal.pl_category)
             const matchedDept = departments.find(d => d.name === proposal.department)
+            // Preserve passthrough if set by parser — AI should not override it
+            const existingTxType = result[j].override_tx_type
+            const resolvedTxType = existingTxType === 'passthrough' ? 'passthrough' : (proposal.tx_type || 'direct')
             result[j] = {
               ...result[j], proposal, status: 'accepted',
-              override_tx_type: proposal.tx_type || 'direct',
+              override_tx_type: resolvedTxType,
               override_tx_subtype: proposal.tx_subtype || (isExpense ? 'expense' : 'revenue'),
               override_pl_category_id: matchedCat?.id || '',
               override_pl_category_name: matchedCat?.name || proposal.pl_category || '',
