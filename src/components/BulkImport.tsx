@@ -320,26 +320,32 @@ function parsePayPal(content: string): ParsedRow[] {
     const descParts = [subject, note, invoiceNum ? `Invoice: ${invoiceNum}` : '', refTxId ? `Ref: ${refTxId}` : ''].filter(Boolean)
     const description = descParts.join(' | ')
 
-    const makeRow = (debit: number | null, credit: number | null, partner: string, desc: string, ref: string): ParsedRow => ({
+    const makeRow = (debit: number | null, credit: number | null, partner: string, desc: string, ref: string, txHint?: string): ParsedRow => ({
       id: `paypal_${rowIndex++}`,
       source_format: 'paypal' as any,
-      date, statement_number: '', currency,
+      date, statement_number: txHint || '', currency,
       debit, credit,
       partner_name: partner,
       description: desc,
       reference_number: ref,
-      model: '', account_number: '',
+      model: txHint || '', account_number: '',
     })
 
     if (txType === 'User Initiated Withdrawal') {
       const absGross = Math.abs(gross)
       const absFee = Math.abs(fee)
       if (absFee > 0) {
-        // Instant withdrawal — split into amount + fee
-        rows.push(makeRow(absGross, null, 'PayPal', `Instant withdrawal${description ? ' | ' + description : ''} | TX: ${txId}`, txId))
-        rows.push(makeRow(absFee, null, 'PayPal', `Instant withdrawal fee | TX: ${txId}`, txId))
+        // Instant withdrawal — passthrough (amount) + expense (fee)
+        rows.push(makeRow(absGross, null, 'PayPal',
+          `Instant withdrawal${description ? ' | ' + description : ''} | TX: ${txId}`, txId,
+          'passthrough'))
+        rows.push(makeRow(absFee, null, 'PayPal',
+          `Instant withdrawal fee | TX: ${txId}`, txId,
+          'expense'))
       } else {
-        rows.push(makeRow(Math.abs(net), null, 'PayPal', `Withdrawal${description ? ' | ' + description : ''} | TX: ${txId}`, txId))
+        rows.push(makeRow(Math.abs(net), null, 'PayPal',
+          `Withdrawal${description ? ' | ' + description : ''} | TX: ${txId}`, txId,
+          'passthrough'))
       }
       return
     }
@@ -441,9 +447,12 @@ function formatDate(d: string): string {
 
 function makeImportRow(parsed: ParsedRow): ImportRow {
   const isExpense = (parsed.debit || 0) > 0
+  // PayPal withdrawal rows carry hint in statement_number field
+  const isPassthrough = parsed.statement_number === 'passthrough'
+  const txType = isPassthrough ? 'passthrough' : 'direct'
   return {
     parsed, proposal: null, status: 'pending',
-    override_tx_type: 'direct',
+    override_tx_type: txType,
     override_tx_subtype: isExpense ? 'expense' : 'revenue',
     override_pt_direction: isExpense ? 'out' : 'in',
     override_pt_period: new Date().toISOString().slice(0, 7),
