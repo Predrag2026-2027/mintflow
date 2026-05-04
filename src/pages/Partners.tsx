@@ -8,7 +8,6 @@ export default function Partners() {
   const [filterType, setFilterType] = useState('all')
   const [showDialog, setShowDialog] = useState(false)
   const [editPartner, setEditPartner] = useState<any>(null)
-  const [showMenu, setShowMenu] = useState<string | null>(null)
 
   const fetchPartners = async () => {
     setLoading(true)
