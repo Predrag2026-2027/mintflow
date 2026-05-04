@@ -216,36 +216,15 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
     setNbsError('')
     setNbsApplied(false)
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-          messages: [{
-            role: 'user',
-            content: `Pronađi podatke o srpskoj firmi sa PIB-om ${pib} na sajtu apr.gov.rs ili webservices.nbs.rs. Vrati SAMO JSON objekat bez ikakvog teksta pre ili posle, u formatu: {"name":"...","registration_number":"...","address":"...","city":"..."}. Ako firma nije pronađena, vrati: {"not_found":true}`
-          }]
-        })
+      const supabaseUrl = process.env.REACT_APP_SUPABASE_URL
+      const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY
+      const resp = await fetch(`${supabaseUrl}/functions/v1/lookup-pib?pib=${pib}`, {
+        headers: { 'Authorization': `Bearer ${supabaseAnonKey}`, 'apikey': supabaseAnonKey || '' }
       })
-      const data = await response.json()
-      const textBlock = data.content?.find((b: any) => b.type === 'text')
-      const raw = textBlock?.text?.replace(/```json|```/g, '').trim() || ''
-      const parsed = JSON.parse(raw)
-      if (parsed.not_found) {
-        setNbsError('Subjekt nije pronađen za ovaj PIB')
-        return
-      }
-      setNbsResult({
-        found: true, source: 'APR/NBS',
-        name: parsed.name || '',
-        tax_id: pib,
-        registration_number: parsed.registration_number || '',
-        address: parsed.address || '',
-        city: parsed.city || '',
-        country: 'Serbia',
-      })
+      const data = await resp.json()
+      if (data.error) { setNbsError(data.error); return }
+      if (!data.found) { setNbsError('Subjekt nije pronađen za ovaj PIB'); return }
+      setNbsResult(data)
     } catch (err: any) {
       setNbsError('Greška pri pretrazi — pokušaj ponovo')
     }
