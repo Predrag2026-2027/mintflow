@@ -279,6 +279,7 @@ function parsePayPal(content: string): ParsedRow[] {
   const INCLUDE_TYPES = new Set([
     'User Initiated Withdrawal', 'Mass Pay Payment', 'Mass Pay Reversal',
     'General Payment', 'Subscription Payment',
+    'Bank Deposit to PP Account',
   ])
 
   const parseAmt = (s: string): number => {
@@ -380,6 +381,14 @@ function parsePayPal(content: string): ParsedRow[] {
       return
     }
 
+    if (txType === 'Bank Deposit to PP Account') {
+      // Credit — deposit from bank to cover negative balance → passthrough
+      rows.push(makeRow(null, Math.abs(net), 'PayPal',
+        `Bank deposit to PayPal${description ? ' | ' + description : ''} | TX: ${txId}`,
+        txId, 'passthrough'))
+      return
+    }
+
     // General Payment (debit), Subscription Payment — net amount
     rows.push(makeRow(Math.abs(net), null, name || 'PayPal',
       `${txType}${description ? ' | ' + description : ''} | TX: ${txId}`,
@@ -447,14 +456,14 @@ function formatDate(d: string): string {
 
 function makeImportRow(parsed: ParsedRow): ImportRow {
   const isExpense = (parsed.debit || 0) > 0
-  // PayPal withdrawal rows carry hint in statement_number field
   const isPassthrough = parsed.statement_number === 'passthrough'
   const txType = isPassthrough ? 'passthrough' : 'direct'
+  const ptDirection = isExpense ? 'out' : 'in'
   return {
     parsed, proposal: null, status: 'pending',
     override_tx_type: txType,
     override_tx_subtype: isExpense ? 'expense' : 'revenue',
-    override_pt_direction: isExpense ? 'out' : 'in',
+    override_pt_direction: ptDirection,
     override_pt_period: new Date().toISOString().slice(0, 7),
     override_payment_method: 'Wire transfer',
     override_linked_invoice_id: '',
