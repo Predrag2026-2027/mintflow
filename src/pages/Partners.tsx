@@ -22,7 +22,6 @@ export default function Partners() {
     if (!window.confirm('Delete this partner?')) return
     await supabase.from('partners').delete().eq('id', id)
     fetchPartners()
-    setShowMenu(null)
   }
 
   const filtered = partners.filter(p => {
@@ -45,7 +44,7 @@ export default function Partners() {
   }
 
   return (
-    <div style={s.root} onClick={() => setShowMenu(null)}>
+    <div style={s.root}>
       <div style={s.body}>
         <div style={s.pageHeader}>
           <div>
