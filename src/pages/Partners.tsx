@@ -366,6 +366,13 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
                     <input style={ds.input} value={city} onChange={e => setCity(e.target.value)} placeholder="City..." />
                   </div>
                 </div>
+
+                <div style={{ marginBottom: '12px' }}>
+                  <div style={ds.field}>
+                    <label style={ds.lbl}>Country</label>
+                    <input style={ds.input} value={country} onChange={e => setCountry(e.target.value)} placeholder="e.g. Serbia" />
+                  </div>
+                </div>
               </div>
 
               <div style={ds.section}>
