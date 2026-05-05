@@ -367,10 +367,14 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
                         <div>
                           <div style={{ fontSize: '12px', color: '#00D47E', fontWeight: '500', marginBottom: '4px' }}>
                             ✓ Pronađen subjekt — izvor: {nbsResult.source}
+                            {nbsResult.status && <span style={{ marginLeft: '8px', opacity: 0.7 }}>· {nbsResult.status}</span>}
                           </div>
                           <div style={{ fontSize: '14px', fontWeight: '600', color: '#DCE9F6', marginBottom: '2px' }}>
                             {nbsResult.name}
                           </div>
+                          {nbsResult.entity_type && (
+                            <div style={{ fontSize: '11px', color: '#7A9BB8', marginBottom: '2px' }}>{nbsResult.entity_type}</div>
+                          )}
                           {(nbsResult.address || nbsResult.city) && (
                             <div style={{ fontSize: '12px', color: '#7A9BB8' }}>
                               {[nbsResult.address, nbsResult.city].filter(Boolean).join(', ')}
