@@ -181,10 +181,6 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
   const [isActive, setIsActive] = useState(partner?.is_active !== false)
 
   // NBS lookup state
-  const [nbsLoading, setNbsLoading] = useState(false)
-  const [nbsResult, setNbsResult] = useState<any>(null)
-  const [nbsError, setNbsError] = useState('')
-  const [nbsApplied, setNbsApplied] = useState(false)
 
   // Bank accounts
   const [accounts, setAccounts] = useState<any[]>([])
@@ -206,39 +202,11 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
   useEffect(() => { if (partner?.id) fetchAccounts() }, [partner?.id]) // eslint-disable-line
 
   // Reset NBS result when registrationNumber changes
-  useEffect(() => { setNbsResult(null); setNbsError(''); setNbsApplied(false) }, [registrationNumber])
 
-  const lookupNBS = async () => {
+  const lookupNBS = () => {
     const mb = registrationNumber.trim()
-    if (!mb || mb.length < 6) { setNbsError('Matični broj mora imati najmanje 6 cifara'); return }
-    setNbsLoading(true)
-    setNbsResult(null)
-    setNbsError('')
-    setNbsApplied(false)
-    try {
-      const supabaseUrl = process.env.REACT_APP_SUPABASE_URL
-      const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY
-      const resp = await fetch(`${supabaseUrl}/functions/v1/lookup-pib?mb=${encodeURIComponent(mb)}`, {
-        headers: { 'Authorization': `Bearer ${supabaseAnonKey}`, 'apikey': supabaseAnonKey || '' }
-      })
-      const data = await resp.json()
-      if (data.error) { setNbsError(data.error); return }
-      if (!data.found) { setNbsError('Subjekt nije pronađen za ovaj matični broj'); return }
-      setNbsResult(data)
-    } catch (err: any) {
-      setNbsError('Greška pri pretrazi — pokušaj ponovo')
-    }
-    setNbsLoading(false)
-  }
-
-  const applyNBSResult = () => {
-    if (!nbsResult) return
-    if (nbsResult.name) setName(nbsResult.name)
-    if (nbsResult.address) setAddress(nbsResult.address)
-    if (nbsResult.city) setCity(nbsResult.city)
-    if (nbsResult.country) setCountry(nbsResult.country)
-    if (nbsResult.registration_number) setRegistrationNumber(nbsResult.registration_number)
-    setNbsApplied(true)
+    if (!mb || mb.length < 6) return
+    window.open(`https://pretraga.apr.gov.rs/search?maticni_broj=${mb}`, '_blank')
   }
 
   const setPrimary = async (accountId: string) => {
@@ -346,72 +314,18 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
                         cursor: registrationNumber.trim().length >= 6 ? 'pointer' : 'not-allowed',
                         background: registrationNumber.trim().length >= 6 ? '#00D47E' : 'rgba(255,255,255,0.08)',
                         color: registrationNumber.trim().length >= 6 ? '#060E1A' : '#7A9BB8',
-                        opacity: nbsLoading ? 0.7 : 1,
                         whiteSpace: 'nowrap' as const,
                         transition: 'all 0.15s',
                       }}
                       onClick={lookupNBS}
-                      disabled={registrationNumber.trim().length < 6 || nbsLoading}
+                      disabled={registrationNumber.trim().length < 6}
                     >
-                      {nbsLoading ? '🔍 Pretraga...' : '🏛 Pretraži APR'}
+                      🏛 Otvori APR
                     </button>
                   </div>
-
-                  {/* NBS result banner */}
-                  {nbsResult && !nbsApplied && (
-                    <div style={{
-                      marginTop: '10px', background: 'rgba(0,212,126,0.08)',
-                      border: '1px solid rgba(0,212,126,0.3)', borderRadius: '10px', padding: '12px 14px',
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
-                        <div>
-                          <div style={{ fontSize: '12px', color: '#00D47E', fontWeight: '500', marginBottom: '4px' }}>
-                            ✓ Pronađen subjekt — izvor: {nbsResult.source}
-                            {nbsResult.status && <span style={{ marginLeft: '8px', opacity: 0.7 }}>· {nbsResult.status}</span>}
-                          </div>
-                          <div style={{ fontSize: '14px', fontWeight: '600', color: '#DCE9F6', marginBottom: '2px' }}>
-                            {nbsResult.name}
-                          </div>
-                          {nbsResult.entity_type && (
-                            <div style={{ fontSize: '11px', color: '#7A9BB8', marginBottom: '2px' }}>{nbsResult.entity_type}</div>
-                          )}
-                          {(nbsResult.address || nbsResult.city) && (
-                            <div style={{ fontSize: '12px', color: '#7A9BB8' }}>
-                              {[nbsResult.address, nbsResult.city].filter(Boolean).join(', ')}
-                            </div>
-                          )}
-                          {nbsResult.registration_number && (
-                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.30)', marginTop: '2px' }}>
-                              Mat. br: {nbsResult.registration_number}
-                            </div>
-                          )}
-                        </div>
-                        <button
-                          style={{
-                            fontFamily: 'system-ui,sans-serif', fontSize: '12px', fontWeight: '500',
-                            padding: '7px 14px', borderRadius: '7px', border: 'none',
-                            background: '#00D47E', color: '#060E1A', cursor: 'pointer',
-                            whiteSpace: 'nowrap' as const, flexShrink: 0,
-                          }}
-                          onClick={applyNBSResult}
-                        >
-                          ← Primeni podatke
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {nbsApplied && (
-                    <div style={{ marginTop: '8px', fontSize: '12px', color: '#00D47E' }}>
-                      ✓ Podaci su primenjeni
-                    </div>
-                  )}
-
-                  {nbsError && (
-                    <div style={{ marginTop: '8px', fontSize: '12px', color: '#FF5B5A' }}>
-                      ⚠ {nbsError}
-                    </div>
-                  )}
+                  <div style={{ marginTop: '6px', fontSize: '11px', color: '#7A9BB8' }}>
+                    Otvara APR pretragu u novom tabu — pronađi firmu i ručno unesi podatke
+                  </div>
                 </div>
 
                 <div style={ds.row2}>
