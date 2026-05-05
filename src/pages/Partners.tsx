@@ -433,8 +433,8 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
                     <input style={{ ...ds.input, fontFamily: 'monospace' }} value={registrationNumber} onChange={e => setRegistrationNumber(e.target.value)} placeholder="e.g. 12345678" />
                   </div>
                   <div style={ds.field}>
-                    <label style={ds.lbl}>Country</label>
-                    <input style={ds.input} value={country} onChange={e => setCountry(e.target.value)} placeholder="e.g. Serbia" />
+                    <label style={ds.lbl}>PIB / Tax ID</label>
+                    <input style={{ ...ds.input, fontFamily: 'monospace' }} value={taxId} onChange={e => setTaxId(e.target.value)} placeholder="e.g. 102937492" />
                   </div>
                 </div>
 
