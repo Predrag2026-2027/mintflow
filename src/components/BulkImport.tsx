@@ -1291,6 +1291,12 @@ export default function BulkImport({ onClose, onImported }: Props) {
               <span style={{ fontSize: '12px', color: '#888' }}>{rows.length > 0 ? `${rows.length} rows ready` : 'Upload a file to begin'}</span>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button style={s.btnGhost} onClick={onClose}>Cancel</button>
+                <button
+                  style={{ ...s.btnGhost, opacity: (!company || !bank || rows.length === 0 || analyzing) ? 0.5 : 1 }}
+                  onClick={() => { if (company && bank && rows.length > 0) { setRows(prev => prev.map(r => ({ ...r, status: 'pending' as RowStatus }))); setStep('review') } }}
+                  disabled={!company || !bank || rows.length === 0 || analyzing}>
+                  📋 Skip AI — review manually
+                </button>
                 <button style={{ ...s.btnPrimary, opacity: (!company || !bank || rows.length === 0 || analyzing) ? 0.5 : 1 }}
                   onClick={analyzeWithAI} disabled={!company || !bank || rows.length === 0 || analyzing}>
                   {analyzing ? `🤖 Analyzing... ${progress}%` : '🤖 Analyze with AI'}
