@@ -205,12 +205,12 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
 
   useEffect(() => { if (partner?.id) fetchAccounts() }, [partner?.id]) // eslint-disable-line
 
-  // Reset NBS result when taxId changes
-  useEffect(() => { setNbsResult(null); setNbsError(''); setNbsApplied(false) }, [taxId])
+  // Reset NBS result when registrationNumber changes
+  useEffect(() => { setNbsResult(null); setNbsError(''); setNbsApplied(false) }, [registrationNumber])
 
   const lookupNBS = async () => {
-    const pib = taxId.trim()
-    if (!/^\d{9}$/.test(pib)) { setNbsError('PIB mora biti tačno 9 cifara'); return }
+    const mb = registrationNumber.trim()
+    if (!mb || mb.length < 6) { setNbsError('Matični broj mora imati najmanje 6 cifara'); return }
     setNbsLoading(true)
     setNbsResult(null)
     setNbsError('')
@@ -218,12 +218,12 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
     try {
       const supabaseUrl = process.env.REACT_APP_SUPABASE_URL
       const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY
-      const resp = await fetch(`${supabaseUrl}/functions/v1/lookup-pib?pib=${pib}`, {
+      const resp = await fetch(`${supabaseUrl}/functions/v1/lookup-pib?mb=${encodeURIComponent(mb)}`, {
         headers: { 'Authorization': `Bearer ${supabaseAnonKey}`, 'apikey': supabaseAnonKey || '' }
       })
       const data = await resp.json()
       if (data.error) { setNbsError(data.error); return }
-      if (!data.found) { setNbsError('Subjekt nije pronađen za ovaj PIB'); return }
+      if (!data.found) { setNbsError('Subjekt nije pronađen za ovaj matični broj'); return }
       setNbsResult(data)
     } catch (err: any) {
       setNbsError('Greška pri pretrazi — pokušaj ponovo')
@@ -288,7 +288,6 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
     setSaving(false)
   }
 
-  const canLookup = /^\d{9}$/.test(taxId.trim())
 
   if (success) return (
     <div style={ds.overlay}>
@@ -329,31 +328,32 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
               <div style={ds.section}>
                 <div style={ds.sectionTitle}>Basic info</div>
 
-                {/* PIB lookup — full width on top */}
+                {/* APR lookup by MB */}
                 <div style={{ marginBottom: '14px' }}>
-                  <label style={ds.lbl}>PIB lookup — Narodna banka Srbije</label>
+                  <label style={ds.lbl}>APR lookup — pretraga po matičnom broju</label>
                   <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
                     <input
                       style={{ ...ds.input, flex: 1, fontFamily: 'monospace', letterSpacing: '0.08em' }}
-                      value={taxId}
-                      onChange={e => setTaxId(e.target.value.replace(/\D/g, '').slice(0, 9))}
-                      placeholder="Unesite PIB (9 cifara)..."
-                      maxLength={9}
+                      value={registrationNumber}
+                      onChange={e => setRegistrationNumber(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                      placeholder="Unesite matični broj (8 cifara)..."
+                      maxLength={8}
                     />
                     <button
                       style={{
                         fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500',
-                        padding: '8px 16px', borderRadius: '8px', border: 'none', cursor: canLookup ? 'pointer' : 'not-allowed',
-                        background: canLookup ? '#00D47E' : 'rgba(255,255,255,0.08)',
-                        color: canLookup ? '#060E1A' : '#7A9BB8',
+                        padding: '8px 16px', borderRadius: '8px', border: 'none',
+                        cursor: registrationNumber.trim().length >= 6 ? 'pointer' : 'not-allowed',
+                        background: registrationNumber.trim().length >= 6 ? '#00D47E' : 'rgba(255,255,255,0.08)',
+                        color: registrationNumber.trim().length >= 6 ? '#060E1A' : '#7A9BB8',
                         opacity: nbsLoading ? 0.7 : 1,
                         whiteSpace: 'nowrap' as const,
                         transition: 'all 0.15s',
                       }}
                       onClick={lookupNBS}
-                      disabled={!canLookup || nbsLoading}
+                      disabled={registrationNumber.trim().length < 6 || nbsLoading}
                     >
-                      {nbsLoading ? '🔍 Pretraga...' : '🏛 Pretraži NBS'}
+                      {nbsLoading ? '🔍 Pretraga...' : '🏛 Pretraži APR'}
                     </button>
                   </div>
 
