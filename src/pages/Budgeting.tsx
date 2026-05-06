@@ -50,13 +50,12 @@ interface DrillTx {
 }
 
 interface DrillState {
-  rowKey: string
+  rowKey: string           // e.g. "dept:Employee and Labour||Labour related expenses"
   rowLabel: string
   month: string
   monthLabel: string
   mode: 'actual' | 'estimate'
   classKey?: string
-  // for parent rows — list of leaf classKeys
   leafClassKeys?: string[]
 }
 
@@ -122,8 +121,35 @@ function DrillModal({
       setLoading(true)
 
       if (drill.mode === 'actual') {
-        // Fetch ALL transactions for this month+company, filter in JS
-        const { data: allTx } = await supabase
+        // Decode the row.key to get exact filter values
+        // row.key formats:
+        //   cat:PlCat
+        //   sub:PlCat|PlSub
+        //   dept:PlCat|PlSub|Dept
+        //   dsub:PlCat|PlSub|Dept|DeptSub
+        //   leaf:PlCat|PlSub|Dept|DeptSub|Desc
+        const rk = drill.rowKey
+        let plCat = '', plSub = '', dept = '', deptSub = '', desc = ''
+
+        if (rk.startsWith('leaf:')) {
+          const parts = rk.slice(5).split('|')
+          ;[plCat, plSub, dept, deptSub, desc] = parts
+        } else if (rk.startsWith('dsub:')) {
+          const parts = rk.slice(5).split('|')
+          ;[plCat, plSub, dept, deptSub] = parts
+        } else if (rk.startsWith('dept:')) {
+          const parts = rk.slice(5).split('|')
+          ;[plCat, plSub, dept] = parts
+        } else if (rk.startsWith('sub:')) {
+          const parts = rk.slice(4).split('|')
+          ;[plCat, plSub] = parts
+        } else if (rk.startsWith('cat:')) {
+          plCat = rk.slice(4)
+        }
+
+        console.log('[Drill] filter:', { plCat, plSub, dept, deptSub, desc })
+
+        let query = supabase
           .from('transactions')
           .select(`
             id, transaction_date, amount, amount_usd, currency,
@@ -140,45 +166,17 @@ function DrillModal({
           .eq('status', 'posted')
           .gte('transaction_date', `${drill.month}-01`)
           .lte('transaction_date', `${drill.month}-31`)
-          .order('transaction_date', { ascending: false })
 
-        const mkKey = (tx: any) => [
-          tx.pl_category || '', tx.pl_subcategory || '',
-          tx.department || '', tx.dept_subcategory || '',
-          tx.expense_description || '',
-        ].join('|')
+        if (plCat) query = query.eq('pl_category', plCat)
+        if (plSub) query = query.eq('pl_subcategory', plSub)
+        if (dept) query = query.eq('department', dept)
+        if (deptSub) query = query.eq('dept_subcategory', deptSub)
+        if (desc) query = query.eq('expense_description', desc)
 
-        // Build set of all leaf keys to match against
-        const leafKeys = drill.leafClassKeys && drill.leafClassKeys.length > 0
-          ? drill.leafClassKeys
-          : drill.classKey ? [drill.classKey] : []
+        const { data, error } = await query.order('transaction_date', { ascending: false })
+        console.log('[Drill] result count:', (data || []).length, 'error:', error)
 
-        console.log('[Drill] leafKeys:', leafKeys)
-        console.log('[Drill] allTx count:', (allTx || []).length)
-        if ((allTx || []).length > 0) {
-          console.log('[Drill] sample txKey:', mkKey((allTx as any[])[0]))
-        }
-
-        // Match: txKey must start with the non-empty prefix of any leaf key
-        const matches = (txKey: string): boolean => {
-          for (const lk of leafKeys) {
-            // Exact match
-            if (txKey === lk) return true
-            // Prefix: trim trailing empty segments from lk, check txKey starts with that
-            const segments = lk.split('|')
-            let last = segments.length - 1
-            while (last >= 0 && segments[last] === '') last--
-            if (last < 0) continue
-            const prefix = segments.slice(0, last + 1).join('|')
-            if (txKey.startsWith(prefix + '|') || txKey === prefix) return true
-          }
-          return false
-        }
-
-        const filtered = (allTx || []).filter((tx: any) => matches(mkKey(tx)))
-        console.log('[Drill] filtered count:', filtered.length)
-
-        const mapped: DrillTx[] = filtered.map((tx: any) => {
+        const mapped: DrillTx[] = (data || []).map((tx: any) => {
           const link = (tx.invoice_transaction_links as any[])?.[0]
           return {
             id: tx.id,
