@@ -72,7 +72,8 @@ export default function Budgeting() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState<{ rowKey: string; month: string } | null>(null)
   const [editVal, setEditVal] = useState('')
-  const [lastRefresh, setLastRefresh] = useState(0)
+  const [refreshTick, setRefreshTick] = useState(0)
+  const refresh = () => setRefreshTick(t => t + 1)
 
   // Build 3-month window: current month + 2 ahead
   useEffect(() => {
@@ -304,7 +305,7 @@ export default function Budgeting() {
 
     setRows(ordered)
     setLoading(false)
-  }, [companyId, months]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [companyId, months, refreshTick])
 
   useEffect(() => { loadData() }, [loadData])
 
@@ -320,13 +321,15 @@ export default function Budgeting() {
 
   const isVisible = (row: BudgetRow): boolean => {
     if (!row.parent) return true
-    let current = row.parent
-    while (current) {
-      if (collapsed.has(current)) return false
-      const parentRow = rows.find(r => r.key === current)
-      current = parentRow?.parent || ''
+    // Build ancestor chain first, then check — no closure over loop variable
+    const ancestors: string[] = []
+    const rowMap = Object.fromEntries(rows.map(r => [r.key, r]))
+    let cur = row.parent
+    while (cur) {
+      ancestors.push(cur)
+      cur = rowMap[cur]?.parent || ''
     }
-    return true
+    return ancestors.every(a => !collapsed.has(a))
   }
 
   // ── Edit estimate ──────────────────────────────────────────────────────────
@@ -368,7 +371,7 @@ export default function Budgeting() {
     })
 
     setEditing(null)
-    setLastRefresh(Date.now())
+    refresh()
   }
 
   // ── Totals ─────────────────────────────────────────────────────────────────
@@ -406,7 +409,7 @@ export default function Budgeting() {
             {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           {companyId && (
-            <button style={pg.refreshBtn} onClick={() => setLastRefresh(Date.now())}>
+            <button style={pg.refreshBtn} onClick={refresh}>
               ↻ Refresh
             </button>
           )}
