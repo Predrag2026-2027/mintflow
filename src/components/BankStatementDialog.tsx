@@ -40,6 +40,9 @@ interface StatementRow {
   opex_type: string
   opex_val: string
   performance_val: string
+  cf_type: string
+  cf_frequency: string
+  cf_next_month_est: string
   note: string
 }
 
@@ -65,6 +68,7 @@ function makeRow(defaultCurrency = 'RSD'): StatementRow {
     expense_description: '', revenue_stream: '',
     rev_alloc: 'sg100', aimfox_val: '', sg_val: '',
     opex_type: 'opex', opex_val: '', performance_val: '',
+    cf_type: '', cf_frequency: 'monthly', cf_next_month_est: '',
     note: '',
   }
 }
@@ -230,6 +234,9 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
           rev_alloc_aimfox: aimfoxAmount, rev_alloc_sg: sgAmount,
           opex_type: isDirectWithPL && row.tx_subtype === 'expense' ? (row.opex_type || 'opex') : null,
           opex_amount: opexAmount, performance_amount: perfAmount,
+          cf_type: isDirectWithPL && row.tx_subtype === 'expense' ? (row.cf_type || null) : null,
+          cf_frequency: row.cf_type === 'recurring' ? row.cf_frequency : null,
+          cf_next_month_est: row.cf_type === 'recurring' ? (row.cf_next_month_est ? parseFloat(row.cf_next_month_est) : (parseFloat(row.debit) || null)) : null,
           account_number: row.account_number || null,
           model: row.model || null, reference_number: row.reference_number || null,
           note: row.note || row.description || null, status: 'posted',
@@ -600,6 +607,46 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                                 })()}
                               </>
                             )}
+
+
+                                {/* ── Cash Flow Classification ── */}
+                                <div style={s.classTitle}>Cash flow classification</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '6px', marginBottom: '10px' }}>
+                                  {[
+                                    { id: 'recurring', label: '🔁 Recurring' },
+                                    { id: 'one_time', label: '1️⃣ One-time' },
+                                    { id: 'accrual', label: '📅 Accrual' },
+                                    { id: 'capex', label: '🏗 CapEx' },
+                                    { id: 'reimbursable', label: '↩️ Reimb.' },
+                                  ].map(a => (
+                                    <div key={a.id} style={{ ...s.allocBtn, padding: '6px 4px', ...(row.cf_type === a.id ? { border: '2px solid #1D9E75', background: '#E1F5EE' } : {}) }}
+                                      onClick={() => updateRow(row.id, { cf_type: row.cf_type === a.id ? '' : a.id })}>
+                                      <div style={{ fontSize: '10px', fontWeight: '600', color: row.cf_type === a.id ? '#085041' : '#111' }}>{a.label}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                                {row.cf_type === 'recurring' && (
+                                  <div style={{ marginBottom: '10px', background: '#f5f5f3', borderRadius: '8px', padding: '10px', border: '0.5px solid #e5e5e5' }}>
+                                    <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                                      {[{ id: 'monthly', label: 'Monthly' }, { id: 'quarterly', label: 'Quarterly' }, { id: 'yearly', label: 'Yearly' }].map(f => (
+                                        <div key={f.id}
+                                          style={{ flex: 1, padding: '5px', border: row.cf_frequency === f.id ? '2px solid #1D9E75' : '0.5px solid #e5e5e5', borderRadius: '6px', background: row.cf_frequency === f.id ? '#E1F5EE' : '#fff', cursor: 'pointer', textAlign: 'center' as const, fontSize: '11px', color: row.cf_frequency === f.id ? '#085041' : '#666' }}
+                                          onClick={() => updateRow(row.id, { cf_frequency: f.id })}>{f.label}</div>
+                                      ))}
+                                    </div>
+                                    <div style={s.field}>
+                                      <label style={s.lbl}>Next month estimate ({row.currency})</label>
+                                      <input type="number" style={s.input} value={row.cf_next_month_est}
+                                        onChange={e => updateRow(row.id, { cf_next_month_est: e.target.value })}
+                                        placeholder={row.debit ? `Auto: ${parseFloat(row.debit).toLocaleString()}` : '0.00'} />
+                                    </div>
+                                  </div>
+                                )}
+                                {row.cf_type === 'one_time' && (
+                                  <div style={{ marginBottom: '10px', fontSize: '11px', color: '#888', background: '#f5f5f3', borderRadius: '6px', padding: '8px 10px' }}>
+                                    One-time — won't be included in future estimates.
+                                  </div>
+                                )}
 
                             {/* Revenue */}
                             {row.tx_subtype === 'revenue' && (
