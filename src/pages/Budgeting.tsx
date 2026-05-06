@@ -72,7 +72,6 @@ export default function Budgeting() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState<{ rowKey: string; month: string } | null>(null)
   const [editVal, setEditVal] = useState('')
-  const [saving, setSaving] = useState(false)
   const [lastRefresh, setLastRefresh] = useState(0)
 
   // Build 3-month window: current month + 2 ahead
@@ -305,7 +304,7 @@ export default function Budgeting() {
 
     setRows(ordered)
     setLoading(false)
-  }, [companyId, months, lastRefresh])
+  }, [companyId, months]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadData() }, [loadData])
 
@@ -321,11 +320,11 @@ export default function Budgeting() {
 
   const isVisible = (row: BudgetRow): boolean => {
     if (!row.parent) return true
-    // Check all ancestors
-    let p = row.parent
-    while (p) {
-      if (collapsed.has(p)) return false
-      p = rows.find(r => r.key === p)?.parent || ''
+    let current = row.parent
+    while (current) {
+      if (collapsed.has(current)) return false
+      const parentRow = rows.find(r => r.key === current)
+      current = parentRow?.parent || ''
     }
     return true
   }
@@ -340,8 +339,6 @@ export default function Budgeting() {
     if (!editing) return
     const row = rows.find(r => r.key === editing.rowKey)
     if (!row) return
-
-    setSaving(true)
     const [plCat, plSub, dept, deptSub, desc] = row.key.includes(':')
       ? (() => {
         const parts = row.key.split(':')[1]?.split('|') || []
@@ -371,7 +368,6 @@ export default function Budgeting() {
     })
 
     setEditing(null)
-    setSaving(false)
     setLastRefresh(Date.now())
   }
 
