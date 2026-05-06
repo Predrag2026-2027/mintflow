@@ -63,6 +63,9 @@ interface ImportRow {
   override_opex_type: string
   override_opex_val: string
   override_performance_val: string
+  override_cf_type: string
+  override_cf_frequency: string
+  override_cf_next_month_est: string
   override_partner_name: string
   override_note: string
 }
@@ -480,6 +483,7 @@ function makeImportRow(parsed: ParsedRow): ImportRow {
     override_aimfox_val: '', override_sg_val: '',
     override_opex_type: 'opex',
     override_opex_val: '', override_performance_val: '',
+    override_cf_type: '', override_cf_frequency: 'monthly', override_cf_next_month_est: '',
     override_partner_name: parsed.partner_name, override_note: '',
   }
 }
@@ -776,6 +780,9 @@ export default function BulkImport({ onClose, onImported }: Props) {
         rev_alloc_aimfox: aimfoxAmount, rev_alloc_sg: sgAmount,
         opex_type: isDirectWithPL && row.override_tx_subtype === 'expense' ? (row.override_opex_type || 'opex') : null,
         opex_amount: opexAmount, performance_amount: perfAmount,
+        cf_type: isDirectWithPL && row.override_tx_subtype === 'expense' ? (row.override_cf_type || null) : null,
+        cf_frequency: row.override_cf_type === 'recurring' ? row.override_cf_frequency : null,
+        cf_next_month_est: row.override_cf_type === 'recurring' ? (row.override_cf_next_month_est ? parseFloat(row.override_cf_next_month_est) : amount) : null,
         account_number: p.account_number || null, model: p.model || null,
         reference_number: p.reference_number || null,
         note: row.override_note || p.description || null, status: 'posted',
@@ -1259,8 +1266,52 @@ export default function BulkImport({ onClose, onImported }: Props) {
                             </>
                           )}
 
-                          {row.override_tx_type === 'direct' && row.override_tx_subtype === 'revenue' && (
-                            <div style={{ marginTop: '8px' }}>
+                          {/* ── Cash Flow Classification ── */}
+                          {row.override_tx_type === 'direct' && row.override_tx_subtype === 'expense' && (
+                            <>
+                              <div style={s.editSectionTitle}>Cash flow classification</div>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '6px', marginTop: '6px' }}>
+                                {[
+                                  { id: 'recurring', label: '🔁 Recurring' },
+                                  { id: 'one_time', label: '1️⃣ One-time' },
+                                  { id: 'accrual', label: '📅 Accrual' },
+                                  { id: 'capex', label: '🏗 CapEx' },
+                                  { id: 'reimbursable', label: '↩️ Reimb.' },
+                                ].map(a => (
+                                  <div key={a.id}
+                                    style={{ ...s.allocBtn, padding: '6px 4px', ...(row.override_cf_type === a.id ? { border: '2px solid #1D9E75', background: '#E1F5EE' } : {}) }}
+                                    onClick={() => updateRow(p.id, { override_cf_type: row.override_cf_type === a.id ? '' : a.id })}>
+                                    <div style={{ fontSize: '10px', fontWeight: '600', color: row.override_cf_type === a.id ? '#085041' : '#111' }}>{a.label}</div>
+                                  </div>
+                                ))}
+                              </div>
+                              {row.override_cf_type === 'recurring' && (
+                                <div style={{ marginTop: '8px', background: '#f5f5f3', borderRadius: '8px', padding: '10px', border: '0.5px solid #e5e5e5' }}>
+                                  <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                                    {[{ id: 'monthly', label: 'Monthly' }, { id: 'quarterly', label: 'Quarterly' }, { id: 'yearly', label: 'Yearly' }].map(f => (
+                                      <div key={f.id}
+                                        style={{ flex: 1, padding: '5px', border: row.override_cf_frequency === f.id ? '2px solid #1D9E75' : '0.5px solid #e5e5e5', borderRadius: '6px', background: row.override_cf_frequency === f.id ? '#E1F5EE' : '#fff', cursor: 'pointer', textAlign: 'center' as const, fontSize: '11px', color: row.override_cf_frequency === f.id ? '#085041' : '#666' }}
+                                        onClick={() => updateRow(p.id, { override_cf_frequency: f.id })}>{f.label}</div>
+                                    ))}
+                                  </div>
+                                  <div style={s.editField}>
+                                    <label style={s.editLbl}>Next month est. ({p.currency})</label>
+                                    <input type="number" style={s.editInput}
+                                      value={row.override_cf_next_month_est}
+                                      onChange={e => updateRow(p.id, { override_cf_next_month_est: e.target.value })}
+                                      placeholder={p.debit ? `Auto: ${p.debit.toLocaleString()}` : '0.00'} />
+                                  </div>
+                                </div>
+                              )}
+                              {row.override_cf_type === 'one_time' && (
+                                <div style={{ marginTop: '6px', fontSize: '11px', color: '#888', background: '#f5f5f3', borderRadius: '6px', padding: '8px 10px' }}>
+                                  One-time — won't be included in future estimates.
+                                </div>
+                              )}
+                            </>
+                          )}
+
+                          {row.override_tx_type === 'direct' && row.override_tx_subtype === 'revenue' && (                            <div style={{ marginTop: '8px' }}>
                               <div style={s.editField}>
                                 <label style={s.editLbl}>Revenue stream</label>
                                 <select style={s.editSelect} value={row.override_revenue_stream} onChange={e => updateRow(p.id, { override_revenue_stream: e.target.value })}>
