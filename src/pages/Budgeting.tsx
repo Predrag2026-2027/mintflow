@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -95,8 +95,11 @@ export default function Budgeting() {
   }, [])
 
   // ── Load budget data ───────────────────────────────────────────────────────
-  const loadData = useCallback(async () => {
+  useEffect(() => {
     if (!companyId || months.length === 0) return
+    let cancelled = false
+
+    const run = async () => {
     setLoading(true)
 
     const monthKeys = months.map(m => m.key)
@@ -159,7 +162,6 @@ export default function Budgeting() {
       const monthly = tx.cf_frequency === 'quarterly' ? est / 3
         : tx.cf_frequency === 'yearly' ? est / 12
         : est
-      // Apply to future months only (not past actuals)
       for (const mk of monthKeys) {
         if (!estimateMap[ck][mk] || estimateMap[ck][mk].amount < monthly) {
           estimateMap[ck][mk] = { amount: monthly, cf_type: tx.cf_type, cf_frequency: tx.cf_frequency || 'monthly' }
@@ -202,43 +204,33 @@ export default function Budgeting() {
       const [plCat, plSub, dept, deptSub, desc] = ck.split('|')
       if (!plCat && !dept) continue
 
-      // Category level
       const catKey = `cat:${plCat}`
       ensureRow(catKey, plCat || 'Uncategorized', 0)
 
-      // Subcategory level (optional)
       let subKey = catKey
       if (plSub) {
         subKey = `sub:${plCat}|${plSub}`
         ensureRow(subKey, plSub, 1, catKey)
       }
 
-      // Department level
       let deptKey = subKey
       if (dept) {
         deptKey = `dept:${plCat}|${plSub}|${dept}`
         ensureRow(deptKey, dept, 2, subKey)
       }
 
-      // Dept subcategory level
       let deptSubKey = deptKey
       if (deptSub) {
         deptSubKey = `dsub:${plCat}|${plSub}|${dept}|${deptSub}`
         ensureRow(deptSubKey, deptSub, 3, deptKey)
       }
 
-      // Leaf = description or deepest level
-      const leafKey = desc
-        ? `leaf:${ck}`
-        : deptSubKey !== deptKey ? deptSubKey : deptKey
+      const leafKey = desc ? `leaf:${ck}` : deptSubKey !== deptKey ? deptSubKey : deptKey
 
       if (desc && leafKey !== deptSubKey) {
-        const leafLabel = desc
-        const leafLevel: 3 = 3
-        ensureRow(leafKey, leafLabel, leafLevel, deptSubKey)
+        ensureRow(leafKey, desc, 3, deptSubKey)
       }
 
-      // Assign cell data to leaf
       const row = rowMap[leafKey]
       if (!row) continue
 
@@ -246,10 +238,8 @@ export default function Budgeting() {
         const actual = actualMap[ck]?.[mk] || 0
         const estData = estimateMap[ck]?.[mk]
         const manual = manualMap[ck]?.[mk]
-
         const estimate = manual ? manual.amount : (estData?.amount || 0)
         const isManual = !!manual
-
         if (!row.cells[mk]) {
           row.cells[mk] = { actual, estimate, isManual, note: manual?.note }
         } else {
@@ -260,11 +250,7 @@ export default function Budgeting() {
     }
 
     // Bubble up to parents
-    const sortedKeys = Object.keys(rowMap).sort((a, b) => {
-      const la = rowMap[a].level, lb = rowMap[b].level
-      return lb - la // deepest first for bubbling
-    })
-
+    const sortedKeys = Object.keys(rowMap).sort((a, b) => rowMap[b].level - rowMap[a].level)
     for (const rk of sortedKeys) {
       const row = rowMap[rk]
       if (row.parent && rowMap[row.parent]) {
@@ -277,13 +263,8 @@ export default function Budgeting() {
       }
     }
 
-    // Sort rows: by level then label
-    const finalRows = Object.values(rowMap).sort((a, b) => {
-      if (a.level !== b.level) return a.level - b.level
-      return a.label.localeCompare(b.label)
-    })
-
-    // Sort properly — children after parent
+    // Build ordered list: roots first, children after parent
+    const finalRows = Object.values(rowMap)
     const ordered: BudgetRow[] = []
     const visited = new Set<string>()
 
@@ -293,7 +274,6 @@ export default function Budgeting() {
       const row = rowMap[key]
       if (!row) return
       ordered.push(row)
-      // Add children
       const children = finalRows.filter(r => r.parent === key)
       children.sort((a, b) => a.label.localeCompare(b.label))
       for (const child of children) addRow(child.key)
@@ -303,11 +283,16 @@ export default function Budgeting() {
     roots.sort((a, b) => a.label.localeCompare(b.label))
     for (const root of roots) addRow(root.key)
 
-    setRows(ordered)
-    setLoading(false)
-  }, [companyId, months, refreshTick])
+    if (!cancelled) {
+      setRows(ordered)
+      setLoading(false)
+    }
+    }
+    run()
+    return () => { cancelled = true }
+  }, [companyId, months, refreshTick]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { loadData() }, [loadData])
+
 
   // ── Collapse/expand ────────────────────────────────────────────────────────
   const toggleCollapse = (key: string) => {
