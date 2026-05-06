@@ -6,12 +6,13 @@ import Transactions from './pages/Transactions'
 import Revenue from './pages/Revenue'
 import PL from './pages/PL'
 import CashFlow from './pages/CashFlow'
+import Budgeting from './pages/Budgeting'
 import Reports from './pages/Reports'
 import Partners from './pages/Partners'
 import Settings from './pages/Settings'
 import Sidebar from './components/Sidebar'
 
-export type Page = 'dashboard' | 'transactions' | 'revenue' | 'pl' | 'cashflow' | 'reports' | 'partners' | 'settings'
+export type Page = 'dashboard' | 'transactions' | 'revenue' | 'pl' | 'cashflow' | 'budgeting' | 'reports' | 'partners' | 'settings'
 
 interface NavProps { page: Page; setPage: (p: Page) => void }
 export const NavContext = React.createContext<NavProps>({ page: 'dashboard', setPage: () => {} })
@@ -38,6 +39,7 @@ function AppContent() {
           {page === 'revenue'      && <Revenue />}
           {page === 'pl'           && <PL />}
           {page === 'cashflow'     && <CashFlow />}
+          {page === 'budgeting'    && <Budgeting />}
           {page === 'reports'      && <Reports />}
           {page === 'partners'     && <Partners />}
           {page === 'settings'     && <Settings />}

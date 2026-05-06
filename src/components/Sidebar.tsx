@@ -3,7 +3,6 @@ import { useAuth } from '../contexts/AuthContext'
 import { NavContext } from '../App'
 import type { Page } from '../App'
 
-// ── Nav icons (inline SVG, no library required) ───────────
 const Icon = ({ children }: { children: React.ReactNode }) => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none"
     stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -17,6 +16,7 @@ const ICONS: Record<string, React.ReactNode> = {
   revenue:      <Icon><path d="M2 12l4-4 3 3 5-6"/><circle cx="13.5" cy="4.5" r="1.5"/></Icon>,
   pl:           <Icon><path d="M2.5 12V8.5M5.5 12V5M8.5 12V7M11.5 12V3M14.5 12V6"/></Icon>,
   cashflow:     <Icon><path d="M1 10C2.5 7 4.5 6 8 6s5.5 2 7 0"/><path d="M1 14C2.5 11 4.5 10 8 10s5.5 2 7 0"/></Icon>,
+  budgeting:    <Icon><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M5 3v10M1.5 7h13M1.5 11h13"/></Icon>,
   reports:      <Icon><rect x="2.5" y="1.5" width="11" height="13" rx="1.5"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3"/></Icon>,
   partners:     <Icon><circle cx="5.5" cy="5" r="2.5"/><path d="M1 13.5c0-2.5 2-4.5 4.5-4.5s4.5 2 4.5 4.5"/><circle cx="12" cy="5" r="2"/><path d="M14.5 13c0-1.9-1.1-3.5-2.5-4"/></Icon>,
   settings:     <Icon><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.6 3.6l1.3 1.3M11.1 11.1l1.3 1.3M3.6 12.4l1.3-1.3M11.1 4.9l1.3-1.3"/></Icon>,
@@ -28,12 +28,12 @@ const NAV_ITEMS: { key: Page; label: string }[] = [
   { key: 'revenue',      label: 'Revenue' },
   { key: 'pl',           label: 'P&L' },
   { key: 'cashflow',     label: 'Cash Flow' },
+  { key: 'budgeting',    label: 'Budgeting' },
   { key: 'reports',      label: 'Reports' },
   { key: 'partners',     label: 'Partners' },
   { key: 'settings',     label: 'Settings' },
 ]
 
-// ── Logo mark ─────────────────────────────────────────────
 export function LogoMark({ size = 26 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 36 36" fill="none">
@@ -45,7 +45,6 @@ export function LogoMark({ size = 26 }: { size?: number }) {
   )
 }
 
-// ── Sidebar component ─────────────────────────────────────
 export default function Sidebar() {
   const { user, signOut } = useAuth()
   const { page, setPage } = React.useContext(NavContext)
@@ -53,7 +52,6 @@ export default function Sidebar() {
 
   return (
     <aside style={s.sidebar}>
-      {/* Logo */}
       <div style={s.logoRow}>
         <LogoMark size={26} />
         <span style={s.logoText}>
@@ -61,11 +59,11 @@ export default function Sidebar() {
         </span>
       </div>
 
-      {/* Nav */}
       <nav style={s.nav}>
         {NAV_ITEMS.map(item => {
           const active = page === item.key
           const isRevenue = item.key === 'revenue'
+          const isBudgeting = item.key === 'budgeting'
           return (
             <button
               key={item.key}
@@ -73,14 +71,18 @@ export default function Sidebar() {
               style={{
                 ...s.navItem,
                 background: active
-                  ? isRevenue ? 'rgba(157,151,255,0.12)' : 'rgba(0,212,126,0.10)'
+                  ? isRevenue ? 'rgba(157,151,255,0.12)'
+                  : isBudgeting ? 'rgba(230,180,50,0.12)'
+                  : 'rgba(0,212,126,0.10)'
                   : 'transparent',
                 color: active ? '#fff' : 'rgba(255,255,255,0.44)',
               }}
             >
               <span style={{
                 color: active
-                  ? isRevenue ? '#9D97FF' : '#00D47E'
+                  ? isRevenue ? '#9D97FF'
+                  : isBudgeting ? '#E6B432'
+                  : '#00D47E'
                   : 'rgba(255,255,255,0.30)',
                 display: 'flex'
               }}>
@@ -94,7 +96,6 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* User */}
       <div style={s.userRow}>
         <div style={s.avatar}>{initials}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -111,7 +112,6 @@ export default function Sidebar() {
   )
 }
 
-// ── Styles ────────────────────────────────────────────────
 const s: Record<string, React.CSSProperties> = {
   sidebar: {
     width: '208px',
