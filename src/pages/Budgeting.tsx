@@ -126,9 +126,6 @@ function DrillModal({
         const classKey = drill.classKey
         const [plCat, plSub, dept, deptSub, desc] = (classKey || '||||').split('|')
 
-        // Get leaf classKeys for parent rows
-        const leafKeys = drill.leafClassKeys || (classKey ? [classKey] : [])
-
         // Build filters for each leaf
         let query = supabase
           .from('transactions')
