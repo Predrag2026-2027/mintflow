@@ -64,7 +64,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
   const [rateSource, setRateSource] = useState('')
   const [fetchingRate, setFetchingRate] = useState(false)
 
-  // ── By value split ────────────────────────────────────
+  // By value split
   const [aimfoxVal, setAimfoxVal] = useState('')
   const [sgVal, setSgVal] = useState('')
 
@@ -72,6 +72,15 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
   const [opexType, setOpexType] = useState('opex')
   const [opexVal, setOpexVal] = useState('')
   const [performanceVal, setPerformanceVal] = useState('')
+
+  // Cash Flow Classification
+  const [cfType, setCfType] = useState(invoice?.cf_type || '')
+  const [cfFrequency, setCfFrequency] = useState(invoice?.cf_frequency || 'monthly')
+  const [cfNextMonthEst, setCfNextMonthEst] = useState(invoice?.cf_next_month_est?.toString() || '')
+  const [cfAccrualFrom, setCfAccrualFrom] = useState(invoice?.cf_accrual_from || '')
+  const [cfAccrualTo, setCfAccrualTo] = useState(invoice?.cf_accrual_to || '')
+  const [cfCapexMonths, setCfCapexMonths] = useState(invoice?.cf_capex_months?.toString() || '')
+  const [cfReimbursableDate, setCfReimbursableDate] = useState(invoice?.cf_reimbursable_date || '')
 
   const handleAimfoxChange = (val: string) => {
     setAimfoxVal(val)
@@ -89,7 +98,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
     else setAimfoxVal('')
   }
 
-  // OPEX / Performance handlers
   const handleOpexChange = (val: string) => {
     setOpexVal(val)
     const op = parseFloat(val) || 0
@@ -269,6 +277,13 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
     setOpexType(invoice.opex_type || 'opex')
     setOpexVal(invoice.opex_amount?.toString() || '')
     setPerformanceVal(invoice.performance_amount?.toString() || '')
+    setCfType(invoice.cf_type || '')
+    setCfFrequency(invoice.cf_frequency || 'monthly')
+    setCfNextMonthEst(invoice.cf_next_month_est?.toString() || '')
+    setCfAccrualFrom(invoice.cf_accrual_from || '')
+    setCfAccrualTo(invoice.cf_accrual_to || '')
+    setCfCapexMonths(invoice.cf_capex_months?.toString() || '')
+    setCfReimbursableDate(invoice.cf_reimbursable_date || '')
   }, [invoice])
 
   useEffect(() => { if (invoice && plCategories.length > 0) { const cat = plCategories.find(c => c.name === invoice.pl_category); if (cat) setPlCatId(cat.id) } }, [invoice, plCategories])
@@ -290,7 +305,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
   const totalErrors = Object.keys(errors).length
   const isValid = totalErrors === 0
 
-  // ── New step order: 1=Basic, 2=Amount, 3=Classification, 4=Review ──
   const touchStep = (n: number) => {
     if (n === 1) setTouched(p => ({ ...p, companyId: true, currency: true, invoiceDate: true, partnerId: true }))
     if (n === 2) setTouched(p => ({ ...p, amount: true, exRate: true }))
@@ -332,11 +346,20 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
     return '—'
   }
 
-  // New order: Basic → Amount → Classification → Review
   const opexLabel = () => {
     if (opexType === 'opex') return '100% OPEX'
     if (opexType === 'performance') return '100% Performance'
     return `Split — OPEX: ${currency} ${parseFloat(opexVal || '0').toFixed(2)} / Perf: ${currency} ${parseFloat(performanceVal || '0').toFixed(2)}`
+  }
+
+  const cfLabel = () => {
+    if (!cfType) return '—'
+    if (cfType === 'recurring') return `Recurring ${cfFrequency}`
+    if (cfType === 'one_time') return 'One-time'
+    if (cfType === 'accrual') return `Accrual ${cfAccrualFrom ? `${cfAccrualFrom} → ${cfAccrualTo}` : ''}`
+    if (cfType === 'capex') return `CapEx (${cfCapexMonths || '?'} months)`
+    if (cfType === 'reimbursable') return `Reimbursable${cfReimbursableDate ? ` by ${cfReimbursableDate}` : ''}`
+    return '—'
   }
 
   const stepTitles = ['Basic information', 'Amount & currency', 'Classification & P&L', 'Review & post']
@@ -371,6 +394,13 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
         rev_alloc_aimfox: aimfoxAmount, rev_alloc_sg: sgAmount,
         opex_type: invType === 'expense' ? opexType : null,
         opex_amount: opexAmount, performance_amount: perfAmount,
+        cf_type: invType === 'expense' ? (cfType || null) : null,
+        cf_frequency: cfType === 'recurring' ? cfFrequency : null,
+        cf_next_month_est: cfType === 'recurring' ? (cfNextMonthEst ? parseFloat(cfNextMonthEst) : (amount ? parseFloat(amount) : null)) : null,
+        cf_accrual_from: cfType === 'accrual' ? (cfAccrualFrom || null) : null,
+        cf_accrual_to: cfType === 'accrual' ? (cfAccrualTo || null) : null,
+        cf_capex_months: cfType === 'capex' ? (cfCapexMonths ? parseInt(cfCapexMonths) : null) : null,
+        cf_reimbursable_date: cfType === 'reimbursable' ? (cfReimbursableDate || null) : null,
         currency, amount: parseFloat(amount),
         exchange_rate: parseFloat(exRate) || null, amount_usd: usdAmount,
         is_indexed: isIndexed, account_number: accNum || null,
@@ -420,7 +450,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
   const currentDeptSubs = getDeptSubs(deptId)
   const currentExpDescs = getExpDescs(deptSubId)
 
-
   // ── OPEX/Performance panel ────────────────────────────
   const opexPanel = (
     <div style={s.section}>
@@ -448,42 +477,128 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
             <div style={s.field}>
               <label style={s.lbl}>OPEX ({currency || '—'})</label>
               <input type="number" style={{ ...s.input, ...(fieldErr('opexSplit') ? s.inputError : {}) }}
-                value={opexVal} onChange={e => handleOpexChange(e.target.value)}
-                placeholder="0.00" min="0" max={amount} />
-              {opexVal && parseFloat(amount) > 0 && (
-                <div style={{ fontSize: '10px', color: '#185FA5', marginTop: '2px' }}>{opexPct.op}% of total</div>
-              )}
+                value={opexVal} onChange={e => handleOpexChange(e.target.value)} placeholder="0.00" min="0" max={amount} />
+              {opexVal && parseFloat(amount) > 0 && <div style={{ fontSize: '10px', color: '#185FA5', marginTop: '2px' }}>{opexPct.op}% of total</div>}
             </div>
             <div style={s.field}>
               <label style={s.lbl}>Performance ({currency || '—'})</label>
               <input type="number" style={{ ...s.input, ...(fieldErr('opexSplit') ? s.inputError : {}) }}
-                value={performanceVal} onChange={e => handlePerformanceChange(e.target.value)}
-                placeholder="0.00" min="0" max={amount} />
-              {performanceVal && parseFloat(amount) > 0 && (
-                <div style={{ fontSize: '10px', color: '#BA7517', marginTop: '2px' }}>{opexPct.perf}% of total</div>
-              )}
+                value={performanceVal} onChange={e => handlePerformanceChange(e.target.value)} placeholder="0.00" min="0" max={amount} />
+              {performanceVal && parseFloat(amount) > 0 && <div style={{ fontSize: '10px', color: '#BA7517', marginTop: '2px' }}>{opexPct.perf}% of total</div>}
             </div>
           </div>
           {opexVal && performanceVal && parseFloat(amount) > 0 && (
             <div style={{ marginTop: '10px', background: '#fff', borderRadius: '8px', padding: '10px 12px', border: '0.5px solid #e5e5e5' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
-                <span style={{ color: '#888' }}>OPEX</span>
-                <span style={{ fontWeight: '500', color: '#185FA5' }}>{parseFloat(opexVal).toLocaleString()} {currency}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '8px' }}>
-                <span style={{ color: '#888' }}>Performance</span>
-                <span style={{ fontWeight: '500', color: '#BA7517' }}>{parseFloat(performanceVal).toLocaleString()} {currency}</span>
-              </div>
               <div style={{ height: '6px', borderRadius: '3px', background: '#e5e5e5', overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${opexPct.op}%`, background: '#185FA5', display: 'inline-block' }} />
                 <div style={{ height: '100%', width: `${opexPct.perf}%`, background: '#BA7517', display: 'inline-block' }} />
               </div>
               {!opexSplitOk
-                ? <div style={{ fontSize: '11px', color: '#A32D2D', marginTop: '6px' }}>⚠️ Sum ({opexSplitTotal.toLocaleString()} {currency}) ≠ total ({parseFloat(amount).toLocaleString()} {currency})</div>
+                ? <div style={{ fontSize: '11px', color: '#A32D2D', marginTop: '6px' }}>⚠️ Sum ≠ total</div>
                 : <div style={{ fontSize: '11px', color: '#1D9E75', marginTop: '6px' }}>✓ Split is valid</div>
               }
             </div>
           )}
+        </div>
+      )}
+    </div>
+  )
+
+  // ── Cash Flow Classification panel ──────────────────
+  const cfPanel = (
+    <div style={s.section}>
+      <div style={s.sectionTitle}>Cash flow classification</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '8px' }}>
+        {[
+          { id: 'recurring', label: '🔁 Recurring', sub: 'Monthly/Qtrly/Yearly' },
+          { id: 'one_time', label: '1️⃣ One-time', sub: 'Non-repeating' },
+          { id: 'accrual', label: '📅 Accrual', sub: 'Period-based' },
+          { id: 'capex', label: '🏗 CapEx', sub: 'Capital expenditure' },
+          { id: 'reimbursable', label: '↩️ Reimbursable', sub: 'Expected return' },
+        ].map(a => (
+          <div key={a.id}
+            style={{ ...s.allocBtn, ...(cfType === a.id ? { border: '2px solid #1D9E75', background: '#E1F5EE' } : {}) }}
+            onClick={() => setCfType(cfType === a.id ? '' : a.id)}>
+            <div style={{ fontSize: '11px', fontWeight: '600', color: cfType === a.id ? '#085041' : '#111' }}>{a.label}</div>
+            <div style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>{a.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {cfType === 'recurring' && (
+        <div style={{ marginTop: '12px', background: '#f5f5f3', borderRadius: '10px', padding: '14px', border: '0.5px solid #e5e5e5' }}>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+            {[{ id: 'monthly', label: '📆 Monthly' }, { id: 'quarterly', label: '📊 Quarterly' }, { id: 'yearly', label: '📅 Yearly' }].map(f => (
+              <div key={f.id}
+                style={{ flex: 1, padding: '8px', border: cfFrequency === f.id ? '2px solid #1D9E75' : '0.5px solid #e5e5e5', borderRadius: '8px', background: cfFrequency === f.id ? '#E1F5EE' : '#fff', cursor: 'pointer', textAlign: 'center' as const, fontSize: '12px', fontWeight: cfFrequency === f.id ? '600' : '400', color: cfFrequency === f.id ? '#085041' : '#666' }}
+                onClick={() => setCfFrequency(f.id)}>{f.label}</div>
+            ))}
+          </div>
+          <div style={s.field}>
+            <label style={s.lbl}>Next month estimate ({currency || '—'})</label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input type="number" style={{ ...s.input, flex: 1 }} value={cfNextMonthEst}
+                onChange={e => setCfNextMonthEst(e.target.value)}
+                placeholder={amount ? `Auto: ${parseFloat(amount).toLocaleString()}` : '0.00'} />
+              {!cfNextMonthEst && amount && (
+                <button style={s.linkBtn} onClick={() => setCfNextMonthEst(amount)}>Use this amount</button>
+              )}
+            </div>
+            {amount && (
+              <div style={{ fontSize: '10px', color: '#888', marginTop: '4px' }}>
+                Auto: {cfFrequency === 'monthly' ? parseFloat(amount).toLocaleString() : cfFrequency === 'quarterly' ? (parseFloat(amount) / 3).toFixed(2) : (parseFloat(amount) / 12).toFixed(2)} {currency}/mo
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {cfType === 'accrual' && (
+        <div style={{ marginTop: '12px', background: '#f5f5f3', borderRadius: '10px', padding: '14px', border: '0.5px solid #e5e5e5' }}>
+          <div style={s.row2}>
+            <div style={s.field}>
+              <label style={s.lbl}>From</label>
+              <input type="date" style={s.input} value={cfAccrualFrom} onChange={e => setCfAccrualFrom(e.target.value)} />
+            </div>
+            <div style={s.field}>
+              <label style={s.lbl}>To</label>
+              <input type="date" style={s.input} value={cfAccrualTo} onChange={e => setCfAccrualTo(e.target.value)} />
+            </div>
+          </div>
+          {cfAccrualFrom && cfAccrualTo && amount && (
+            <div style={{ fontSize: '11px', color: '#085041', marginTop: '4px' }}>
+              {(() => { const m = Math.max(1, Math.round((new Date(cfAccrualTo).getTime() - new Date(cfAccrualFrom).getTime()) / (1000*60*60*24*30))); return `Monthly: ${(parseFloat(amount)/m).toFixed(2)} ${currency} × ${m} months` })()}
+            </div>
+          )}
+        </div>
+      )}
+
+      {cfType === 'capex' && (
+        <div style={{ marginTop: '12px', background: '#f5f5f3', borderRadius: '10px', padding: '14px', border: '0.5px solid #e5e5e5' }}>
+          <div style={s.field}>
+            <label style={s.lbl}>Amortization period (months)</label>
+            <input type="number" style={s.input} value={cfCapexMonths} onChange={e => setCfCapexMonths(e.target.value)} placeholder="e.g. 36" min="1" />
+            {cfCapexMonths && amount && (
+              <div style={{ fontSize: '11px', color: '#085041', marginTop: '4px' }}>
+                Monthly depreciation: {(parseFloat(amount) / parseFloat(cfCapexMonths)).toFixed(2)} {currency}/mo
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {cfType === 'reimbursable' && (
+        <div style={{ marginTop: '12px', background: '#f5f5f3', borderRadius: '10px', padding: '14px', border: '0.5px solid #e5e5e5' }}>
+          <div style={s.field}>
+            <label style={s.lbl}>Expected reimbursement date</label>
+            <input type="date" style={s.input} value={cfReimbursableDate} onChange={e => setCfReimbursableDate(e.target.value)} />
+          </div>
+        </div>
+      )}
+
+      {cfType === 'one_time' && (
+        <div style={{ marginTop: '8px', fontSize: '12px', color: '#888', background: '#f5f5f3', borderRadius: '8px', padding: '10px 12px' }}>
+          One-time expense — will not be included in future month estimates.
         </div>
       )}
     </div>
@@ -536,7 +651,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
 
         <div style={s.body}>
 
-          {/* ── STEP 1 — Basic information ── */}
+          {/* ── STEP 1 ── */}
           {step === 1 && (
             <>
               {companyId && (
@@ -700,7 +815,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
             </>
           )}
 
-          {/* ── STEP 2 — Amount & currency ── */}
+          {/* ── STEP 2 ── */}
           {step === 2 && (
             <div style={s.section}>
               <div style={s.sectionTitle}>Amount & currency conversion</div>
@@ -747,7 +862,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
             </div>
           )}
 
-          {/* ── STEP 3 — Classification & P&L ── */}
+          {/* ── STEP 3 ── */}
           {step === 3 && (
             <>
               {linkedTxId && (
@@ -813,6 +928,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                       )}
                     </div>
                   </div>
+
                   <div style={s.section}>
                     <div style={s.sectionTitle}>Revenue stream allocation</div>
                     <div style={s.allocGrid}>
@@ -825,47 +941,31 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                     </div>
                     {revAlloc === 'byval' && (
                       <div style={{ marginTop: '14px', background: '#f5f5f3', borderRadius: '10px', padding: '14px', border: '0.5px solid #e5e5e5' }}>
-                        <div style={{ fontSize: '11px', color: '#888', fontWeight: '500', marginBottom: '10px', textTransform: 'uppercase' as const, letterSpacing: '0.07em' }}>
-                          Split po vrednosti — ukupno: {amount ? `${parseFloat(amount).toLocaleString('sr-RS')} ${currency}` : '—'}
-                        </div>
                         <div style={s.row2}>
                           <div style={s.field}>
                             <label style={s.lbl}>Aimfox ({currency || '—'})</label>
-                            <input type="number" style={{ ...s.input, ...(fieldErr('split') ? s.inputError : {}) }} value={aimfoxVal} onChange={e => handleAimfoxChange(e.target.value)} placeholder="0.00" min="0" max={amount} />
+                            <input type="number" style={s.input} value={aimfoxVal} onChange={e => handleAimfoxChange(e.target.value)} placeholder="0.00" />
                             {aimfoxVal && parseFloat(amount) > 0 && <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '2px' }}>{splitPct.af}% od ukupnog</div>}
                           </div>
                           <div style={s.field}>
                             <label style={s.lbl}>Social Growth ({currency || '—'})</label>
-                            <input type="number" style={{ ...s.input, ...(fieldErr('split') ? s.inputError : {}) }} value={sgVal} onChange={e => handleSgChange(e.target.value)} placeholder="0.00" min="0" max={amount} />
+                            <input type="number" style={s.input} value={sgVal} onChange={e => handleSgChange(e.target.value)} placeholder="0.00" />
                             {sgVal && parseFloat(amount) > 0 && <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '2px' }}>{splitPct.sg}% od ukupnog</div>}
                           </div>
                         </div>
-                        <div style={{ marginTop: '10px', background: '#fff', borderRadius: '8px', padding: '10px 12px', border: '0.5px solid #e5e5e5' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
-                            <span style={{ color: '#888' }}>Aimfox</span>
-                            <span style={{ fontWeight: '500', color: '#0C447C' }}>{aimfoxVal ? `${parseFloat(aimfoxVal).toLocaleString('sr-RS')} ${currency}` : '—'}</span>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '8px' }}>
-                            <span style={{ color: '#888' }}>Social Growth</span>
-                            <span style={{ fontWeight: '500', color: '#0F6E56' }}>{sgVal ? `${parseFloat(sgVal).toLocaleString('sr-RS')} ${currency}` : '—'}</span>
-                          </div>
-                          {aimfoxVal && sgVal && parseFloat(amount) > 0 && (
-                            <div style={{ height: '6px', borderRadius: '3px', background: '#e5e5e5', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${splitPct.af}%`, background: '#0C447C', borderRadius: '3px', display: 'inline-block' }} />
-                              <div style={{ height: '100%', width: `${splitPct.sg}%`, background: '#1D9E75', borderRadius: '3px', display: 'inline-block' }} />
-                            </div>
-                          )}
-                          {aimfoxVal && sgVal && !splitOk && <div style={{ fontSize: '11px', color: '#A32D2D', marginTop: '6px' }}>⚠️ Zbir ({splitTotal.toLocaleString('sr-RS')} {currency}) ne odgovara ukupnom ({parseFloat(amount).toLocaleString('sr-RS')} {currency})</div>}
-                          {aimfoxVal && sgVal && splitOk && <div style={{ fontSize: '11px', color: '#1D9E75', marginTop: '6px' }}>✓ Split je ispravan</div>}
-                        </div>
+                        {aimfoxVal && sgVal && splitOk && <div style={{ fontSize: '11px', color: '#1D9E75', marginTop: '6px' }}>✓ Split je ispravan</div>}
+                        {aimfoxVal && sgVal && !splitOk && <div style={{ fontSize: '11px', color: '#A32D2D', marginTop: '6px' }}>⚠️ Zbir ne odgovara ukupnom</div>}
                       </div>
                     )}
                   </div>
+
+                  {/* ── OPEX / Performance ── */}
+                  {opexPanel}
+
+                  {/* ── Cash Flow Classification ── */}
+                  {cfPanel}
                 </>
               )}
-
-              {/* ── OPEX / Performance ── */}
-              {opexPanel}
 
               {invType === 'revenue' && (
                 <div style={s.section}>
@@ -881,6 +981,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                   </div>
                 </div>
               )}
+
               <div style={s.section}>
                 <div style={s.sectionTitle}>Tags & note</div>
                 <div style={s.tagRow}>
@@ -896,7 +997,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
             </>
           )}
 
-          {/* ── STEP 4 — Review & post ── */}
+          {/* ── STEP 4 ── */}
           {step === 4 && (
             <div style={s.section}>
               <div style={s.sectionTitle}>Review before posting</div>
@@ -926,23 +1027,19 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                   ['Due date', dueDate || '—'],
                   ['Type', invType],
                   ['P&L Impact', linkedTxId ? '❌ None — reconciled with Direct tx' : '✅ Yes'],
-                  ['Account number', accNum || '—'],
-                  ['Model / Poziv', model ? `${model} / ${refNum}` : refNum || '—'],
                 ]},
                 { title: 'Amounts', rows: [
                   ['Original amount', amount ? `${parseFloat(amount).toLocaleString('sr-RS')} ${currency}` : '—'],
                   ['Exchange rate', exRate ? `${parseFloat(exRate).toFixed(4)} (${rateSource || 'Manual'})` : 'N/A'],
                   ['USD equivalent', `$${usdAmount.toFixed(2)}`],
                 ]},
-                { title: 'P&L classification', rows: [
+                { title: 'P&L & CF classification', rows: [
                   ['P&L Category', plCatName || '—'],
-                  ['P&L Sub-category', plSubName || '—'],
                   ['Department', deptName || '—'],
-                  ['Dept. sub-category', deptSubName || '—'],
-                  ['Expense description', expDesc || '—'],
-                  ['Revenue stream', revStream || '—'],
+                  ['Description', expDesc || '—'],
                   ['Rev. stream alloc.', revAllocLabel()],
                   ['Expense type', opexLabel()],
+                  ['CF Classification', cfLabel()],
                 ]},
               ].map(sec => (
                 <div key={sec.title} style={s.reviewSection}>
