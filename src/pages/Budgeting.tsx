@@ -149,6 +149,10 @@ function DrillModal({
 
         console.log('[Drill] filter:', { plCat, plSub, dept, deptSub, desc })
 
+        // Last day of month — correct for all months
+        const [yr, mo] = drill.month.split('-').map(Number)
+        const lastDay = new Date(yr, mo, 0).getDate() // day 0 of next month = last day of this month
+
         let query = supabase
           .from('transactions')
           .select(`
@@ -165,7 +169,7 @@ function DrillModal({
           .eq('tx_subtype', 'expense')
           .eq('status', 'posted')
           .gte('transaction_date', `${drill.month}-01`)
-          .lte('transaction_date', `${drill.month}-31`)
+          .lte('transaction_date', `${drill.month}-${String(lastDay).padStart(2, '0')}`)
 
         if (plCat) query = query.eq('pl_category', plCat)
         if (plSub) query = query.eq('pl_subcategory', plSub)
@@ -423,7 +427,7 @@ export default function Budgeting() {
         .eq('tx_subtype', 'expense')
         .eq('status', 'posted')
         .gte('transaction_date', `${firstMonth}-01`)
-        .lte('transaction_date', `${lastMonth}-31`)
+        .lte('transaction_date', (() => { const [y,m] = lastMonth.split('-').map(Number); return `${lastMonth}-${new Date(y,m,0).getDate()}` })())
 
       // 2. Budget entries
       const { data: budgetEntries } = await supabase
