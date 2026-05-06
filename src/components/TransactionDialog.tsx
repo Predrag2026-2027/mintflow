@@ -95,6 +95,15 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   const [opexVal, setOpexVal] = useState('')
   const [performanceVal, setPerformanceVal] = useState('')
 
+  // Cash Flow Classification
+  const [cfType, setCfType] = useState(transaction?.cf_type || '')
+  const [cfFrequency, setCfFrequency] = useState(transaction?.cf_frequency || 'monthly')
+  const [cfNextMonthEst, setCfNextMonthEst] = useState(transaction?.cf_next_month_est?.toString() || '')
+  const [cfAccrualFrom, setCfAccrualFrom] = useState(transaction?.cf_accrual_from || '')
+  const [cfAccrualTo, setCfAccrualTo] = useState(transaction?.cf_accrual_to || '')
+  const [cfCapexMonths, setCfCapexMonths] = useState(transaction?.cf_capex_months?.toString() || '')
+  const [cfReimbursableDate, setCfReimbursableDate] = useState(transaction?.cf_reimbursable_date || '')
+
   // Step 2
   const [amount, setAmount] = useState('')
   const [exRate, setExRate] = useState('')
@@ -293,6 +302,13 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
     setOpexType(transaction.opex_type || 'opex')
     setOpexVal(transaction.opex_amount?.toString() || '')
     setPerformanceVal(transaction.performance_amount?.toString() || '')
+    setCfType(transaction.cf_type || '')
+    setCfFrequency(transaction.cf_frequency || 'monthly')
+    setCfNextMonthEst(transaction.cf_next_month_est?.toString() || '')
+    setCfAccrualFrom(transaction.cf_accrual_from || '')
+    setCfAccrualTo(transaction.cf_accrual_to || '')
+    setCfCapexMonths(transaction.cf_capex_months?.toString() || '')
+    setCfReimbursableDate(transaction.cf_reimbursable_date || '')
   }, [transaction])
 
   useEffect(() => {
@@ -410,6 +426,16 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
     return `Split — OPEX: ${currency} ${parseFloat(opexVal || '0').toFixed(2)} / Perf: ${currency} ${parseFloat(performanceVal || '0').toFixed(2)}`
   }
 
+  const cfLabel = () => {
+    if (!cfType) return '—'
+    if (cfType === 'recurring') return `Recurring ${cfFrequency}`
+    if (cfType === 'one_time') return 'One-time'
+    if (cfType === 'accrual') return `Accrual ${cfAccrualFrom ? `${cfAccrualFrom} → ${cfAccrualTo}` : ''}`
+    if (cfType === 'capex') return `CapEx (${cfCapexMonths || '?'} months)`
+    if (cfType === 'reimbursable') return `Reimbursable${cfReimbursableDate ? ` by ${cfReimbursableDate}` : ''}`
+    return '—'
+  }
+
   const handlePost = async () => {
     setTouched({ companyId: true, bankId: true, currency: true, txDate: true, linkedInvoices: true, plCat: true, dept: true, revStream: true, amount: true, exRate: true, split: true, opexSplit: true })
     const e = runValidation()
@@ -445,6 +471,13 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
         rev_alloc_aimfox: aimfoxAmount, rev_alloc_sg: sgAmount,
         opex_type: isDirectWithPL && directSubtype === 'expense' ? opexType : null,
         opex_amount: opexAmount, performance_amount: perfAmount,
+        cf_type: isDirectWithPL && directSubtype === 'expense' ? (cfType || null) : null,
+        cf_frequency: cfType === 'recurring' ? cfFrequency : null,
+        cf_next_month_est: cfType === 'recurring' ? (cfNextMonthEst ? parseFloat(cfNextMonthEst) : (amount ? parseFloat(amount) : null)) : null,
+        cf_accrual_from: cfType === 'accrual' ? (cfAccrualFrom || null) : null,
+        cf_accrual_to: cfType === 'accrual' ? (cfAccrualTo || null) : null,
+        cf_capex_months: cfType === 'capex' ? (cfCapexMonths ? parseInt(cfCapexMonths) : null) : null,
+        cf_reimbursable_date: cfType === 'reimbursable' ? (cfReimbursableDate || null) : null,
         account_number: accNum || null, model: model || null,
         reference_number: refNum || null, note: note || null,
         tags: tags.length > 0 ? tags : null, status: 'posted',
@@ -564,6 +597,106 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
               }
             </div>
           )}
+        </div>
+      )}
+    </div>
+  )
+
+  // ── Cash Flow Classification panel ──────────────────
+  const cfPanel = (
+    <div style={s.section}>
+      <div style={s.sectionTitle}>Cash flow classification</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '8px' }}>
+        {[
+          { id: 'recurring', label: '🔁 Recurring', sub: 'Monthly/Qtrly/Yearly' },
+          { id: 'one_time', label: '1️⃣ One-time', sub: 'Non-repeating' },
+          { id: 'accrual', label: '📅 Accrual', sub: 'Period-based' },
+          { id: 'capex', label: '🏗 CapEx', sub: 'Capital expenditure' },
+          { id: 'reimbursable', label: '↩️ Reimbursable', sub: 'Expected return' },
+        ].map(a => (
+          <div key={a.id}
+            style={{ ...s.allocBtn, ...(cfType === a.id ? { border: '2px solid #1D9E75', background: '#E1F5EE' } : {}) }}
+            onClick={() => setCfType(cfType === a.id ? '' : a.id)}>
+            <div style={{ fontSize: '11px', fontWeight: '600', color: cfType === a.id ? '#085041' : '#111' }}>{a.label}</div>
+            <div style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>{a.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {cfType === 'recurring' && (
+        <div style={{ marginTop: '12px', background: '#f5f5f3', borderRadius: '10px', padding: '14px', border: '0.5px solid #e5e5e5' }}>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+            {[{ id: 'monthly', label: '📆 Monthly' }, { id: 'quarterly', label: '📊 Quarterly' }, { id: 'yearly', label: '📅 Yearly' }].map(f => (
+              <div key={f.id}
+                style={{ flex: 1, padding: '8px', border: cfFrequency === f.id ? '2px solid #1D9E75' : '0.5px solid #e5e5e5', borderRadius: '8px', background: cfFrequency === f.id ? '#E1F5EE' : '#fff', cursor: 'pointer', textAlign: 'center' as const, fontSize: '12px', fontWeight: cfFrequency === f.id ? '600' : '400', color: cfFrequency === f.id ? '#085041' : '#666' }}
+                onClick={() => setCfFrequency(f.id)}>{f.label}</div>
+            ))}
+          </div>
+          <div style={s.field}>
+            <label style={s.lbl}>Next month estimate ({currency || '—'})</label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input type="number" style={{ ...s.input, flex: 1 }} value={cfNextMonthEst}
+                onChange={e => setCfNextMonthEst(e.target.value)}
+                placeholder={amount ? `Auto: ${parseFloat(amount).toLocaleString()}` : '0.00'} />
+              {!cfNextMonthEst && amount && (
+                <button style={s.linkBtn} onClick={() => setCfNextMonthEst(amount)}>Use this amount</button>
+              )}
+            </div>
+            {amount && (
+              <div style={{ fontSize: '10px', color: '#888', marginTop: '4px' }}>
+                Auto: {cfFrequency === 'monthly' ? parseFloat(amount).toLocaleString() : cfFrequency === 'quarterly' ? (parseFloat(amount) / 3).toFixed(2) : (parseFloat(amount) / 12).toFixed(2)} {currency}/mo
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {cfType === 'accrual' && (
+        <div style={{ marginTop: '12px', background: '#f5f5f3', borderRadius: '10px', padding: '14px', border: '0.5px solid #e5e5e5' }}>
+          <div style={s.row2}>
+            <div style={s.field}>
+              <label style={s.lbl}>From</label>
+              <input type="date" style={s.input} value={cfAccrualFrom} onChange={e => setCfAccrualFrom(e.target.value)} />
+            </div>
+            <div style={s.field}>
+              <label style={s.lbl}>To</label>
+              <input type="date" style={s.input} value={cfAccrualTo} onChange={e => setCfAccrualTo(e.target.value)} />
+            </div>
+          </div>
+          {cfAccrualFrom && cfAccrualTo && amount && (
+            <div style={{ fontSize: '11px', color: '#085041', marginTop: '4px' }}>
+              {(() => { const m = Math.max(1, Math.round((new Date(cfAccrualTo).getTime() - new Date(cfAccrualFrom).getTime()) / (1000*60*60*24*30))); return `Monthly: ${(parseFloat(amount)/m).toFixed(2)} ${currency} × ${m} months` })()}
+            </div>
+          )}
+        </div>
+      )}
+
+      {cfType === 'capex' && (
+        <div style={{ marginTop: '12px', background: '#f5f5f3', borderRadius: '10px', padding: '14px', border: '0.5px solid #e5e5e5' }}>
+          <div style={s.field}>
+            <label style={s.lbl}>Amortization period (months)</label>
+            <input type="number" style={s.input} value={cfCapexMonths} onChange={e => setCfCapexMonths(e.target.value)} placeholder="e.g. 36" min="1" />
+            {cfCapexMonths && amount && (
+              <div style={{ fontSize: '11px', color: '#085041', marginTop: '4px' }}>
+                Monthly depreciation: {(parseFloat(amount) / parseFloat(cfCapexMonths)).toFixed(2)} {currency}/mo
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {cfType === 'reimbursable' && (
+        <div style={{ marginTop: '12px', background: '#f5f5f3', borderRadius: '10px', padding: '14px', border: '0.5px solid #e5e5e5' }}>
+          <div style={s.field}>
+            <label style={s.lbl}>Expected reimbursement date</label>
+            <input type="date" style={s.input} value={cfReimbursableDate} onChange={e => setCfReimbursableDate(e.target.value)} />
+          </div>
+        </div>
+      )}
+
+      {cfType === 'one_time' && (
+        <div style={{ marginTop: '8px', fontSize: '12px', color: '#888', background: '#f5f5f3', borderRadius: '8px', padding: '10px 12px' }}>
+          One-time expense — will not be included in future month estimates.
         </div>
       )}
     </div>
@@ -1011,6 +1144,9 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
 
                       {/* ── OPEX / Performance split ── */}
                       {opexPanel}
+
+                      {/* ── Cash Flow Classification ── */}
+                      {cfPanel}
                     </>
                   )}
 
@@ -1082,6 +1218,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                   ['Description', expDesc || '—'],
                   ['Rev. stream alloc.', revAllocLabel()],
                   ['Expense type', opexLabel()],
+                  ['CF Classification', cfLabel()],
                 ]}] : []),
                 { title: 'Amounts', rows: [
                   ['Original amount', amount ? `${parseFloat(amount).toLocaleString()} ${currency}` : '—'],
