@@ -122,12 +122,21 @@ function DrillModal({
       setLoading(true)
 
       if (drill.mode === 'actual') {
-        // Build pl_category filter from classKey
-        const classKey = drill.classKey
-        const [plCat, plSub, dept, deptSub, desc] = (classKey || '||||').split('|')
+        // leafClassKeys — all leaf classification keys under this row
+        // for leaf rows it's [classKey], for parent rows it's all descendants
+        const keys = drill.leafClassKeys && drill.leafClassKeys.length > 0
+          ? drill.leafClassKeys
+          : drill.classKey ? [drill.classKey] : []
 
-        // Build filters for each leaf
-        let query = supabase
+        if (keys.length === 0) {
+          setTxList([])
+          setLoading(false)
+          return
+        }
+
+        // Fetch all transactions matching any of the leaf keys
+        // We fetch broadly by date + company, then filter in JS
+        const { data: allTx } = await supabase
           .from('transactions')
           .select(`
             id, transaction_date, amount, amount_usd, currency,
@@ -144,17 +153,34 @@ function DrillModal({
           .eq('status', 'posted')
           .gte('transaction_date', `${drill.month}-01`)
           .lte('transaction_date', `${drill.month}-31`)
+          .order('transaction_date', { ascending: false })
 
-        // Filter by classification
-        if (plCat) query = query.eq('pl_category', plCat)
-        if (plSub) query = query.eq('pl_subcategory', plSub)
-        if (dept) query = query.eq('department', dept)
-        if (deptSub) query = query.eq('dept_subcategory', deptSub)
-        if (desc) query = query.eq('expense_description', desc)
+        // Filter in JS by matching any of the leaf classKeys
+        const makeKey = (tx: any) => [
+          tx.pl_category || '', tx.pl_subcategory || '',
+          tx.department || '', tx.dept_subcategory || '',
+          tx.expense_description || '',
+        ].join('|')
 
-        const { data } = await query.order('transaction_date', { ascending: false })
+        // Build prefix matcher — if key ends with ||| it's a partial match
+        const keySet = new Set(keys)
+        const filtered = (allTx || []).filter((tx: any) => {
+          const txKey = makeKey(tx)
+          // Exact match
+          if (keySet.has(txKey)) return true
+          // Prefix match — parent row's classKey covers all children
+          for (const k of keys) {
+            const parts = k.split('|')
+            // Find how many non-empty parts the key has
+            const lastNonEmpty = parts.reduceRight((acc, v, i) => acc === -1 && v !== '' ? i : acc, -1)
+            if (lastNonEmpty === -1) continue
+            const prefix = parts.slice(0, lastNonEmpty + 1).join('|')
+            if (txKey.startsWith(prefix)) return true
+          }
+          return false
+        })
 
-        const mapped: DrillTx[] = (data || []).map((tx: any) => {
+        const mapped: DrillTx[] = filtered.map((tx: any) => {
           const link = tx.invoice_transaction_links?.[0]
           return {
             id: tx.id,
@@ -639,13 +665,16 @@ export default function Budgeting() {
 
   const openDrill = (row: BudgetRow, m: MonthMeta, mode: 'actual' | 'estimate') => {
     if (mode === 'estimate') {
-      // For estimate — just show info panel or open inline edit
       if (!row.hasChildren) {
         startEdit(row.key, m.key, row.cells[m.key]?.estimate || 0)
         return
       }
     }
-    const leafClassKeys = row.hasChildren ? getLeafClassKeys(row.key) : undefined
+    // For leaf rows: leafClassKeys = [classKey], for parent rows: all descendant classKeys
+    const leafClassKeys = row.hasChildren
+      ? getLeafClassKeys(row.key)
+      : (row.classKey ? [row.classKey] : [])
+
     setDrill({
       rowKey: row.key,
       rowLabel: row.label,
