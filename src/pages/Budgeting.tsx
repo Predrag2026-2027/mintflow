@@ -122,20 +122,7 @@ function DrillModal({
       setLoading(true)
 
       if (drill.mode === 'actual') {
-        // leafClassKeys — all leaf classification keys under this row
-        // for leaf rows it's [classKey], for parent rows it's all descendants
-        const keys = drill.leafClassKeys && drill.leafClassKeys.length > 0
-          ? drill.leafClassKeys
-          : drill.classKey ? [drill.classKey] : []
-
-        if (keys.length === 0) {
-          setTxList([])
-          setLoading(false)
-          return
-        }
-
-        // Fetch all transactions matching any of the leaf keys
-        // We fetch broadly by date + company, then filter in JS
+        // Fetch ALL transactions for this month+company, filter in JS
         const { data: allTx } = await supabase
           .from('transactions')
           .select(`
@@ -155,40 +142,51 @@ function DrillModal({
           .lte('transaction_date', `${drill.month}-31`)
           .order('transaction_date', { ascending: false })
 
-        // Filter in JS by matching any of the leaf classKeys
-        const makeKey = (tx: any) => [
+        const mkKey = (tx: any) => [
           tx.pl_category || '', tx.pl_subcategory || '',
           tx.department || '', tx.dept_subcategory || '',
           tx.expense_description || '',
         ].join('|')
 
-        // Build prefix matcher — if key ends with ||| it's a partial match
-        const keySet = new Set(keys)
-        const filtered = (allTx || []).filter((tx: any) => {
-          const txKey = makeKey(tx)
-          // Exact match
-          if (keySet.has(txKey)) return true
-          // Prefix match — parent row's classKey covers all children
-          for (const k of keys) {
-            const parts = k.split('|')
-            // Find how many non-empty parts the key has
-            const lastNonEmpty = parts.reduceRight((acc, v, i) => acc === -1 && v !== '' ? i : acc, -1)
-            if (lastNonEmpty === -1) continue
-            const prefix = parts.slice(0, lastNonEmpty + 1).join('|')
-            if (txKey.startsWith(prefix)) return true
+        // Build set of all leaf keys to match against
+        const leafKeys = drill.leafClassKeys && drill.leafClassKeys.length > 0
+          ? drill.leafClassKeys
+          : drill.classKey ? [drill.classKey] : []
+
+        console.log('[Drill] leafKeys:', leafKeys)
+        console.log('[Drill] allTx count:', (allTx || []).length)
+        if ((allTx || []).length > 0) {
+          console.log('[Drill] sample txKey:', mkKey((allTx as any[])[0]))
+        }
+
+        // Match: txKey must start with the non-empty prefix of any leaf key
+        const matches = (txKey: string): boolean => {
+          for (const lk of leafKeys) {
+            // Exact match
+            if (txKey === lk) return true
+            // Prefix: trim trailing empty segments from lk, check txKey starts with that
+            const segments = lk.split('|')
+            let last = segments.length - 1
+            while (last >= 0 && segments[last] === '') last--
+            if (last < 0) continue
+            const prefix = segments.slice(0, last + 1).join('|')
+            if (txKey.startsWith(prefix + '|') || txKey === prefix) return true
           }
           return false
-        })
+        }
+
+        const filtered = (allTx || []).filter((tx: any) => matches(mkKey(tx)))
+        console.log('[Drill] filtered count:', filtered.length)
 
         const mapped: DrillTx[] = filtered.map((tx: any) => {
-          const link = tx.invoice_transaction_links?.[0]
+          const link = (tx.invoice_transaction_links as any[])?.[0]
           return {
             id: tx.id,
             transaction_date: tx.transaction_date,
             amount: tx.amount,
             amount_usd: tx.amount_usd,
             currency: tx.currency,
-            partner_name: tx.partners?.name || '—',
+            partner_name: (tx.partners as any)?.name || '—',
             pl_category: tx.pl_category || '—',
             department: tx.department || '—',
             expense_description: tx.expense_description || '',
