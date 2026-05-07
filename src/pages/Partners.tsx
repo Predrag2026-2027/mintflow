@@ -172,13 +172,14 @@ export default function Partners() {
           partner={editPartner}
           onClose={() => { setShowDialog(false); setEditPartner(null) }}
           onSaved={() => { setShowDialog(false); setEditPartner(null); fetchPartners() }}
+          onDelete={async (id, name) => { setShowDialog(false); setEditPartner(null); await deletePartner(id, name) }}
         />
       )}
     </div>
   )
 }
 
-function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: () => void; onSaved: () => void }) {
+function PartnerDialog({ partner, onClose, onSaved, onDelete }: { partner: any; onClose: () => void; onSaved: () => void; onDelete: (id: string, name: string) => void }) {
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
   const [activeTab, setActiveTab] = useState<'info' | 'accounts'>('info')
@@ -539,7 +540,14 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
         </div>
 
         <div style={ds.footer}>
-          <button style={ds.btnGhost} onClick={onClose}>Cancel</button>
+          <div style={{ display: 'flex', gap: '8px', flex: 1 }}>
+            <button style={ds.btnGhost} onClick={onClose}>Cancel</button>
+            {partner?.id && (
+              <button style={ds.btnDelete} onClick={() => onDelete(partner.id, partner.name)}>
+                🗑 Delete
+              </button>
+            )}
+          </div>
           {activeTab === 'info' && (
             <button style={ds.btnPrimary} onClick={handleSave} disabled={saving || !name.trim()}>
               {saving ? 'Saving...' : partner ? 'Update partner' : 'Save partner'}
@@ -609,5 +617,6 @@ const ds: Record<string, React.CSSProperties> = {
   accountRowPrimary: { border: '1.5px solid #00D47E', background: 'rgba(0,212,126,0.06)' },
   accountBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '4px 10px', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '6px', background: 'transparent', color: '#7A9BB8', cursor: 'pointer', whiteSpace: 'nowrap' as const },
   btnGhost: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.10)', background: 'transparent', color: '#7A9BB8', cursor: 'pointer' },
+  btnDelete: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255,91,90,0.3)', background: 'rgba(255,91,90,0.08)', color: '#FF5B5A', cursor: 'pointer' },
   btnPrimary: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 18px', borderRadius: '8px', border: 'none', background: '#00D47E', color: '#060E1A', cursor: 'pointer', fontWeight: '500' },
 }
