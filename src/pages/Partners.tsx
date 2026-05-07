@@ -206,14 +206,14 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
   useEffect(() => { if (partner?.id) fetchAccounts() }, [partner?.id]) // eslint-disable-line
 
   const lookupNBS = async () => {
-    const pib = nbsPib.trim().replace(/\D/g, '')
-    if (!pib || pib.length < 9) return
+    const mb = nbsPib.trim().replace(/\D/g, '')
+    if (!mb || mb.length < 8) return
     setNbsLoading(true)
     setNbsError('')
     setNbsResult(null)
     try {
       const { data, error } = await supabase.functions.invoke('lookup-pib', {
-        body: { pib },
+        body: { mb },
       })
       if (error) {
         setNbsError(`NBS greška: ${error.message}`)
@@ -326,33 +326,33 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
           {activeTab === 'info' && (
             <>
               <div style={ds.section}>
-                <div style={ds.sectionTitle}>🏛 NBS lookup — automatska pretraga po PIB-u</div>
+                <div style={ds.sectionTitle}>🏛 NBS lookup — automatska pretraga po matičnom broju</div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <input
                     style={{ ...ds.input, flex: 1, fontFamily: 'monospace', letterSpacing: '0.1em', fontSize: '15px' }}
                     value={nbsPib}
-                    onChange={e => { setNbsPib(e.target.value.replace(/\D/g, '').slice(0, 9)); setNbsResult(null); setNbsError('') }}
+                    onChange={e => { setNbsPib(e.target.value.replace(/\D/g, '').slice(0, 8)); setNbsResult(null); setNbsError('') }}
                     onKeyDown={e => { if (e.key === 'Enter') lookupNBS() }}
-                    placeholder="Unesite PIB (9 cifara)..."
-                    maxLength={9}
+                    placeholder="Unesite matični broj (8 cifara)..."
+                    maxLength={8}
                   />
                   <button
                     style={{
                       fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '600',
                       padding: '8px 20px', borderRadius: '8px', border: 'none', minWidth: '130px',
-                      cursor: nbsPib.length >= 9 && !nbsLoading ? 'pointer' : 'not-allowed',
-                      background: nbsPib.length >= 9 && !nbsLoading ? '#00D47E' : 'rgba(255,255,255,0.06)',
-                      color: nbsPib.length >= 9 && !nbsLoading ? '#060E1A' : '#7A9BB8',
+                      cursor: nbsPib.length >= 8 && !nbsLoading ? 'pointer' : 'not-allowed',
+                      background: nbsPib.length >= 8 && !nbsLoading ? '#00D47E' : 'rgba(255,255,255,0.06)',
+                      color: nbsPib.length >= 8 && !nbsLoading ? '#060E1A' : '#7A9BB8',
                       transition: 'all 0.15s',
                     }}
                     onClick={lookupNBS}
-                    disabled={nbsPib.length < 9 || nbsLoading}
+                    disabled={nbsPib.length < 8 || nbsLoading}
                   >
                     {nbsLoading ? '⏳ Tražim...' : '🔍 NBS Lookup'}
                   </button>
                 </div>
                 <div style={{ marginTop: '6px', fontSize: '11px', color: '#7A9BB8' }}>
-                  Unesi PIB i pritisni Enter ili klikni dugme — podaci firme se automatski popunjavaju
+                  Unesi matični broj i pritisni Enter ili klikni dugme — podaci firme se automatski popunjavaju
                 </div>
 
                 {nbsError && (
