@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
-
 export default function Partners() {
   const [partners, setPartners] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -215,19 +212,12 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
     setNbsError('')
     setNbsResult(null)
     try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/lookup-pib`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'apikey': SUPABASE_ANON_KEY || '',
-        },
-        body: JSON.stringify({ pib }),
+      const { data, error } = await supabase.functions.invoke('lookup-pib', {
+        body: { pib },
       })
-      const data = await res.json()
-      if (data.error) {
-        setNbsError(`NBS greška: ${data.error}`)
-      } else if (data.success && data.name) {
+      if (error) {
+        setNbsError(`NBS greška: ${error.message}`)
+      } else if (data?.success && data?.name) {
         setNbsResult(data)
         if (data.name) setName(data.name)
         if (data.pib) setTaxId(data.pib)
@@ -236,7 +226,7 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
         if (data.city) setCity(data.city)
         if (!country) setCountry('Serbia')
       } else {
-        setNbsError('Firma nije pronađena u NBS registru.')
+        setNbsError(data?.error || 'Firma nije pronađena u NBS registru.')
       }
     } catch (e: any) {
       setNbsError(`Greška pri pozivu NBS: ${e.message}`)
@@ -335,7 +325,6 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
         <div style={ds.body}>
           {activeTab === 'info' && (
             <>
-              {/* ── NBS Lookup ── */}
               <div style={ds.section}>
                 <div style={ds.sectionTitle}>🏛 NBS lookup — automatska pretraga po PIB-u</div>
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -409,7 +398,6 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
                 )}
               </div>
 
-              {/* ── Basic info ── */}
               <div style={ds.section}>
                 <div style={ds.sectionTitle}>Basic info</div>
                 <div style={ds.row2}>
