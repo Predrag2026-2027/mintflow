@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 
+const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL
+const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY
+
 export default function Partners() {
   const [partners, setPartners] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -181,6 +184,10 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
   const [isActive, setIsActive] = useState(partner?.is_active !== false)
 
   // NBS lookup state
+  const [nbsPib, setNbsPib] = useState('')
+  const [nbsLoading, setNbsLoading] = useState(false)
+  const [nbsResult, setNbsResult] = useState<any>(null)
+  const [nbsError, setNbsError] = useState('')
 
   // Bank accounts
   const [accounts, setAccounts] = useState<any[]>([])
@@ -201,12 +208,51 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
 
   useEffect(() => { if (partner?.id) fetchAccounts() }, [partner?.id]) // eslint-disable-line
 
-  // Reset NBS result when registrationNumber changes
+  const lookupNBS = async () => {
+    const pib = nbsPib.trim().replace(/\D/g, '')
+    if (!pib || pib.length < 9) return
+    setNbsLoading(true)
+    setNbsError('')
+    setNbsResult(null)
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/lookup-pib`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'apikey': SUPABASE_ANON_KEY || '',
+        },
+        body: JSON.stringify({ pib }),
+      })
+      const data = await res.json()
+      if (data.error) {
+        setNbsError(`NBS greška: ${data.error}`)
+      } else if (data.success && data.name) {
+        setNbsResult(data)
+        if (data.name) setName(data.name)
+        if (data.pib) setTaxId(data.pib)
+        if (data.mb) setRegistrationNumber(data.mb)
+        if (data.address) setAddress(data.address)
+        if (data.city) setCity(data.city)
+        if (!country) setCountry('Serbia')
+      } else {
+        setNbsError('Firma nije pronađena u NBS registru.')
+      }
+    } catch (e: any) {
+      setNbsError(`Greška pri pozivu NBS: ${e.message}`)
+    }
+    setNbsLoading(false)
+  }
 
-  const lookupNBS = () => {
-    const mb = registrationNumber.trim()
-    if (!mb || mb.length < 6) return
-    window.open(`https://pretraga.apr.gov.rs/search?maticni_broj=${mb}`, '_blank')
+  const applyNbsAccount = async (accNumber: string) => {
+    if (!partner?.id || !accNumber) return
+    const exists = accounts.find(a => a.account_number === accNumber)
+    if (exists) return
+    const isPrimary = accounts.length === 0
+    await supabase.from('partner_accounts').insert({
+      partner_id: partner.id, account_number: accNumber, currency: 'RSD', is_primary: isPrimary,
+    })
+    fetchAccounts()
   }
 
   const setPrimary = async (accountId: string) => {
@@ -240,8 +286,7 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
     setSaving(true)
     const payload = {
       name: name.trim(), type,
-      tax_id: taxId || null,
-      registration_number: registrationNumber || null,
+      tax_id: taxId || null, registration_number: registrationNumber || null,
       address: address || null, city: city || null, country: country || null,
       contact_name: contactName || null, contact_email: contactEmail || null,
       contact_phone: contactPhone || null, note: note || null, is_active: isActive,
@@ -255,7 +300,6 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
     setTimeout(() => { setSuccess(false); onSaved() }, 1200)
     setSaving(false)
   }
-
 
   if (success) return (
     <div style={ds.overlay}>
@@ -280,9 +324,7 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
 
         {partner?.id && (
           <div style={ds.tabBar}>
-            <button style={{ ...ds.tab, ...(activeTab === 'info' ? ds.tabActive : {}) }} onClick={() => setActiveTab('info')}>
-              📋 Basic info
-            </button>
+            <button style={{ ...ds.tab, ...(activeTab === 'info' ? ds.tabActive : {}) }} onClick={() => setActiveTab('info')}>📋 Basic info</button>
             <button style={{ ...ds.tab, ...(activeTab === 'accounts' ? ds.tabActive : {}) }} onClick={() => setActiveTab('accounts')}>
               🏦 Bank accounts
               {accounts.length > 0 && <span style={ds.tabBadge}>{accounts.length}</span>}
@@ -293,41 +335,83 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
         <div style={ds.body}>
           {activeTab === 'info' && (
             <>
+              {/* ── NBS Lookup ── */}
               <div style={ds.section}>
-                <div style={ds.sectionTitle}>Basic info</div>
-
-                {/* APR lookup by MB */}
-                <div style={{ marginBottom: '14px' }}>
-                  <label style={ds.lbl}>APR lookup — pretraga po matičnom broju</label>
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                    <input
-                      style={{ ...ds.input, flex: 1, fontFamily: 'monospace', letterSpacing: '0.08em' }}
-                      value={registrationNumber}
-                      onChange={e => setRegistrationNumber(e.target.value.replace(/\D/g, '').slice(0, 8))}
-                      placeholder="Unesite matični broj (8 cifara)..."
-                      maxLength={8}
-                    />
-                    <button
-                      style={{
-                        fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500',
-                        padding: '8px 16px', borderRadius: '8px', border: 'none',
-                        cursor: registrationNumber.trim().length >= 6 ? 'pointer' : 'not-allowed',
-                        background: registrationNumber.trim().length >= 6 ? '#00D47E' : 'rgba(255,255,255,0.08)',
-                        color: registrationNumber.trim().length >= 6 ? '#060E1A' : '#7A9BB8',
-                        whiteSpace: 'nowrap' as const,
-                        transition: 'all 0.15s',
-                      }}
-                      onClick={lookupNBS}
-                      disabled={registrationNumber.trim().length < 6}
-                    >
-                      🏛 Otvori APR
-                    </button>
-                  </div>
-                  <div style={{ marginTop: '6px', fontSize: '11px', color: '#7A9BB8' }}>
-                    Otvara APR pretragu u novom tabu — pronađi firmu i ručno unesi podatke
-                  </div>
+                <div style={ds.sectionTitle}>🏛 NBS lookup — automatska pretraga po PIB-u</div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    style={{ ...ds.input, flex: 1, fontFamily: 'monospace', letterSpacing: '0.1em', fontSize: '15px' }}
+                    value={nbsPib}
+                    onChange={e => { setNbsPib(e.target.value.replace(/\D/g, '').slice(0, 9)); setNbsResult(null); setNbsError('') }}
+                    onKeyDown={e => { if (e.key === 'Enter') lookupNBS() }}
+                    placeholder="Unesite PIB (9 cifara)..."
+                    maxLength={9}
+                  />
+                  <button
+                    style={{
+                      fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '600',
+                      padding: '8px 20px', borderRadius: '8px', border: 'none', minWidth: '130px',
+                      cursor: nbsPib.length >= 9 && !nbsLoading ? 'pointer' : 'not-allowed',
+                      background: nbsPib.length >= 9 && !nbsLoading ? '#00D47E' : 'rgba(255,255,255,0.06)',
+                      color: nbsPib.length >= 9 && !nbsLoading ? '#060E1A' : '#7A9BB8',
+                      transition: 'all 0.15s',
+                    }}
+                    onClick={lookupNBS}
+                    disabled={nbsPib.length < 9 || nbsLoading}
+                  >
+                    {nbsLoading ? '⏳ Tražim...' : '🔍 NBS Lookup'}
+                  </button>
+                </div>
+                <div style={{ marginTop: '6px', fontSize: '11px', color: '#7A9BB8' }}>
+                  Unesi PIB i pritisni Enter ili klikni dugme — podaci firme se automatski popunjavaju
                 </div>
 
+                {nbsError && (
+                  <div style={{ marginTop: '10px', padding: '10px 14px', background: 'rgba(255,91,90,0.1)', border: '1px solid rgba(255,91,90,0.25)', borderRadius: '8px', fontSize: '12px', color: '#FF5B5A' }}>
+                    ⚠️ {nbsError}
+                  </div>
+                )}
+
+                {nbsResult && (
+                  <div style={{ marginTop: '10px', padding: '14px', background: 'rgba(0,212,126,0.07)', border: '1px solid rgba(0,212,126,0.2)', borderRadius: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                      <span style={{ fontSize: '18px' }}>✅</span>
+                      <div style={{ fontSize: '14px', fontWeight: '600', color: '#00D47E' }}>{nbsResult.name}</div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '12px', color: '#7A9BB8', marginBottom: '8px' }}>
+                      {nbsResult.pib && <span>PIB: <strong style={{ color: '#DCE9F6', fontFamily: 'monospace' }}>{nbsResult.pib}</strong></span>}
+                      {nbsResult.mb && <span>MB: <strong style={{ color: '#DCE9F6', fontFamily: 'monospace' }}>{nbsResult.mb}</strong></span>}
+                      {nbsResult.address && <span>Adresa: <strong style={{ color: '#DCE9F6' }}>{nbsResult.address}</strong></span>}
+                      {nbsResult.city && <span>Grad: <strong style={{ color: '#DCE9F6' }}>{nbsResult.city}</strong></span>}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#5DCAA5' }}>✓ Polja u formi su automatski popunjena</div>
+
+                    {nbsResult.accounts?.length > 0 && partner?.id && (
+                      <div style={{ marginTop: '12px', borderTop: '1px solid rgba(0,212,126,0.15)', paddingTop: '10px' }}>
+                        <div style={{ fontSize: '11px', color: '#7A9BB8', marginBottom: '6px', fontWeight: '500' }}>
+                          Računi iz NBS ({nbsResult.accounts.length})
+                        </div>
+                        {nbsResult.accounts.map((acc: string) => {
+                          const exists = accounts.find(a => a.account_number === acc)
+                          return (
+                            <div key={acc} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+                              <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#DCE9F6' }}>{acc}</span>
+                              {exists
+                                ? <span style={{ fontSize: '10px', color: '#5DCAA5' }}>✓ već dodat</span>
+                                : <button style={{ ...ds.accountBtn, color: '#00D47E', borderColor: 'rgba(0,212,126,0.3)' }} onClick={() => applyNbsAccount(acc)}>+ Dodaj račun</button>
+                              }
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Basic info ── */}
+              <div style={ds.section}>
+                <div style={ds.sectionTitle}>Basic info</div>
                 <div style={ds.row2}>
                   <div style={ds.field}>
                     <label style={ds.lbl}>Name <span style={{ color: '#E24B4A' }}>*</span></label>
@@ -337,25 +421,21 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
                     <label style={ds.lbl}>Type <span style={{ color: '#E24B4A' }}>*</span></label>
                     <div style={{ display: 'flex', gap: '6px' }}>
                       {[{ id: 'vendor', label: '📤 Vendor' }, { id: 'customer', label: '📥 Customer' }, { id: 'both', label: '🔄 Both' }, { id: 'company', label: '🏢 Company' }].map(t => (
-                        <div key={t.id} style={{ ...ds.typeChip, ...(type === t.id ? ds.typeChipActive : {}) }} onClick={() => setType(t.id)}>
-                          {t.label}
-                        </div>
+                        <div key={t.id} style={{ ...ds.typeChip, ...(type === t.id ? ds.typeChipActive : {}) }} onClick={() => setType(t.id)}>{t.label}</div>
                       ))}
                     </div>
                   </div>
                 </div>
-
                 <div style={ds.row2}>
-                  <div style={ds.field}>
-                    <label style={ds.lbl}>Matični broj</label>
-                    <input style={{ ...ds.input, fontFamily: 'monospace' }} value={registrationNumber} onChange={e => setRegistrationNumber(e.target.value)} placeholder="e.g. 12345678" />
-                  </div>
                   <div style={ds.field}>
                     <label style={ds.lbl}>PIB / Tax ID</label>
                     <input style={{ ...ds.input, fontFamily: 'monospace' }} value={taxId} onChange={e => setTaxId(e.target.value)} placeholder="e.g. 102937492" />
                   </div>
+                  <div style={ds.field}>
+                    <label style={ds.lbl}>Matični broj</label>
+                    <input style={{ ...ds.input, fontFamily: 'monospace' }} value={registrationNumber} onChange={e => setRegistrationNumber(e.target.value)} placeholder="e.g. 12345678" />
+                  </div>
                 </div>
-
                 <div style={ds.row2}>
                   <div style={ds.field}>
                     <label style={ds.lbl}>Address</label>
@@ -366,30 +446,18 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
                     <input style={ds.input} value={city} onChange={e => setCity(e.target.value)} placeholder="City..." />
                   </div>
                 </div>
-
-                <div style={{ marginBottom: '12px' }}>
-                  <div style={ds.field}>
-                    <label style={ds.lbl}>Country</label>
-                    <input style={ds.input} value={country} onChange={e => setCountry(e.target.value)} placeholder="e.g. Serbia" />
-                  </div>
+                <div style={ds.field}>
+                  <label style={ds.lbl}>Country</label>
+                  <input style={ds.input} value={country} onChange={e => setCountry(e.target.value)} placeholder="e.g. Serbia" />
                 </div>
               </div>
 
               <div style={ds.section}>
                 <div style={ds.sectionTitle}>Contact</div>
                 <div style={ds.row3}>
-                  <div style={ds.field}>
-                    <label style={ds.lbl}>Contact person</label>
-                    <input style={ds.input} value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Full name..." />
-                  </div>
-                  <div style={ds.field}>
-                    <label style={ds.lbl}>Email</label>
-                    <input style={ds.input} type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} placeholder="email@example.com" />
-                  </div>
-                  <div style={ds.field}>
-                    <label style={ds.lbl}>Phone</label>
-                    <input style={ds.input} value={contactPhone} onChange={e => setContactPhone(e.target.value)} placeholder="+381..." />
-                  </div>
+                  <div style={ds.field}><label style={ds.lbl}>Contact person</label><input style={ds.input} value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Full name..." /></div>
+                  <div style={ds.field}><label style={ds.lbl}>Email</label><input style={ds.input} type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} placeholder="email@example.com" /></div>
+                  <div style={ds.field}><label style={ds.lbl}>Phone</label><input style={ds.input} value={contactPhone} onChange={e => setContactPhone(e.target.value)} placeholder="+381..." /></div>
                 </div>
               </div>
 
@@ -416,9 +484,7 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
               {loadingAccounts ? (
                 <div style={{ padding: '20px', textAlign: 'center' as const, color: '#7A9BB8', fontSize: '13px' }}>Loading...</div>
               ) : accounts.length === 0 ? (
-                <div style={{ padding: '20px', textAlign: 'center' as const, color: 'rgba(255,255,255,0.30)', fontSize: '13px', background: 'rgba(255,255,255,0.04)', borderRadius: '8px', marginBottom: '16px' }}>
-                  No bank accounts yet.
-                </div>
+                <div style={{ padding: '20px', textAlign: 'center' as const, color: 'rgba(255,255,255,0.30)', fontSize: '13px', background: 'rgba(255,255,255,0.04)', borderRadius: '8px', marginBottom: '16px' }}>No bank accounts yet.</div>
               ) : (
                 <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column' as const, gap: '8px' }}>
                   {accounts.map(acc => (
@@ -430,7 +496,6 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
                           <span style={{ fontSize: '10px', padding: '1px 7px', borderRadius: '20px', background: 'rgba(255,255,255,0.06)', color: '#7A9BB8' }}>{acc.currency || 'RSD'}</span>
                         </div>
                         {acc.bank_name && <div style={{ fontSize: '11px', color: '#7A9BB8', marginTop: '2px' }}>{acc.bank_name}</div>}
-                        {acc.model && <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.30)' }}>Model: {acc.model}</div>}
                       </div>
                       <div style={{ display: 'flex', gap: '6px' }}>
                         {!acc.is_primary && <button style={ds.accountBtn} onClick={() => setPrimary(acc.id)}>★ Set primary</button>}
@@ -443,29 +508,18 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
               <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '14px', border: '0.5px solid rgba(255,255,255,0.10)' }}>
                 <div style={{ fontSize: '11px', fontWeight: '500', color: '#7A9BB8', textTransform: 'uppercase' as const, letterSpacing: '0.07em', marginBottom: '10px' }}>Add new account</div>
                 <div style={ds.row2}>
-                  <div style={ds.field}>
-                    <label style={ds.lbl}>Account number <span style={{ color: '#E24B4A' }}>*</span></label>
-                    <input style={ds.input} value={newAccNum} onChange={e => setNewAccNum(e.target.value)} placeholder="e.g. 265-1234567-89" />
-                  </div>
-                  <div style={ds.field}>
-                    <label style={ds.lbl}>Bank name</label>
-                    <input style={ds.input} value={newBankName} onChange={e => setNewBankName(e.target.value)} placeholder="e.g. Raiffeisen" />
-                  </div>
+                  <div style={ds.field}><label style={ds.lbl}>Account number *</label><input style={ds.input} value={newAccNum} onChange={e => setNewAccNum(e.target.value)} placeholder="e.g. 265-1234567-89" /></div>
+                  <div style={ds.field}><label style={ds.lbl}>Bank name</label><input style={ds.input} value={newBankName} onChange={e => setNewBankName(e.target.value)} placeholder="e.g. Raiffeisen" /></div>
                 </div>
                 <div style={ds.row2}>
-                  <div style={ds.field}>
-                    <label style={ds.lbl}>Currency</label>
+                  <div style={ds.field}><label style={ds.lbl}>Currency</label>
                     <select style={ds.select} value={newCurrency} onChange={e => setNewCurrency(e.target.value)}>
                       <option>RSD</option><option>EUR</option><option>USD</option><option>AED</option>
                     </select>
                   </div>
-                  <div style={ds.field}>
-                    <label style={ds.lbl}>Model</label>
-                    <input style={ds.input} value={newModel} onChange={e => setNewModel(e.target.value)} placeholder="e.g. 97" />
-                  </div>
+                  <div style={ds.field}><label style={ds.lbl}>Model</label><input style={ds.input} value={newModel} onChange={e => setNewModel(e.target.value)} placeholder="e.g. 97" /></div>
                 </div>
-                <button style={{ ...ds.btnPrimary, opacity: !newAccNum.trim() || addingAccount ? 0.6 : 1 }}
-                  onClick={addAccount} disabled={!newAccNum.trim() || addingAccount}>
+                <button style={{ ...ds.btnPrimary, opacity: !newAccNum.trim() || addingAccount ? 0.6 : 1 }} onClick={addAccount} disabled={!newAccNum.trim() || addingAccount}>
                   {addingAccount ? 'Adding...' : '+ Add account'}
                 </button>
               </div>
@@ -520,9 +574,9 @@ const ds: Record<string, React.CSSProperties> = {
   header: { background: '#060E1A', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
   headerTitle: { color: '#DCE9F6', fontSize: '15px', fontWeight: '500' },
   closeBtn: { background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '22px', cursor: 'pointer', padding: '0 4px', lineHeight: 1 },
-  tabBar: { display: 'flex', gap: '0', borderBottom: '1px solid rgba(255,255,255,0.075)', background: '#111F30' },
+  tabBar: { display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.075)', background: '#111F30' },
   tab: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '10px 20px', border: 'none', background: 'transparent', color: '#7A9BB8', cursor: 'pointer', borderBottom: '2px solid transparent', display: 'flex', alignItems: 'center', gap: '6px' },
-  tabActive: { color: '#00D47E', borderBottom: '2px solid #00D47E', background: 'transparent', fontWeight: '500' },
+  tabActive: { color: '#00D47E', borderBottom: '2px solid #00D47E', fontWeight: '500' },
   tabBadge: { fontSize: '10px', background: '#00D47E', color: '#060E1A', borderRadius: '20px', padding: '1px 6px', fontWeight: '500' },
   body: { padding: '1.5rem', overflowY: 'auto', flex: 1 },
   footer: { padding: '1rem 1.5rem', borderTop: '1px solid rgba(255,255,255,0.075)', display: 'flex', justifyContent: 'flex-end', gap: '8px', background: '#111F30' },
