@@ -222,6 +222,7 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
         if (data.name) setName(data.name)
         if (data.pib) setTaxId(data.pib)
         if (data.mb) setRegistrationNumber(data.mb)
+        if (data.pib) setTaxId(data.pib)
         if (data.address) setAddress(data.address)
         if (data.city) setCity(data.city)
         if (!country) setCountry('Serbia')
@@ -234,13 +235,14 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
     setNbsLoading(false)
   }
 
-  const applyNbsAccount = async (accNumber: string) => {
+  const applyNbsAccount = async (accNumber: string, bankName?: string) => {
     if (!partner?.id || !accNumber) return
     const exists = accounts.find(a => a.account_number === accNumber)
     if (exists) return
     const isPrimary = accounts.length === 0
     await supabase.from('partner_accounts').insert({
       partner_id: partner.id, account_number: accNumber, currency: 'RSD', is_primary: isPrimary,
+      bank_name: bankName || null,
     })
     fetchAccounts()
   }
@@ -375,19 +377,24 @@ function PartnerDialog({ partner, onClose, onSaved }: { partner: any; onClose: (
                     </div>
                     <div style={{ fontSize: '11px', color: '#5DCAA5' }}>✓ Polja u formi su automatski popunjena</div>
 
-                    {nbsResult.accounts?.length > 0 && partner?.id && (
+                    {nbsResult.accounts?.length > 0 && (
                       <div style={{ marginTop: '12px', borderTop: '1px solid rgba(0,212,126,0.15)', paddingTop: '10px' }}>
                         <div style={{ fontSize: '11px', color: '#7A9BB8', marginBottom: '6px', fontWeight: '500' }}>
                           Računi iz NBS ({nbsResult.accounts.length})
                         </div>
-                        {nbsResult.accounts.map((acc: string) => {
-                          const exists = accounts.find(a => a.account_number === acc)
+                        {nbsResult.accounts.map((acc: { account: string; bankName: string; currency: string }) => {
+                          const exists = accounts.find(a => a.account_number === acc.account)
                           return (
-                            <div key={acc} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
-                              <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#DCE9F6' }}>{acc}</span>
-                              {exists
-                                ? <span style={{ fontSize: '10px', color: '#5DCAA5' }}>✓ već dodat</span>
-                                : <button style={{ ...ds.accountBtn, color: '#00D47E', borderColor: 'rgba(0,212,126,0.3)' }} onClick={() => applyNbsAccount(acc)}>+ Dodaj račun</button>
+                            <div key={acc.account} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+                              <div>
+                                <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#DCE9F6' }}>{acc.account}</span>
+                                {acc.bankName && <span style={{ fontSize: '11px', color: '#7A9BB8', marginLeft: '8px' }}>{acc.bankName}</span>}
+                              </div>
+                              {partner?.id
+                                ? exists
+                                  ? <span style={{ fontSize: '10px', color: '#5DCAA5' }}>✓ već dodat</span>
+                                  : <button style={{ ...ds.accountBtn, color: '#00D47E', borderColor: 'rgba(0,212,126,0.3)' }} onClick={() => applyNbsAccount(acc.account, acc.bankName)}>+ Dodaj račun</button>
+                                : <span style={{ fontSize: '10px', color: '#7A9BB8' }}>Sačuvaj partnera prvo</span>
                               }
                             </div>
                           )
