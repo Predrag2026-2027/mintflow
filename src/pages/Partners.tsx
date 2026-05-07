@@ -18,8 +18,24 @@ export default function Partners() {
 
   useEffect(() => { fetchPartners() }, [])
 
-  const deletePartner = async (id: string) => {
-    if (!window.confirm('Delete this partner?')) return
+  const deletePartner = async (id: string, name: string) => {
+    const [{ count: txCount }, { count: invCount }, { count: ptCount }] = await Promise.all([
+      supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('partner_id', id),
+      supabase.from('invoices').select('id', { count: 'exact', head: true }).eq('partner_id', id),
+      supabase.from('passthrough').select('id', { count: 'exact', head: true }).eq('partner_id', id),
+    ])
+    const total = (txCount || 0) + (invCount || 0) + (ptCount || 0)
+    if (total > 0) {
+      const details = [
+        txCount ? txCount + ' transakcija' : '',
+        invCount ? invCount + ' faktura' : '',
+        ptCount ? ptCount + ' pass-through' : '',
+      ].filter(Boolean).join(', ')
+      window.alert(`Partner "${name}" se ne moze obrisati. Povezan je sa: ${details}. Pre brisanja uklonite sve veze.`)
+      return
+    }
+    if (!window.confirm(`Obrisati partnera "${name}"? Ova akcija ce obrisati i sve bankove racune partnera.`)) return
+    await supabase.from('partner_accounts').delete().eq('partner_id', id)
     await supabase.from('partners').delete().eq('id', id)
     fetchPartners()
   }
@@ -141,7 +157,7 @@ export default function Partners() {
                       </span>
                     </td>
                     <td style={s.td} onClick={e => e.stopPropagation()}>
-                      <button style={s.deleteBtn} onClick={() => deletePartner(p.id)}>🗑</button>
+                      <button style={s.deleteBtn} onClick={() => deletePartner(p.id, p.name)}>🗑</button>
                     </td>
                   </tr>
                 ))}
