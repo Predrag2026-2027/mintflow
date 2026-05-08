@@ -10,10 +10,145 @@ interface Props {
   onDelete?: (id: string, name: string) => void
 }
 
+// NBS Merge Dialog — shown when NBS lookup returns data for existing partner
+interface NbsMergeProps {
+  existingPartner: any
+  existingAccounts: any[]
+  nbsResult: any
+  onConfirm: (fieldsToUpdate: Record<string, boolean>, accountsToAdd: string[]) => void
+  onCancel: () => void
+}
+
+function NbsMergeDialog({ existingPartner, existingAccounts, nbsResult, onConfirm, onCancel }: NbsMergeProps) {
+  const fields: { key: string; label: string; existing: string; nbs: string }[] = [
+    { key: 'name', label: 'Naziv', existing: existingPartner.name || '—', nbs: nbsResult.name || '—' },
+    { key: 'tax_id', label: 'PIB', existing: existingPartner.tax_id || '—', nbs: nbsResult.pib || '—' },
+    { key: 'registration_number', label: 'Matični broj', existing: existingPartner.registration_number || '—', nbs: nbsResult.mb || '—' },
+    { key: 'address', label: 'Adresa', existing: existingPartner.address || '—', nbs: nbsResult.address || '—' },
+    { key: 'city', label: 'Grad', existing: existingPartner.city || '—', nbs: nbsResult.city || '—' },
+  ].filter(f => f.nbs !== '—' && f.nbs !== f.existing)
+
+  const newAccounts = (nbsResult.accounts || []).filter((a: any) =>
+    !existingAccounts.some(ea => ea.account_number === a.account)
+  )
+
+  const [selectedFields, setSelectedFields] = useState<Record<string, boolean>>(
+    Object.fromEntries(fields.map(f => [f.key, true]))
+  )
+  const [selectedAccounts, setSelectedAccounts] = useState<Record<string, boolean>>(
+    Object.fromEntries(newAccounts.map((a: any) => [a.account, true]))
+  )
+
+  const toggleField = (key: string) => setSelectedFields(p => ({ ...p, [key]: !p[key] }))
+  const toggleAccount = (acc: string) => setSelectedAccounts(p => ({ ...p, [acc]: !p[acc] }))
+
+  const handleConfirm = () => {
+    const accountsToAdd = newAccounts.filter((a: any) => selectedAccounts[a.account]).map((a: any) => a.account)
+    onConfirm(selectedFields, accountsToAdd)
+  }
+
+  const hasChanges = fields.length > 0 || newAccounts.length > 0
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200 }}>
+      <div style={{ background: '#0D1B2C', borderRadius: '14px', width: '600px', maxWidth: '94vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column', border: '1px solid rgba(255,255,255,0.12)', overflow: 'hidden' }}>
+        <div style={{ background: '#060E1A', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ color: '#DCE9F6', fontSize: '15px', fontWeight: '500' }}>🔄 NBS podaci — pregled izmena</div>
+            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '12px', marginTop: '2px' }}>Odaberi šta želiš da ažuriraš</div>
+          </div>
+          <button style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '22px', cursor: 'pointer' }} onClick={onCancel}>×</button>
+        </div>
+
+        <div style={{ padding: '1.25rem 1.5rem', overflowY: 'auto', flex: 1 }}>
+          {!hasChanges ? (
+            <div style={{ padding: '20px', textAlign: 'center', color: '#5DCAA5', fontSize: '13px', background: 'rgba(0,212,126,0.07)', borderRadius: '8px' }}>
+              ✓ NBS podaci su identični sa podacima u bazi — nema izmena
+            </div>
+          ) : (
+            <>
+              {fields.length > 0 && (
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '500', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px', paddingBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.075)' }}>
+                    Podaci i adresa
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {fields.map(f => (
+                      <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', borderRadius: '8px', background: selectedFields[f.key] ? 'rgba(0,212,126,0.07)' : 'rgba(255,255,255,0.03)', border: `1px solid ${selectedFields[f.key] ? 'rgba(0,212,126,0.25)' : 'rgba(255,255,255,0.07)'}`, cursor: 'pointer' }}
+                        onClick={() => toggleField(f.key)}>
+                        <div style={{ width: '18px', height: '18px', borderRadius: '4px', border: `2px solid ${selectedFields[f.key] ? '#00D47E' : 'rgba(255,255,255,0.2)'}`, background: selectedFields[f.key] ? '#00D47E' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {selectedFields[f.key] && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="#060E1A" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', width: '110px', flexShrink: 0 }}>{f.label}</div>
+                        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '8px', alignItems: 'center' }}>
+                          <div style={{ fontSize: '12px', color: '#7A9BB8', textDecoration: 'line-through', opacity: 0.7 }}>{f.existing}</div>
+                          <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.3)' }}>→</div>
+                          <div style={{ fontSize: '12px', color: '#00D47E', fontWeight: '500' }}>{f.nbs}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {fields.length > 1 && (
+                    <button style={{ marginTop: '8px', background: 'none', border: 'none', color: '#7A9BB8', fontSize: '11px', cursor: 'pointer', padding: '4px 0' }}
+                      onClick={() => setSelectedFields(Object.fromEntries(fields.map(f => [f.key, !Object.values(selectedFields).every(Boolean)])))}>
+                      {Object.values(selectedFields).every(Boolean) ? 'Odznači sve' : 'Odaberi sve'}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {newAccounts.length > 0 && (
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: '500', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px', paddingBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.075)' }}>
+                    Novi računi iz NBS ({newAccounts.length})
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {newAccounts.map((acc: any) => (
+                      <div key={acc.account} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', borderRadius: '8px', background: selectedAccounts[acc.account] ? 'rgba(0,212,126,0.07)' : 'rgba(255,255,255,0.03)', border: `1px solid ${selectedAccounts[acc.account] ? 'rgba(0,212,126,0.25)' : 'rgba(255,255,255,0.07)'}`, cursor: 'pointer' }}
+                        onClick={() => toggleAccount(acc.account)}>
+                        <div style={{ width: '18px', height: '18px', borderRadius: '4px', border: `2px solid ${selectedAccounts[acc.account] ? '#00D47E' : 'rgba(255,255,255,0.2)'}`, background: selectedAccounts[acc.account] ? '#00D47E' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {selectedAccounts[acc.account] && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="#060E1A" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '13px', fontWeight: '500', color: '#DCE9F6', fontFamily: 'monospace' }}>{acc.account}</div>
+                          {acc.bankName && <div style={{ fontSize: '11px', color: '#7A9BB8', marginTop: '2px' }}>{acc.bankName}</div>}
+                        </div>
+                        <div style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(0,212,126,0.12)', color: '#00D47E' }}>Novi</div>
+                      </div>
+                    ))}
+                  </div>
+                  {existingAccounts.length > 0 && (
+                    <div style={{ marginTop: '8px', fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>
+                      {existingAccounts.length} postojeći račun(a) nisu prikazani
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid rgba(255,255,255,0.075)', display: 'flex', gap: '8px', justifyContent: 'flex-end', background: '#111F30' }}>
+          <button style={ds.btnGhost} onClick={onCancel}>Otkaži</button>
+          {hasChanges && (
+            <button style={ds.btnPrimary} onClick={handleConfirm}>
+              ✓ Primeni odabrane izmene
+            </button>
+          )}
+          {!hasChanges && (
+            <button style={ds.btnPrimary} onClick={onCancel}>Zatvori</button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function PartnerDialog({ partner, initialName = '', initialAccountNumber = '', onClose, onSaved, onDelete }: Props) {
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
   const [activeTab, setActiveTab] = useState<'info' | 'accounts'>('info')
+  const [saveError, setSaveError] = useState('')
 
   const [name, setName] = useState(partner?.name || initialName)
   const [type, setType] = useState(partner?.type || 'vendor')
@@ -33,6 +168,10 @@ export default function PartnerDialog({ partner, initialName = '', initialAccoun
   const [nbsLoading, setNbsLoading] = useState(false)
   const [nbsResult, setNbsResult] = useState<any>(null)
   const [nbsError, setNbsError] = useState('')
+  const [showNbsMerge, setShowNbsMerge] = useState(false)
+
+  // Duplicate detection
+  const [duplicateWarning, setDuplicateWarning] = useState<{ partner: any; field: string } | null>(null)
 
   // Bank accounts
   const [accounts, setAccounts] = useState<any[]>([])
@@ -43,7 +182,6 @@ export default function PartnerDialog({ partner, initialName = '', initialAccoun
   const [newModel, setNewModel] = useState('')
   const [addingAccount, setAddingAccount] = useState(false)
 
-  // After save — newly created partner id
   const [savedPartnerId, setSavedPartnerId] = useState(partner?.id || '')
 
   const fetchAccounts = async (pid?: string) => {
@@ -59,6 +197,21 @@ export default function PartnerDialog({ partner, initialName = '', initialAccoun
     if (partner?.id || savedPartnerId) fetchAccounts()
   }, [partner?.id, savedPartnerId]) // eslint-disable-line
 
+  // Check for duplicates by PIB or MB
+  const checkDuplicate = async (pib: string, mb: string): Promise<{ partner: any; field: string } | null> => {
+    const checks = []
+    if (pib?.trim()) checks.push(supabase.from('partners').select('id,name,tax_id,registration_number').eq('tax_id', pib.trim()).neq('id', partner?.id || '00000000-0000-0000-0000-000000000000').limit(1))
+    if (mb?.trim()) checks.push(supabase.from('partners').select('id,name,tax_id,registration_number').eq('registration_number', mb.trim()).neq('id', partner?.id || '00000000-0000-0000-0000-000000000000').limit(1))
+
+    for (let i = 0; i < checks.length; i++) {
+      const { data } = await checks[i]
+      if (data && data.length > 0) {
+        return { partner: data[0], field: i === 0 ? 'PIB' : 'Matični broj' }
+      }
+    }
+    return null
+  }
+
   const lookupNBS = async () => {
     const mb = nbsPib.trim().replace(/\D/g, '')
     if (!mb || mb.length < 8) return
@@ -69,17 +222,53 @@ export default function PartnerDialog({ partner, initialName = '', initialAccoun
         setNbsError(`NBS greška: ${error.message}`)
       } else if (data?.success && data?.name) {
         setNbsResult(data)
-        if (data.name) setName(data.name)
-        if (data.pib) setTaxId(data.pib)
-        if (data.mb) setRegistrationNumber(data.mb)
-        if (data.address) setAddress(data.address)
-        if (data.city) setCity(data.city)
-        if (!country) setCountry('Serbia')
+        // If editing existing partner — show merge dialog instead of auto-applying
+        if (partner?.id || savedPartnerId) {
+          setShowNbsMerge(true)
+        } else {
+          // New partner — auto-apply all fields
+          if (data.name) setName(data.name)
+          if (data.pib) setTaxId(data.pib)
+          if (data.mb) setRegistrationNumber(data.mb)
+          if (data.address) setAddress(data.address)
+          if (data.city) setCity(data.city)
+          if (!country) setCountry('Serbia')
+        }
       } else {
         setNbsError(data?.error || 'Firma nije pronađena u NBS registru.')
       }
     } catch (e: any) { setNbsError(`Greška: ${e.message}`) }
     setNbsLoading(false)
+  }
+
+  const handleNbsMergeConfirm = async (fieldsToUpdate: Record<string, boolean>, accountsToAdd: string[]) => {
+    setShowNbsMerge(false)
+    const pid = savedPartnerId || partner?.id
+
+    // Apply selected field updates to form state
+    const fieldMap: Record<string, () => void> = {
+      name: () => setName(nbsResult.name || ''),
+      tax_id: () => setTaxId(nbsResult.pib || ''),
+      registration_number: () => setRegistrationNumber(nbsResult.mb || ''),
+      address: () => setAddress(nbsResult.address || ''),
+      city: () => setCity(nbsResult.city || ''),
+    }
+    Object.entries(fieldsToUpdate).forEach(([key, selected]) => {
+      if (selected && fieldMap[key]) fieldMap[key]()
+    })
+
+    // Add selected new accounts immediately if we have a partner ID
+    if (pid && accountsToAdd.length > 0) {
+      for (const accNum of accountsToAdd) {
+        const nbsAcc = nbsResult.accounts?.find((a: any) => a.account === accNum)
+        const isPrimary = accounts.length === 0
+        await supabase.from('partner_accounts').insert({
+          partner_id: pid, account_number: accNum,
+          bank_name: nbsAcc?.bankName || null, currency: 'RSD', is_primary: isPrimary,
+        })
+      }
+      fetchAccounts(pid)
+    }
   }
 
   const applyNbsAccount = async (accNumber: string, bankName?: string) => {
@@ -130,6 +319,16 @@ export default function PartnerDialog({ partner, initialName = '', initialAccoun
   const handleSave = async () => {
     if (!name.trim()) return
     setSaving(true)
+    setSaveError('')
+
+    // Duplicate check
+    const dup = await checkDuplicate(taxId, registrationNumber)
+    if (dup) {
+      setDuplicateWarning(dup)
+      setSaving(false)
+      return
+    }
+
     const payload = {
       name: name.trim(), type,
       tax_id: taxId || null, registration_number: registrationNumber || null,
@@ -139,14 +338,13 @@ export default function PartnerDialog({ partner, initialName = '', initialAccoun
     }
     if (partner?.id) {
       const { error } = await supabase.from('partners').update(payload).eq('id', partner.id)
-      if (error) { console.error('update partner error:', error); setSaving(false); return }
+      if (error) { setSaveError(`Greška: ${error.message}`); setSaving(false); return }
       setSuccess(true)
       setTimeout(() => { setSuccess(false); onSaved({ ...partner, ...payload }) }, 1200)
     } else {
       const { data: newP, error } = await supabase.from('partners').insert(payload).select().single()
-      if (error) { console.error('insert partner error:', error); setSaving(false); return }
+      if (error) { setSaveError(`Greška: ${error.message}`); setSaving(false); return }
       setSavedPartnerId(newP.id)
-      // If there's an initial account number, add it automatically
       if (initialAccountNumber.trim()) {
         await supabase.from('partner_accounts').insert({
           partner_id: newP.id, account_number: initialAccountNumber.trim(),
@@ -200,6 +398,28 @@ export default function PartnerDialog({ partner, initialName = '', initialAccoun
         <div style={ds.body}>
           {activeTab === 'info' && (
             <>
+              {/* Duplicate warning */}
+              {duplicateWarning && (
+                <div style={{ marginBottom: '16px', padding: '12px 16px', background: 'rgba(255,91,90,0.10)', border: '1px solid rgba(255,91,90,0.3)', borderRadius: '10px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: '500', color: '#FF5B5A', marginBottom: '6px' }}>
+                    ⚠️ Partner sa istim {duplicateWarning.field} već postoji u bazi
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#DCE9F6' }}>
+                    <strong>{duplicateWarning.partner.name}</strong>
+                    {duplicateWarning.partner.tax_id && <span style={{ color: '#7A9BB8', marginLeft: '8px' }}>PIB: {duplicateWarning.partner.tax_id}</span>}
+                    {duplicateWarning.partner.registration_number && <span style={{ color: '#7A9BB8', marginLeft: '8px' }}>MB: {duplicateWarning.partner.registration_number}</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                    <button style={{ ...ds.btnGhost, fontSize: '12px', padding: '5px 12px' }} onClick={() => setDuplicateWarning(null)}>
+                      Ignoriši i nastavi
+                    </button>
+                    <button style={{ ...ds.btnPrimary, fontSize: '12px', padding: '5px 12px' }} onClick={() => { setDuplicateWarning(null); onClose() }}>
+                      Otvori postojećeg
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div style={ds.section}>
                 <div style={ds.sectionTitle}>🏛 NBS lookup — automatska pretraga po matičnom broju</div>
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -233,7 +453,7 @@ export default function PartnerDialog({ partner, initialName = '', initialAccoun
                   </div>
                 )}
 
-                {nbsResult && (
+                {nbsResult && !showNbsMerge && (
                   <div style={{ marginTop: '10px', padding: '14px', background: 'rgba(0,212,126,0.07)', border: '1px solid rgba(0,212,126,0.2)', borderRadius: '10px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
                       <span style={{ fontSize: '18px' }}>✅</span>
@@ -246,12 +466,34 @@ export default function PartnerDialog({ partner, initialName = '', initialAccoun
                       {nbsResult.city && <span>Grad: <strong style={{ color: '#DCE9F6' }}>{nbsResult.city}</strong></span>}
                     </div>
                     <div style={{ fontSize: '11px', color: '#5DCAA5' }}>✓ Polja u formi su automatski popunjena</div>
-                    {nbsResult.accounts?.length > 0 && (
+
+                    {currentPartnerId && (
+                      <button style={{ ...ds.accountBtn, marginTop: '10px', color: '#00D47E', borderColor: 'rgba(0,212,126,0.3)' }}
+                        onClick={() => setShowNbsMerge(true)}>
+                        🔄 Otvori pregled izmena
+                      </button>
+                    )}
+
+                    {nbsResult.accounts?.length > 0 && !currentPartnerId && (
+                      <div style={{ marginTop: '12px', borderTop: '1px solid rgba(0,212,126,0.15)', paddingTop: '10px' }}>
+                        <div style={{ fontSize: '11px', color: '#7A9BB8', marginBottom: '6px', fontWeight: '500' }}>
+                          Računi iz NBS ({nbsResult.accounts.length}) — biće dodati po sačuvanju
+                        </div>
+                        {nbsResult.accounts.map((acc: { account: string; bankName: string }) => (
+                          <div key={acc.account} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0' }}>
+                            <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#DCE9F6' }}>{acc.account}</span>
+                            {acc.bankName && <span style={{ fontSize: '11px', color: '#7A9BB8' }}>{acc.bankName}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {nbsResult.accounts?.length > 0 && currentPartnerId && (
                       <div style={{ marginTop: '12px', borderTop: '1px solid rgba(0,212,126,0.15)', paddingTop: '10px' }}>
                         <div style={{ fontSize: '11px', color: '#7A9BB8', marginBottom: '6px', fontWeight: '500' }}>
                           Računi iz NBS ({nbsResult.accounts.length})
                         </div>
-                        {nbsResult.accounts.map((acc: { account: string; bankName: string; currency: string }) => {
+                        {nbsResult.accounts.map((acc: { account: string; bankName: string }) => {
                           const exists = accounts.find(a => a.account_number === acc.account)
                           return (
                             <div key={acc.account} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
@@ -259,11 +501,9 @@ export default function PartnerDialog({ partner, initialName = '', initialAccoun
                                 <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#DCE9F6' }}>{acc.account}</span>
                                 {acc.bankName && <span style={{ fontSize: '11px', color: '#7A9BB8', marginLeft: '8px' }}>{acc.bankName}</span>}
                               </div>
-                              {currentPartnerId
-                                ? exists
-                                  ? <span style={{ fontSize: '10px', color: '#5DCAA5' }}>✓ već dodat</span>
-                                  : <button style={{ ...ds.accountBtn, color: '#00D47E', borderColor: 'rgba(0,212,126,0.3)' }} onClick={() => applyNbsAccount(acc.account, acc.bankName)}>+ Dodaj račun</button>
-                                : <span style={{ fontSize: '10px', color: '#7A9BB8' }}>Sačuvaj partnera prvo</span>
+                              {exists
+                                ? <span style={{ fontSize: '10px', color: '#5DCAA5' }}>✓ već dodat</span>
+                                : <button style={{ ...ds.accountBtn, color: '#00D47E', borderColor: 'rgba(0,212,126,0.3)' }} onClick={() => applyNbsAccount(acc.account, acc.bankName)}>+ Dodaj</button>
                               }
                             </div>
                           )
@@ -340,10 +580,15 @@ export default function PartnerDialog({ partner, initialName = '', initialAccoun
                 </div>
               </div>
 
-              {/* Show initial account notice */}
               {initialAccountNumber && !currentPartnerId && (
                 <div style={{ padding: '10px 14px', background: 'rgba(0,212,126,0.07)', border: '1px solid rgba(0,212,126,0.2)', borderRadius: '8px', fontSize: '12px', color: '#5DCAA5' }}>
-                  ✓ Po sačuvanju, račun <strong style={{ fontFamily: 'monospace' }}>{initialAccountNumber}</strong> će biti automatski dodat ovom partneru
+                  ✓ Po sačuvanju, račun <strong style={{ fontFamily: 'monospace' }}>{initialAccountNumber}</strong> će biti automatski dodat
+                </div>
+              )}
+
+              {saveError && (
+                <div style={{ padding: '10px 14px', background: 'rgba(255,91,90,0.10)', border: '1px solid rgba(255,91,90,0.3)', borderRadius: '8px', fontSize: '12px', color: '#FF5B5A', marginTop: '10px' }}>
+                  ⚠️ {saveError}
                 </div>
               )}
             </>
@@ -403,9 +648,7 @@ export default function PartnerDialog({ partner, initialName = '', initialAccoun
           <div style={{ display: 'flex', gap: '8px', flex: 1 }}>
             <button style={ds.btnGhost} onClick={onClose}>Cancel</button>
             {partner?.id && onDelete && (
-              <button style={ds.btnDelete} onClick={() => onDelete(partner.id, partner.name)}>
-                🗑 Delete
-              </button>
+              <button style={ds.btnDelete} onClick={() => onDelete(partner.id, partner.name)}>🗑 Delete</button>
             )}
           </div>
           {activeTab === 'info' && (
@@ -415,6 +658,17 @@ export default function PartnerDialog({ partner, initialName = '', initialAccoun
           )}
         </div>
       </div>
+
+      {/* NBS Merge Dialog */}
+      {showNbsMerge && nbsResult && (
+        <NbsMergeDialog
+          existingPartner={{ name, tax_id: taxId, registration_number: registrationNumber, address, city }}
+          existingAccounts={accounts}
+          nbsResult={nbsResult}
+          onConfirm={handleNbsMergeConfirm}
+          onCancel={() => setShowNbsMerge(false)}
+        />
+      )}
     </div>
   )
 }
