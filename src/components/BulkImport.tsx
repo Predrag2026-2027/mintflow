@@ -516,6 +516,8 @@ export default function BulkImport({ onClose, onImported }: Props) {
   const [parseError, setParseError] = useState('')
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const [reviewPartnerSearch, setReviewPartnerSearch] = useState<Record<string, string>>({})
+  const [creatingPartner, setCreatingPartner] = useState<Record<string, boolean>>({})
+  const [savingAccount, setSavingAccount] = useState<Record<string, boolean>>({})
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [plCategories, setPlCategories] = useState<any[]>([])
@@ -585,6 +587,36 @@ export default function BulkImport({ onClose, onImported }: Props) {
     const partner = partList.find((p: any) => p.id === match.partner_id)
     if (!partner) return null
     return { name: partner.name, id: partner.id }
+  }
+
+  const createPartnerFromRow = async (rowId: string, name: string, type: string = 'both') => {
+    if (!name.trim()) return
+    setCreatingPartner(prev => ({ ...prev, [rowId]: true }))
+    try {
+      const { data: newP } = await supabase.from('partners').insert({ name: name.trim(), type }).select().single()
+      if (newP) {
+        setPartners(prev => [...prev, newP])
+        updateRow(rowId, { override_partner_name: newP.name, override_partner_id: newP.id })
+        setReviewPartnerSearch(prev => ({ ...prev, [rowId]: newP.name }))
+      }
+    } catch (err) { console.error('createPartner error', err) }
+    setCreatingPartner(prev => ({ ...prev, [rowId]: false }))
+  }
+
+  const saveAccountToPartner = async (rowId: string, partnerId: string, accountNumber: string) => {
+    if (!partnerId || !accountNumber.trim()) return
+    setSavingAccount(prev => ({ ...prev, [rowId]: true }))
+    try {
+      const { data: newAcc } = await supabase.from('partner_accounts').insert({
+        partner_id: partnerId,
+        account_number: accountNumber.trim(),
+        is_primary: false,
+      }).select().single()
+      if (newAcc) {
+        setPartnerAccounts(prev => [...prev, newAcc])
+      }
+    } catch (err) { console.error('saveAccount error', err) }
+    setSavingAccount(prev => ({ ...prev, [rowId]: false }))
   }
 
   const handleFile = async (file: File) => {
@@ -1049,7 +1081,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                   {row.override_partner_id ? '✓' : '✎'}
                                 </span>
                                 {((reviewPartnerSearch[p.id] ?? '').length > 0 || (!row.override_partner_id && row.override_partner_name.length > 0)) && !row.override_partner_id && (
-                                  <div style={{ position: 'absolute' as const, top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e5e5', borderRadius: '6px', zIndex: 300, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', maxHeight: '180px', overflowY: 'auto' as const }}>
+                                  <div style={{ position: 'absolute' as const, top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e5e5', borderRadius: '6px', zIndex: 300, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', maxHeight: '220px', overflowY: 'auto' as const }}>
                                     {partners.filter(pt => pt.name.toLowerCase().includes((reviewPartnerSearch[p.id] ?? row.override_partner_name).toLowerCase())).slice(0, 8).map(pt => (
                                       <div key={pt.id} style={{ padding: '7px 10px', fontSize: '12px', cursor: 'pointer', borderBottom: '0.5px solid #f5f5f3', display: 'flex', flexDirection: 'column' as const }}
                                         onMouseDown={e => {
@@ -1065,30 +1097,59 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                         )}
                                       </div>
                                     ))}
-                                    {partners.filter(pt => pt.name.toLowerCase().includes((reviewPartnerSearch[p.id] ?? row.override_partner_name).toLowerCase())).length === 0 && (
-                                      <div style={{ padding: '7px 10px', fontSize: '12px', color: '#aaa' }}>
-                                        Novi partner — biće kreiran pri postovanju
-                                      </div>
-                                    )}
+                                    {(() => {
+                                      const searchTerm = reviewPartnerSearch[p.id] ?? row.override_partner_name
+                                      const noMatch = partners.filter(pt => pt.name.toLowerCase().includes(searchTerm.toLowerCase())).length === 0
+                                      if (!noMatch || !searchTerm.trim()) return null
+                                      return (
+                                        <div style={{ padding: '8px 10px', borderTop: '0.5px solid #e5e5e5', background: '#f9f9f7' }}>
+                                          <div style={{ fontSize: '11px', color: '#888', marginBottom: '6px' }}>"{searchTerm}" nije u bazi partnera</div>
+                                          <button
+                                            style={{ fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '5px 12px', border: 'none', borderRadius: '6px', background: '#1D9E75', color: '#fff', cursor: 'pointer', width: '100%' }}
+                                            onMouseDown={e => { e.preventDefault(); createPartnerFromRow(p.id, searchTerm) }}>
+                                            {creatingPartner[p.id] ? '⏳ Kreiranje...' : `➕ Dodaj "${searchTerm}" kao novog partnera`}
+                                          </button>
+                                        </div>
+                                      )
+                                    })()}
                                   </div>
                                 )}
                               </div>
                               {(() => {
                                 const rowAccounts = partnerAccounts.filter((pa: any) => pa.partner_id === row.override_partner_id)
-                                if (rowAccounts.length === 0) return null
+                                const parsedAccount = p.account_number?.trim()
+                                const accountInDB = parsedAccount && rowAccounts.some((a: any) =>
+                                  a.account_number?.replace(/[-\s]/g, '') === parsedAccount.replace(/[-\s]/g, '')
+                                )
                                 return (
-                                  <div style={{ marginTop: '6px' }}>
-                                    <label style={{ ...s.editLbl, display: 'block', marginBottom: '4px' }}>Račun partnera ({rowAccounts.length})</label>
-                                    <select style={{ ...s.editSelect, border: '1.5px solid #1D9E75', background: '#f0fdf8' }}
-                                      defaultValue={rowAccounts.find((a: any) => a.is_primary)?.account_number || rowAccounts[0]?.account_number || ''}>
-                                      <option value="">— Bez računa —</option>
-                                      {rowAccounts.map((acc: any) => (
-                                        <option key={acc.id} value={acc.account_number}>
-                                          {acc.account_number}{acc.bank_name ? ` · ${acc.bank_name}` : ''}{acc.is_primary ? ' ★' : ''}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
+                                  <>
+                                    {rowAccounts.length > 0 && (
+                                      <div style={{ marginTop: '6px' }}>
+                                        <label style={{ ...s.editLbl, display: 'block', marginBottom: '4px' }}>Račun partnera ({rowAccounts.length})</label>
+                                        <select style={{ ...s.editSelect, border: '1.5px solid #1D9E75', background: '#f0fdf8' }}
+                                          defaultValue={rowAccounts.find((a: any) => a.is_primary)?.account_number || rowAccounts[0]?.account_number || ''}>
+                                          <option value="">— Bez računa —</option>
+                                          {rowAccounts.map((acc: any) => (
+                                            <option key={acc.id} value={acc.account_number}>
+                                              {acc.account_number}{acc.bank_name ? ` · ${acc.bank_name}` : ''}{acc.is_primary ? ' ★' : ''}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    )}
+                                    {row.override_partner_id && parsedAccount && !accountInDB && (
+                                      <div style={{ marginTop: '6px', background: '#FAEEDA', border: '0.5px solid #E5B96A', borderRadius: '6px', padding: '7px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                        <span style={{ fontSize: '11px', color: '#633806' }}>
+                                          Račun <strong>{parsedAccount}</strong> nije u bazi za ovog partnera
+                                        </span>
+                                        <button
+                                          style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '3px 10px', border: 'none', borderRadius: '5px', background: '#E6B432', color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' as const }}
+                                          onClick={() => saveAccountToPartner(p.id, row.override_partner_id, parsedAccount)}>
+                                          {savingAccount[p.id] ? '⏳' : '➕ Sačuvaj račun'}
+                                        </button>
+                                      </div>
+                                    )}
+                                  </>
                                 )
                               })()}
                             </div>
