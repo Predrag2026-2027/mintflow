@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { supabase } from '../supabase'
 import * as XLSX from 'xlsx'
 import { getRate, convertToUSD } from '../services/currencyService'
+import PartnerDialog from './PartnerDialog'
 
 interface Props {
   onClose: () => void
@@ -518,6 +519,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
   const [reviewPartnerSearch, setReviewPartnerSearch] = useState<Record<string, string>>({})
   const [creatingPartner, setCreatingPartner] = useState<Record<string, boolean>>({})
   const [savingAccount, setSavingAccount] = useState<Record<string, boolean>>({})
+  const [partnerDialogRow, setPartnerDialogRow] = useState<{ rowId: string; initialName: string; initialAccount: string } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [plCategories, setPlCategories] = useState<any[]>([])
@@ -589,33 +591,25 @@ export default function BulkImport({ onClose, onImported }: Props) {
     return { name: partner.name, id: partner.id }
   }
 
-  const createPartnerFromRow = async (rowId: string, name: string, type: string = 'both') => {
-    if (!name.trim()) return
-    setCreatingPartner(prev => ({ ...prev, [rowId]: true }))
-    try {
-      const { data: newP } = await supabase.from('partners').insert({ name: name.trim(), type }).select().single()
-      if (newP) {
-        setPartners(prev => [...prev, newP])
-        updateRow(rowId, { override_partner_name: newP.name, override_partner_id: newP.id })
-        setReviewPartnerSearch(prev => ({ ...prev, [rowId]: newP.name }))
-      }
-    } catch (err) { console.error('createPartner error', err) }
-    setCreatingPartner(prev => ({ ...prev, [rowId]: false }))
+  const openPartnerDialog = (rowId: string, name: string, accountNumber: string) => {
+    setPartnerDialogRow({ rowId, initialName: name, initialAccount: accountNumber })
   }
 
   const saveAccountToPartner = async (rowId: string, partnerId: string, accountNumber: string) => {
     if (!partnerId || !accountNumber.trim()) return
     setSavingAccount(prev => ({ ...prev, [rowId]: true }))
-    try {
-      const { data: newAcc } = await supabase.from('partner_accounts').insert({
-        partner_id: partnerId,
-        account_number: accountNumber.trim(),
-        is_primary: false,
-      }).select().single()
-      if (newAcc) {
-        setPartnerAccounts(prev => [...prev, newAcc])
-      }
-    } catch (err) { console.error('saveAccount error', err) }
+    const { data: newAcc, error } = await supabase.from('partner_accounts').insert({
+      partner_id: partnerId,
+      account_number: accountNumber.trim(),
+      currency: 'RSD',
+      is_primary: false,
+    }).select('id,partner_id,account_number,bank_name,is_primary').single()
+    if (error) {
+      console.error('saveAccount error:', error)
+      alert(`Greška pri čuvanju računa: ${error.message}`)
+    } else if (newAcc) {
+      setPartnerAccounts(prev => [...prev, newAcc])
+    }
     setSavingAccount(prev => ({ ...prev, [rowId]: false }))
   }
 
@@ -1106,8 +1100,8 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                           <div style={{ fontSize: '11px', color: '#888', marginBottom: '6px' }}>"{searchTerm}" nije u bazi partnera</div>
                                           <button
                                             style={{ fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '5px 12px', border: 'none', borderRadius: '6px', background: '#1D9E75', color: '#fff', cursor: 'pointer', width: '100%' }}
-                                            onMouseDown={e => { e.preventDefault(); createPartnerFromRow(p.id, searchTerm) }}>
-                                            {creatingPartner[p.id] ? '⏳ Kreiranje...' : `➕ Dodaj "${searchTerm}" kao novog partnera`}
+                                            onMouseDown={e => { e.preventDefault(); setReviewPartnerSearch(prev => ({ ...prev, [p.id]: '' })); openPartnerDialog(p.id, searchTerm, p.account_number || '') }}>
+                                            {`➕ Dodaj "${searchTerm}" kao novog partnera (sa NBS lookup-om)`}
                                           </button>
                                         </div>
                                       )
@@ -1516,6 +1510,28 @@ export default function BulkImport({ onClose, onImported }: Props) {
           )}
         </div>
       </div>
+
+      {partnerDialogRow && (
+        <PartnerDialog
+          initialName={partnerDialogRow.initialName}
+          initialAccountNumber={partnerDialogRow.initialAccount}
+          onClose={() => setPartnerDialogRow(null)}
+          onSaved={(newPartner) => {
+            setPartners(prev => [...prev, newPartner])
+            setPartnerAccounts(prev => {
+              // Reload accounts from DB after partner saved
+              supabase.from('partner_accounts').select('id,partner_id,account_number,bank_name,is_primary')
+                .eq('partner_id', newPartner.id)
+                .then(({ data }) => { if (data) setPartnerAccounts(all => [...all, ...data]) })
+              return prev
+            })
+            const rowId = partnerDialogRow.rowId
+            updateRow(rowId, { override_partner_name: newPartner.name, override_partner_id: newPartner.id })
+            setReviewPartnerSearch(prev => ({ ...prev, [rowId]: newPartner.name }))
+            setPartnerDialogRow(null)
+          }}
+        />
+      )}
     </div>
   )
 }
