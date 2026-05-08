@@ -576,13 +576,42 @@ export default function BulkImport({ onClose, onImported }: Props) {
   const getDeptSubs = (deptId: string) => deptSubcategories.filter(s => s.department_id === deptId)
   const getExpDescs = (subId: string) => expenseDescriptions.filter(e => e.dept_subcategory_id === subId)
 
+  // Normalize Serbian bank account for comparison.
+  // Handles both formats:
+  //   NBS/baza format:  160-490637-43       (bank-account-control, 3 segments)
+  //   Izvod format:     160-000000049063743  (bank-fullnumber, last 2 digits = control)
+  const normalizeAccountNumber = (acc: string): string => {
+    if (!acc) return ''
+    const a = acc.trim().replace(/\s/g, '')
+    const parts = a.split('-')
+    if (parts.length === 3) {
+      // NBS format: bank-account-control
+      const bank = parts[0].replace(/^0+/, '') || '0'
+      const core = parts[1].replace(/^0+/, '') || '0'
+      const ctrl = parts[2].replace(/^0+/, '') || '0'
+      return `${bank}|${core}|${ctrl}`
+    } else if (parts.length === 2) {
+      // Izvod format: bank-fullnumber (last 2 = control, rest = account)
+      const bank = parts[0].replace(/^0+/, '') || '0'
+      const full = parts[1]
+      if (full.length >= 3) {
+        const core = full.slice(0, -2).replace(/^0+/, '') || '0'
+        const ctrl = full.slice(-2).replace(/^0+/, '') || '0'
+        return `${bank}|${core}|${ctrl}`
+      }
+      return `${bank}|${full.replace(/^0+/, '') || '0'}`
+    }
+    // Fallback: strip all non-digits and leading zeros
+    return a.replace(/\D/g, '').replace(/^0+/, '') || '0'
+  }
+
   const matchPartnerByAccount = (accountNum: string, pacc: any[], partList: any[]): { name: string; id: string } | null => {
     if (!accountNum) return null
-    const clean = accountNum.replace(/[-\s]/g, '')
-    if (!clean) return null
+    const normalizedInput = normalizeAccountNumber(accountNum)
+    if (!normalizedInput) return null
     const match = pacc.find((pa: any) => {
-      const paClean = (pa.account_number || '').replace(/[-\s]/g, '')
-      return paClean && paClean === clean
+      const normalizedDB = normalizeAccountNumber(pa.account_number || '')
+      return normalizedDB && normalizedDB === normalizedInput
     })
     if (!match) return null
     const partner = partList.find((p: any) => p.id === match.partner_id)
@@ -1112,7 +1141,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                 const rowAccounts = partnerAccounts.filter((pa: any) => pa.partner_id === row.override_partner_id)
                                 const parsedAccount = p.account_number?.trim()
                                 const accountInDB = parsedAccount && rowAccounts.some((a: any) =>
-                                  a.account_number?.replace(/[-\s]/g, '') === parsedAccount.replace(/[-\s]/g, '')
+                                  normalizeAccountNumber(a.account_number || '') === normalizeAccountNumber(parsedAccount)
                                 )
                                 return (
                                   <>

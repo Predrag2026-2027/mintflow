@@ -143,6 +143,28 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
   const getPlSubs = (catId: string) => plSubcategories.filter(s => s.category_id === catId)
   const getDeptSubs = (dId: string) => deptSubcategories.filter(s => s.department_id === dId)
   const getExpDescs = (subId: string) => expenseDescriptions.filter(e => e.dept_subcategory_id === subId)
+  const normalizeAccountNumber = (acc: string): string => {
+    if (!acc) return ''
+    const a = acc.trim().replace(/\s/g, '')
+    const parts = a.split('-')
+    if (parts.length === 3) {
+      const bank = parts[0].replace(/^0+/, '') || '0'
+      const core = parts[1].replace(/^0+/, '') || '0'
+      const ctrl = parts[2].replace(/^0+/, '') || '0'
+      return `${bank}|${core}|${ctrl}`
+    } else if (parts.length === 2) {
+      const bank = parts[0].replace(/^0+/, '') || '0'
+      const full = parts[1]
+      if (full.length >= 3) {
+        const core = full.slice(0, -2).replace(/^0+/, '') || '0'
+        const ctrl = full.slice(-2).replace(/^0+/, '') || '0'
+        return `${bank}|${core}|${ctrl}`
+      }
+      return `${bank}|${full.replace(/^0+/, '') || '0'}`
+    }
+    return a.replace(/\D/g, '').replace(/^0+/, '') || '0'
+  }
+
   const getPartnerAccounts = (partnerId: string | null) => {
     if (!partnerId) return []
     return allPartnerAccounts.filter(pa => pa.partner_id === partnerId)
