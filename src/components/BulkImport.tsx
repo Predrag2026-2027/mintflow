@@ -108,11 +108,11 @@ function parseRaiffeisen(content: string): ParsedRow[] {
       statement_number: cols[2]?.trim() || '',
       currency: cols[3]?.trim() || 'RSD',
       debit, credit,
-      partner_name: cols[11]?.trim() || '',
-      description: cols[12]?.trim() || cols[8]?.trim() || '',
+      partner_name: (cols[11] || '').replace(/[\r\n]/g, '').trim() || '',
+      description: (cols[12] || cols[8] || '').replace(/[\r\n]/g, '').trim() || '',
       reference_number: cols[15]?.trim() || cols[14]?.trim() || '',
       model: cols[17]?.trim() || cols[16]?.trim() || '',
-      account_number: cols[10]?.trim() || '',
+      account_number: (cols[10] || '').replace(/[\r\n\t]/g, '').trim() || '',
     })
   })
   return rows
@@ -438,7 +438,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
   // Handles NBS format (160-490637-43) and izvod format (160-000000049063743).
   const normalizeAccountNumber = (acc: string): string => {
     if (!acc) return ''
-    const a = acc.trim().replace(/\s/g, '')
+    const a = acc.replace(/[\r\n\t]/g, '').trim().replace(/\s/g, '')
     const parts = a.split('-')
     if (parts.length === 3) {
       const bank = parts[0].replace(/^0+/, '') || '0'
@@ -460,7 +460,9 @@ export default function BulkImport({ onClose, onImported }: Props) {
 
   const matchPartnerByAccount = (accountNum: string, pacc: any[], partList: any[]): { name: string; id: string } | null => {
     if (!accountNum) return null
-    const normalizedInput = normalizeAccountNumber(accountNum)
+    const cleanNum = accountNum.replace(/[\r\n\t]/g, '').trim()
+    if (!cleanNum) return null
+    const normalizedInput = normalizeAccountNumber(cleanNum)
     if (!normalizedInput) return null
     const match = pacc.find((pa: any) => {
       const normalizedDB = normalizeAccountNumber(pa.account_number || '')
@@ -870,9 +872,12 @@ export default function BulkImport({ onClose, onImported }: Props) {
                   const typeBadge = getTxTypeBadge(row.override_tx_type)
                   const rowAccounts = partnerAccounts.filter((pa: any) => pa.partner_id === row.override_partner_id)
                   const parsedAccount = p.account_number?.trim()
-                  const accountInDB = parsedAccount && rowAccounts.some((a: any) =>
-                    normalizeAccountNumber(a.account_number || '') === normalizeAccountNumber(parsedAccount)
-                  )
+                  const parsedAccountClean = (parsedAccount || '').replace(/[\r\n\t]/g, '').trim()
+                  const accountInDB = parsedAccountClean && rowAccounts.some((a: any) => {
+                    const dbAccClean = (a.account_number || '').replace(/[\r\n\t]/g, '').trim()
+                    return dbAccClean === parsedAccountClean ||
+                      normalizeAccountNumber(dbAccClean) === normalizeAccountNumber(parsedAccountClean)
+                  })
 
                   return (
                     <div key={p.id} style={{ ...s.reviewRow, ...(row.status === 'accepted' ? s.reviewRowAccepted : {}), ...(row.status === 'rejected' ? s.reviewRowRejected : {}), ...(row.override_tx_type === 'passthrough' ? s.reviewRowPassthrough : {}) }}>
