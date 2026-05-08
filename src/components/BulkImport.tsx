@@ -521,13 +521,14 @@ export default function BulkImport({ onClose, onImported }: Props) {
   const [departments, setDepartments] = useState<any[]>([])
   const [deptSubcategories, setDeptSubcategories] = useState<any[]>([])
   const [expenseDescriptions, setExpenseDescriptions] = useState<any[]>([])
+  const [partnerAccounts, setPartnerAccounts] = useState<any[]>([])
 
   useEffect(() => {
     const load = async () => {
       const [
         { data: comp }, { data: bnk }, { data: part },
         { data: plCat }, { data: plSub }, { data: dept },
-        { data: deptSub }, { data: expDesc },
+        { data: deptSub }, { data: expDesc }, { data: pacc },
       ] = await Promise.all([
         supabase.from('companies').select('*').order('name'),
         supabase.from('banks').select('*').order('name'),
@@ -537,6 +538,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
         supabase.from('departments').select('id,name,sort_order').order('sort_order'),
         supabase.from('dept_subcategories').select('id,name,department_id,sort_order').order('sort_order'),
         supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_order').order('sort_order'),
+        supabase.from('partner_accounts').select('partner_id,account_number'),
       ])
       if (comp) setCompanies(comp)
       if (bnk) setAllBanks(bnk)
@@ -546,6 +548,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
       if (dept) setDepartments(dept)
       if (deptSub) setDeptSubcategories(deptSub)
       if (expDesc) setExpenseDescriptions(expDesc)
+      if (pacc) setPartnerAccounts(pacc)
     }
     load()
   }, [])
@@ -568,6 +571,19 @@ export default function BulkImport({ onClose, onImported }: Props) {
   const getDeptSubs = (deptId: string) => deptSubcategories.filter(s => s.department_id === deptId)
   const getExpDescs = (subId: string) => expenseDescriptions.filter(e => e.dept_subcategory_id === subId)
 
+  const matchPartnerByAccount = (accountNum: string, pacc: any[], partList: any[]): string => {
+    if (!accountNum) return ''
+    const clean = accountNum.replace(/[-\s]/g, '')
+    if (!clean) return ''
+    const match = pacc.find((pa: any) => {
+      const paClean = (pa.account_number || '').replace(/[-\s]/g, '')
+      return paClean && paClean === clean
+    })
+    if (!match) return ''
+    const partner = partList.find((p: any) => p.id === match.partner_id)
+    return partner?.name || ''
+  }
+
   const handleFile = async (file: File) => {
     setParseError('')
     setFileName(file.name)
@@ -579,7 +595,11 @@ export default function BulkImport({ onClose, onImported }: Props) {
         const parsed = parseAmex(workbook)
         if (parsed.length === 0) { setParseError('Could not parse Amex file.'); return }
         setDetectedFormat('amex')
-        setRows(parsed.map(makeImportRow))
+        const importRows = parsed.map(makeImportRow)
+        setRows(importRows.map(r => {
+          const matched = matchPartnerByAccount(r.parsed.account_number, partnerAccounts, partners)
+          return matched ? { ...r, override_partner_name: matched } : r
+        }))
       } else {
         const text = await file.text()
         const format = detectFormat(text, file.name)
@@ -592,7 +612,11 @@ export default function BulkImport({ onClose, onImported }: Props) {
         else if (format === 'wio') parsed = parseWio(text)
         else if (format === 'paypal') parsed = parsePayPal(text)
         if (parsed.length === 0) { setParseError('No transactions found in file.'); return }
-        setRows(parsed.map(makeImportRow))
+        const importRows = parsed.map(makeImportRow)
+        setRows(importRows.map(r => {
+          const matched = matchPartnerByAccount(r.parsed.account_number, partnerAccounts, partners)
+          return matched ? { ...r, override_partner_name: matched } : r
+        }))
       }
     } catch (err: any) {
       setParseError(`Failed to read file: ${err.message}`)
@@ -1399,7 +1423,7 @@ const s: Record<string, React.CSSProperties> = {
   reviewSummary: { display: 'flex', alignItems: 'center', gap: '24px', padding: '12px 16px', background: '#f5f5f3', borderRadius: '10px', marginBottom: '12px' },
   reviewStat: { display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: '2px' },
   reviewList: { display: 'flex', flexDirection: 'column' as const, gap: '6px' },
-  reviewRow: { border: '0.5px solid #e5e5e5', borderRadius: '10px', background: '#fff', overflow: 'hidden' },
+  reviewRow: { border: '0.5px solid #e5e5e5', borderRadius: '10px', background: '#fff', overflow: 'visible' },
   reviewRowAccepted: { border: '1.5px solid #1D9E75', background: '#f0fdf8' },
   reviewRowRejected: { opacity: 0.45 },
   reviewRowPassthrough: { border: '0.5px solid #E6B432', background: '#FFFDF0' },

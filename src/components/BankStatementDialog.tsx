@@ -11,6 +11,7 @@ interface StatementRow {
   id: string
   date: string
   partner_name: string
+  partner_id: string | null
   description: string
   debit: string
   credit: string
@@ -54,7 +55,7 @@ function makeRow(defaultCurrency = 'RSD'): StatementRow {
   return {
     id: `row_${rowCounter}`,
     date: new Date().toISOString().split('T')[0],
-    partner_name: '', description: '',
+    partner_name: '', partner_id: null, description: '',
     debit: '', credit: '',
     currency: defaultCurrency,
     reference_number: '', model: '', account_number: '',
@@ -83,6 +84,7 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
   const [allBanks, setAllBanks] = useState<any[]>([])
   const [openInvoices, setOpenInvoices] = useState<any[]>([])
   const [partners, setPartners] = useState<any[]>([])
+  const [allPartnerAccounts, setAllPartnerAccounts] = useState<any[]>([])
   const [partnerSearch, setPartnerSearch] = useState<Record<string, string>>({})
   const [plCategories, setPlCategories] = useState<any[]>([])
   const [plSubcategories, setPlSubcategories] = useState<any[]>([])
@@ -101,6 +103,7 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
         { data: comp }, { data: bnk }, { data: part },
         { data: plCat }, { data: plSub },
         { data: dept }, { data: deptSub }, { data: expDesc },
+        { data: pacc },
       ] = await Promise.all([
         supabase.from('companies').select('*').order('name'),
         supabase.from('banks').select('*').order('name'),
@@ -110,6 +113,7 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
         supabase.from('departments').select('id,name,sort_order').order('sort_order'),
         supabase.from('dept_subcategories').select('id,name,department_id,sort_order').order('sort_order'),
         supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_order').order('sort_order'),
+        supabase.from('partner_accounts').select('id,partner_id,account_number,bank_name,currency,is_primary').order('is_primary', { ascending: false }),
       ])
       if (comp) setCompanies(comp)
       if (bnk) setAllBanks(bnk)
@@ -119,6 +123,7 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
       if (dept) setDepartments(dept)
       if (deptSub) setDeptSubcategories(deptSub)
       if (expDesc) setExpenseDescriptions(expDesc)
+      if (pacc) setAllPartnerAccounts(pacc)
     }
     load()
   }, [])
@@ -138,6 +143,10 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
   const getPlSubs = (catId: string) => plSubcategories.filter(s => s.category_id === catId)
   const getDeptSubs = (dId: string) => deptSubcategories.filter(s => s.department_id === dId)
   const getExpDescs = (subId: string) => expenseDescriptions.filter(e => e.dept_subcategory_id === subId)
+  const getPartnerAccounts = (partnerId: string | null) => {
+    if (!partnerId) return []
+    return allPartnerAccounts.filter(pa => pa.partner_id === partnerId)
+  }
 
   const addRow = () => setRows(prev => [...prev, makeRow(defaultCurrency)])
   const removeRow = (id: string) => setRows(prev => prev.filter(r => r.id !== id))
@@ -188,8 +197,10 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
         const exRate = await getExRate(cur, row.date)
         const amountUsd = convertToUSD(amount, cur, exRate)
 
-        let partnerId: string | null = null
-        if (row.partner_name.trim()) {
+        let partnerId: string | null = row.partner_id || null
+
+        // If partner_id not set but name is, look up or create
+        if (!partnerId && row.partner_name.trim()) {
           const { data: existing } = await supabase.from('partners').select('id').ilike('name', row.partner_name.trim()).single()
           if (existing) { partnerId = existing.id }
           else {
@@ -243,9 +254,10 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
         }).select().single()
 
         if (row.tx_type === 'invoice_payment' && row.linked_invoice_id && newTx?.id) {
+          const invAmount = amountUsd
           await supabase.from('invoice_transaction_links').insert({
             invoice_id: row.linked_invoice_id, transaction_id: newTx.id,
-            allocated_amount: amount, allocated_amount_usd: cur === 'USD' ? amount : null,
+            allocated_amount: amount, allocated_amount_usd: cur === 'USD' ? amount : invAmount,
           })
           const { data: invStatus } = await supabase.from('v_invoice_status').select('calculated_status').eq('id', row.linked_invoice_id).single()
           if (invStatus) await supabase.from('invoices').update({ status: invStatus.calculated_status }).eq('id', row.linked_invoice_id)
@@ -325,7 +337,7 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '6px' }}>
-              {rows.map((row, idx) => {
+              {rows.map((row) => {
                 const isExpanded = expandedRow === row.id
                 const hasAmount = parseFloat(row.debit) > 0 || parseFloat(row.credit) > 0
                 const isValid = row.date && hasAmount
@@ -333,11 +345,13 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                 const deptSubs = getDeptSubs(row.department_id)
                 const expDescs = getExpDescs(row.dept_subcategory_id)
                 const linkedInvoice = openInvoices.find(i => i.id === row.linked_invoice_id)
+                const rowPartnerAccounts = getPartnerAccounts(row.partner_id)
 
                 return (
                   <div key={row.id} style={{
                     border: isExpanded ? '1.5px solid #1D9E75' : isValid ? '1px solid #e5e5e5' : '1px dashed #ddd',
-                    borderRadius: '10px', overflow: 'hidden',
+                    borderRadius: '10px',
+                    // NOTE: no overflow:hidden here so dropdowns can overlay other rows
                     background: isExpanded ? '#f0fdf8' : isValid ? '#fff' : '#fafaf9',
                   }}>
                     {/* Row header — always visible */}
@@ -346,27 +360,39 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                       <input type="date" style={s.cellInput} value={row.date}
                         onChange={e => { e.stopPropagation(); updateRow(row.id, { date: e.target.value }) }}
                         onClick={e => e.stopPropagation()} />
+
+                      {/* Partner search with dropdown */}
                       <div style={{ position: 'relative' as const }} onClick={e => e.stopPropagation()}>
                         <input style={s.cellInput} value={partnerSearch[row.id] ?? row.partner_name}
                           onChange={e => {
                             setPartnerSearch(prev => ({ ...prev, [row.id]: e.target.value }))
-                            updateRow(row.id, { partner_name: e.target.value })
+                            updateRow(row.id, { partner_name: e.target.value, partner_id: null })
                           }}
                           placeholder="Partner name" />
-                        {(partnerSearch[row.id] ?? '').length > 0 && !partners.find(p => p.name === row.partner_name) && (
-                          <div style={{ position: 'absolute' as const, top: '100%', left: 0, right: 0, background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '6px', zIndex: 100, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', maxHeight: '140px', overflowY: 'auto' as const }}>
-                            {partners.filter(p => p.name.toLowerCase().includes((partnerSearch[row.id] ?? '').toLowerCase())).slice(0, 6).map(p => (
-                              <div key={p.id} style={{ padding: '6px 10px', fontSize: '12px', cursor: 'pointer', borderBottom: '0.5px solid #f5f5f3' }}
-                                onMouseDown={e => { e.preventDefault(); updateRow(row.id, { partner_name: p.name }); setPartnerSearch(prev => ({ ...prev, [row.id]: p.name })) }}>
-                                {p.name}
+                        {(partnerSearch[row.id] ?? '').length > 0 && !row.partner_id && (
+                          <div style={{ position: 'absolute' as const, top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e5e5', borderRadius: '6px', zIndex: 200, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', maxHeight: '200px', overflowY: 'auto' as const }}>
+                            {partners.filter(p => p.name.toLowerCase().includes((partnerSearch[row.id] ?? '').toLowerCase())).slice(0, 8).map(p => (
+                              <div key={p.id} style={{ padding: '7px 10px', fontSize: '12px', cursor: 'pointer', borderBottom: '0.5px solid #f5f5f3', display: 'flex', flexDirection: 'column' as const }}
+                                onMouseDown={e => {
+                                  e.preventDefault()
+                                  updateRow(row.id, { partner_name: p.name, partner_id: p.id })
+                                  setPartnerSearch(prev => ({ ...prev, [row.id]: p.name }))
+                                }}>
+                                <span style={{ fontWeight: '500', color: '#111' }}>{p.name}</span>
+                                {allPartnerAccounts.filter(pa => pa.partner_id === p.id).length > 0 && (
+                                  <span style={{ fontSize: '10px', color: '#7A9BB8' }}>
+                                    {allPartnerAccounts.filter(pa => pa.partner_id === p.id).length} račun(a)
+                                  </span>
+                                )}
                               </div>
                             ))}
                             {partners.filter(p => p.name.toLowerCase().includes((partnerSearch[row.id] ?? '').toLowerCase())).length === 0 && (
-                              <div style={{ padding: '6px 10px', fontSize: '12px', color: '#aaa' }}>New partner: "{partnerSearch[row.id]}"</div>
+                              <div style={{ padding: '7px 10px', fontSize: '12px', color: '#aaa' }}>Novi partner: "{partnerSearch[row.id]}"</div>
                             )}
                           </div>
                         )}
                       </div>
+
                       <input style={s.cellInput} value={row.description}
                         onChange={e => { e.stopPropagation(); updateRow(row.id, { description: e.target.value }) }}
                         onClick={e => e.stopPropagation()} placeholder="Description" />
@@ -383,7 +409,6 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                         onClick={e => e.stopPropagation()}>
                         {['RSD', 'USD', 'EUR', 'AED', 'GBP'].map(c => <option key={c}>{c}</option>)}
                       </select>
-                      {/* Classification summary */}
                       <div style={{ fontSize: '10px', color: '#888', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
                         {hasAmount ? getRowSummary(row) : <span style={{ color: '#ccc' }}>click to classify</span>}
                       </div>
@@ -445,12 +470,18 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                           <>
                             <div style={s.classTitle}>Link to open invoice</div>
                             <div style={{ marginBottom: '14px' }}>
-                              <select style={{ ...s.select, width: '100%' }} value={row.linked_invoice_id} onChange={e => updateRow(row.id, { linked_invoice_id: e.target.value })}>
-                                <option value="">— No invoice linked —</option>
-                                {openInvoices.map(inv => (
-                                  <option key={inv.id} value={inv.id}>{inv.partner_name || '—'}{inv.invoice_number ? ` · ${inv.invoice_number}` : ''} · ${(inv.remaining_usd || 0).toFixed(0)} remaining</option>
-                                ))}
-                              </select>
+                              {openInvoices.length === 0 ? (
+                                <div style={{ fontSize: '12px', color: '#aaa', padding: '8px', background: '#f5f5f3', borderRadius: '8px' }}>
+                                  No open invoices for this company. Select a company first.
+                                </div>
+                              ) : (
+                                <select style={{ ...s.select, width: '100%' }} value={row.linked_invoice_id} onChange={e => updateRow(row.id, { linked_invoice_id: e.target.value })}>
+                                  <option value="">— No invoice linked —</option>
+                                  {openInvoices.map(inv => (
+                                    <option key={inv.id} value={inv.id}>{inv.partner_name || '—'}{inv.invoice_number ? ` · ${inv.invoice_number}` : ''} · ${(inv.remaining_usd || 0).toFixed(0)} remaining</option>
+                                  ))}
+                                </select>
+                              )}
                               {linkedInvoice && (
                                 <div style={{ marginTop: '8px', background: '#E6F1FB', border: '0.5px solid #7FB8EE', borderRadius: '8px', padding: '8px 12px', fontSize: '12px', color: '#0C447C' }}>
                                   💳 Closes: <strong>{linkedInvoice.partner_name}</strong> · Remaining: <strong>${(linkedInvoice.remaining_usd || 0).toFixed(2)}</strong>
@@ -608,45 +639,44 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                               </>
                             )}
 
-
-                                {/* ── Cash Flow Classification ── */}
-                                <div style={s.classTitle}>Cash flow classification</div>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '6px', marginBottom: '10px' }}>
-                                  {[
-                                    { id: 'recurring', label: '🔁 Recurring' },
-                                    { id: 'one_time', label: '1️⃣ One-time' },
-                                    { id: 'accrual', label: '📅 Accrual' },
-                                    { id: 'capex', label: '🏗 CapEx' },
-                                    { id: 'reimbursable', label: '↩️ Reimb.' },
-                                  ].map(a => (
-                                    <div key={a.id} style={{ ...s.allocBtn, padding: '6px 4px', ...(row.cf_type === a.id ? { border: '2px solid #1D9E75', background: '#E1F5EE' } : {}) }}
-                                      onClick={() => updateRow(row.id, { cf_type: row.cf_type === a.id ? '' : a.id })}>
-                                      <div style={{ fontSize: '10px', fontWeight: '600', color: row.cf_type === a.id ? '#085041' : '#111' }}>{a.label}</div>
-                                    </div>
+                            {/* Cash Flow Classification */}
+                            <div style={s.classTitle}>Cash flow classification</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '6px', marginBottom: '10px' }}>
+                              {[
+                                { id: 'recurring', label: '🔁 Recurring' },
+                                { id: 'one_time', label: '1️⃣ One-time' },
+                                { id: 'accrual', label: '📅 Accrual' },
+                                { id: 'capex', label: '🏗 CapEx' },
+                                { id: 'reimbursable', label: '↩️ Reimb.' },
+                              ].map(a => (
+                                <div key={a.id} style={{ ...s.allocBtn, padding: '6px 4px', ...(row.cf_type === a.id ? { border: '2px solid #1D9E75', background: '#E1F5EE' } : {}) }}
+                                  onClick={() => updateRow(row.id, { cf_type: row.cf_type === a.id ? '' : a.id })}>
+                                  <div style={{ fontSize: '10px', fontWeight: '600', color: row.cf_type === a.id ? '#085041' : '#111' }}>{a.label}</div>
+                                </div>
+                              ))}
+                            </div>
+                            {row.cf_type === 'recurring' && (
+                              <div style={{ marginBottom: '10px', background: '#f5f5f3', borderRadius: '8px', padding: '10px', border: '0.5px solid #e5e5e5' }}>
+                                <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+                                  {[{ id: 'monthly', label: 'Monthly' }, { id: 'quarterly', label: 'Quarterly' }, { id: 'yearly', label: 'Yearly' }].map(f => (
+                                    <div key={f.id}
+                                      style={{ flex: 1, padding: '5px', border: row.cf_frequency === f.id ? '2px solid #1D9E75' : '0.5px solid #e5e5e5', borderRadius: '6px', background: row.cf_frequency === f.id ? '#E1F5EE' : '#fff', cursor: 'pointer', textAlign: 'center' as const, fontSize: '11px', color: row.cf_frequency === f.id ? '#085041' : '#666' }}
+                                      onClick={() => updateRow(row.id, { cf_frequency: f.id })}>{f.label}</div>
                                   ))}
                                 </div>
-                                {row.cf_type === 'recurring' && (
-                                  <div style={{ marginBottom: '10px', background: '#f5f5f3', borderRadius: '8px', padding: '10px', border: '0.5px solid #e5e5e5' }}>
-                                    <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
-                                      {[{ id: 'monthly', label: 'Monthly' }, { id: 'quarterly', label: 'Quarterly' }, { id: 'yearly', label: 'Yearly' }].map(f => (
-                                        <div key={f.id}
-                                          style={{ flex: 1, padding: '5px', border: row.cf_frequency === f.id ? '2px solid #1D9E75' : '0.5px solid #e5e5e5', borderRadius: '6px', background: row.cf_frequency === f.id ? '#E1F5EE' : '#fff', cursor: 'pointer', textAlign: 'center' as const, fontSize: '11px', color: row.cf_frequency === f.id ? '#085041' : '#666' }}
-                                          onClick={() => updateRow(row.id, { cf_frequency: f.id })}>{f.label}</div>
-                                      ))}
-                                    </div>
-                                    <div style={s.field}>
-                                      <label style={s.lbl}>Next month estimate ({row.currency})</label>
-                                      <input type="number" style={s.input} value={row.cf_next_month_est}
-                                        onChange={e => updateRow(row.id, { cf_next_month_est: e.target.value })}
-                                        placeholder={row.debit ? `Auto: ${parseFloat(row.debit).toLocaleString()}` : '0.00'} />
-                                    </div>
-                                  </div>
-                                )}
-                                {row.cf_type === 'one_time' && (
-                                  <div style={{ marginBottom: '10px', fontSize: '11px', color: '#888', background: '#f5f5f3', borderRadius: '6px', padding: '8px 10px' }}>
-                                    One-time — won't be included in future estimates.
-                                  </div>
-                                )}
+                                <div style={s.field}>
+                                  <label style={s.lbl}>Next month estimate ({row.currency})</label>
+                                  <input type="number" style={s.input} value={row.cf_next_month_est}
+                                    onChange={e => updateRow(row.id, { cf_next_month_est: e.target.value })}
+                                    placeholder={row.debit ? `Auto: ${parseFloat(row.debit).toLocaleString()}` : '0.00'} />
+                                </div>
+                              </div>
+                            )}
+                            {row.cf_type === 'one_time' && (
+                              <div style={{ marginBottom: '10px', fontSize: '11px', color: '#888', background: '#f5f5f3', borderRadius: '6px', padding: '8px 10px' }}>
+                                One-time — won't be included in future estimates.
+                              </div>
+                            )}
 
                             {/* Revenue */}
                             {row.tx_subtype === 'revenue' && (
@@ -667,8 +697,23 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                         <div style={s.classTitle}>Payment reference</div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 1fr', gap: '10px', marginBottom: '10px' }}>
                           <div style={s.field}>
-                            <label style={s.lbl}>Account number</label>
-                            <input style={s.input} value={row.account_number} onChange={e => updateRow(row.id, { account_number: e.target.value })} placeholder="265-..." />
+                            <label style={s.lbl}>Account number {rowPartnerAccounts.length > 0 ? `(${rowPartnerAccounts.length} from partner)` : ''}</label>
+                            {rowPartnerAccounts.length > 0 ? (
+                              <select style={s.select} value={row.account_number}
+                                onChange={e => {
+                                  const acc = rowPartnerAccounts.find(a => a.account_number === e.target.value)
+                                  updateRow(row.id, { account_number: e.target.value, model: acc?.model || row.model })
+                                }}>
+                                <option value="">— Bez računa —</option>
+                                {rowPartnerAccounts.map(acc => (
+                                  <option key={acc.id} value={acc.account_number}>
+                                    {acc.account_number}{acc.bank_name ? ` (${acc.bank_name})` : ''}{acc.is_primary ? ' ★' : ''}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input style={s.input} value={row.account_number} onChange={e => updateRow(row.id, { account_number: e.target.value })} placeholder="265-..." />
+                            )}
                           </div>
                           <div style={s.field}>
                             <label style={s.lbl}>Model</label>
