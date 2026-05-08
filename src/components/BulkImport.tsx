@@ -123,16 +123,13 @@ function parseTruist(content: string): ParsedRow[] {
   if (lines.length < 2) return []
   const rows: ParsedRow[] = []
   const parseCSVLine = (line: string): string[] => {
-    const result: string[] = []
-    let current = ''
-    let inQuotes = false
+    const result: string[] = []; let current = ''; let inQuotes = false
     for (let i = 0; i < line.length; i++) {
       if (line[i] === '"') { inQuotes = !inQuotes }
       else if (line[i] === ',' && !inQuotes) { result.push(current.trim()); current = '' }
       else { current += line[i] }
     }
-    result.push(current.trim())
-    return result
+    result.push(current.trim()); return result
   }
   lines.slice(1).forEach((line, index) => {
     if (!line.trim()) return
@@ -147,15 +144,7 @@ function parseTruist(content: string): ParsedRow[] {
     const rawDate = cols[1]?.trim() || cols[0]?.trim() || ''
     const dateParts = rawDate.split('/')
     const date = dateParts.length === 3 ? `${dateParts[1]}.${dateParts[0]}.${dateParts[2]}` : rawDate
-    rows.push({
-      id: `row_${index}`, source_format: 'truist',
-      date, statement_number: '', currency: 'USD',
-      debit, credit,
-      partner_name: cols[5]?.trim() || '',
-      description: cols[4]?.trim() || '',
-      reference_number: cols[3]?.trim() || '',
-      model: '', account_number: '',
-    })
+    rows.push({ id: `row_${index}`, source_format: 'truist', date, statement_number: '', currency: 'USD', debit, credit, partner_name: cols[5]?.trim() || '', description: cols[4]?.trim() || '', reference_number: cols[3]?.trim() || '', model: '', account_number: '' })
   })
   return rows
 }
@@ -165,22 +154,17 @@ function parseBOA(content: string): ParsedRow[] {
   const rows: ParsedRow[] = []
   let dataStart = 0
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].startsWith('Date,') && lines[i].includes('Description') && lines[i].includes('Amount')) {
-      dataStart = i + 1; break
-    }
+    if (lines[i].startsWith('Date,') && lines[i].includes('Description') && lines[i].includes('Amount')) { dataStart = i + 1; break }
   }
   if (dataStart === 0) return []
   const parseCSVLine = (line: string): string[] => {
-    const result: string[] = []
-    let current = ''
-    let inQuotes = false
+    const result: string[] = []; let current = ''; let inQuotes = false
     for (let i = 0; i < line.length; i++) {
       if (line[i] === '"') { inQuotes = !inQuotes }
       else if (line[i] === ',' && !inQuotes) { result.push(current.trim()); current = '' }
       else { current += line[i] }
     }
-    result.push(current.trim())
-    return result
+    result.push(current.trim()); return result
   }
   lines.slice(dataStart).forEach((line, index) => {
     if (!line.trim()) return
@@ -196,20 +180,9 @@ function parseBOA(content: string): ParsedRow[] {
     const dateParts = rawDate.split('/')
     const date = dateParts.length === 3 ? `${dateParts[1]}.${dateParts[0]}.${dateParts[2]}` : rawDate
     let partnerName = description
-    if (description.includes('WIRE TYPE:')) {
-      const bnfMatch = description.match(/BNF:([^I]+?)(?:\s+ID:|$)/)
-      if (bnfMatch) partnerName = bnfMatch[1].trim()
-    } else if (description.includes(' DES:')) {
-      partnerName = description.split(' DES:')[0].trim()
-    }
-    rows.push({
-      id: `row_${index}`, source_format: 'boa',
-      date, statement_number: '', currency: 'USD',
-      debit, credit,
-      partner_name: partnerName.slice(0, 60),
-      description: description.slice(0, 200),
-      reference_number: '', model: '', account_number: '',
-    })
+    if (description.includes('WIRE TYPE:')) { const bnfMatch = description.match(/BNF:([^I]+?)(?:\s+ID:|$)/); if (bnfMatch) partnerName = bnfMatch[1].trim() }
+    else if (description.includes(' DES:')) { partnerName = description.split(' DES:')[0].trim() }
+    rows.push({ id: `row_${index}`, source_format: 'boa', date, statement_number: '', currency: 'USD', debit, credit, partner_name: partnerName.slice(0, 60), description: description.slice(0, 200), reference_number: '', model: '', account_number: '' })
   })
   return rows
 }
@@ -240,15 +213,7 @@ function parseAmex(workbook: XLSX.WorkBook): ParsedRow[] {
     const city = String(row[7] || '').trim()
     let partnerName = description.split(/\s{2,}/)[0].trim()
     if (city) partnerName = partnerName.replace(city, '').trim()
-    rows.push({
-      id: `row_${index}`, source_format: 'amex',
-      date, statement_number: String(row[10] || ''), currency: 'USD',
-      debit, credit,
-      partner_name: partnerName.slice(0, 60),
-      description: `${description}${category ? ` [${category}]` : ''}`,
-      reference_number: String(row[10] || ''),
-      model: '', account_number: '',
-    })
+    rows.push({ id: `row_${index}`, source_format: 'amex', date, statement_number: String(row[10] || ''), currency: 'USD', debit, credit, partner_name: partnerName.slice(0, 60), description: `${description}${category ? ` [${category}]` : ''}`, reference_number: String(row[10] || ''), model: '', account_number: '' })
   })
   return rows
 }
@@ -256,154 +221,64 @@ function parseAmex(workbook: XLSX.WorkBook): ParsedRow[] {
 function parsePayPal(content: string): ParsedRow[] {
   const lines = content.split('\n')
   if (lines.length < 2) return []
-
   const parseCSVLinePP = (line: string): string[] => {
-    const result: string[] = []
-    let current = ''
-    let inQuotes = false
+    const result: string[] = []; let current = ''; let inQuotes = false
     for (let i = 0; i < line.length; i++) {
       if (line[i] === '"') { inQuotes = !inQuotes }
       else if (line[i] === ',' && !inQuotes) { result.push(current.trim()); current = '' }
       else { current += line[i] }
     }
-    result.push(current.trim())
-    return result
+    result.push(current.trim()); return result
   }
-
   const headerLine = lines[0].replace(/^\uFEFF/, '')
   const headerCols = parseCSVLinePP(headerLine)
   const col = (name: string) => headerCols.findIndex(h => h.trim() === name)
-
   const iDate = col('Date'), iName = col('Name'), iType = col('Type')
   const iStatus = col('Status'), iCurrency = col('Currency')
   const iGross = col('Gross'), iFee = col('Fee'), iNet = col('Net')
   const iTxId = col('Transaction ID'), iRefTxId = col('Reference Txn ID')
   const iInvoiceNum = col('Invoice Number'), iSubject = col('Subject')
   const iNote = col('Note'), iBalanceImpact = col('Balance Impact')
-
-  const INCLUDE_TYPES = new Set([
-    'User Initiated Withdrawal', 'Mass Pay Payment', 'Mass Pay Reversal',
-    'General Payment', 'Subscription Payment',
-    'Bank Deposit to PP Account',
-  ])
-
-  const parseAmt = (s: string): number => {
-    if (!s) return 0
-    return parseFloat(s.replace(/[",]/g, '').trim()) || 0
-  }
-
+  const INCLUDE_TYPES = new Set(['User Initiated Withdrawal', 'Mass Pay Payment', 'Mass Pay Reversal', 'General Payment', 'Subscription Payment', 'Bank Deposit to PP Account'])
+  const parseAmt = (s: string): number => { if (!s) return 0; return parseFloat(s.replace(/[",]/g, '').trim()) || 0 }
   const rows: ParsedRow[] = []
   let rowIndex = 0
-
   lines.slice(1).forEach(line => {
     if (!line.trim()) return
     const cols = parseCSVLinePP(line.replace(/\r/g, ''))
     if (cols.length < 10) return
-
     const txType = cols[iType]?.trim() || ''
     if (!INCLUDE_TYPES.has(txType)) return
-
     const status = cols[iStatus]?.trim() || ''
-    // Withdrawals can appear as "Removed", Bank Deposits as "Pending" — include them
     const allowedStatuses = new Set(['Completed', 'Removed', 'Pending'])
     if (!allowedStatuses.has(status)) return
-
     const rawDate = cols[iDate]?.trim() || ''
     const dateParts = rawDate.split('/')
-    const date = dateParts.length === 3
-      ? `${dateParts[2]}-${dateParts[0].padStart(2, '0')}-${dateParts[1].padStart(2, '0')}`
-      : rawDate
-
+    const date = dateParts.length === 3 ? `${dateParts[2]}-${dateParts[0].padStart(2, '0')}-${dateParts[1].padStart(2, '0')}` : rawDate
     const currency = cols[iCurrency]?.trim() || 'USD'
-    const gross = parseAmt(cols[iGross])
-    const fee = parseAmt(cols[iFee])
-    const net = parseAmt(cols[iNet])
+    const gross = parseAmt(cols[iGross]); const fee = parseAmt(cols[iFee]); const net = parseAmt(cols[iNet])
     const name = cols[iName]?.trim() || ''
-    const txId = cols[iTxId]?.trim() || ''
-    const refTxId = cols[iRefTxId]?.trim() || ''
-    const invoiceNum = cols[iInvoiceNum]?.trim() || ''
-    const subject = cols[iSubject]?.trim() || ''
-    const note = cols[iNote]?.trim() || ''
-    const balanceImpact = cols[iBalanceImpact]?.trim() || ''
+    const txId = cols[iTxId]?.trim() || ''; const refTxId = cols[iRefTxId]?.trim() || ''
+    const invoiceNum = cols[iInvoiceNum]?.trim() || ''; const subject = cols[iSubject]?.trim() || ''
+    const note = cols[iNote]?.trim() || ''; const balanceImpact = cols[iBalanceImpact]?.trim() || ''
     const isCredit = balanceImpact === 'Credit'
-
     const descParts = [subject, note, invoiceNum ? `Invoice: ${invoiceNum}` : '', refTxId ? `Ref: ${refTxId}` : ''].filter(Boolean)
     const description = descParts.join(' | ')
-
     const makeRow = (debit: number | null, credit: number | null, partner: string, desc: string, ref: string, txHint?: string): ParsedRow => ({
-      id: `paypal_${rowIndex++}`,
-      source_format: 'paypal' as any,
-      date, statement_number: txHint || '', currency,
-      debit, credit,
-      partner_name: partner,
-      description: desc,
-      reference_number: ref,
-      model: txHint || '', account_number: '',
+      id: `paypal_${rowIndex++}`, source_format: 'paypal' as any, date, statement_number: txHint || '', currency, debit, credit, partner_name: partner, description: desc, reference_number: ref, model: txHint || '', account_number: '',
     })
-
     if (txType === 'User Initiated Withdrawal') {
-      const absGross = Math.abs(gross)
-      const absFee = Math.abs(fee)
-      if (absFee > 0) {
-        // Instant withdrawal — passthrough (amount) + expense (fee)
-        rows.push(makeRow(absGross, null, 'PayPal',
-          `Instant withdrawal${description ? ' | ' + description : ''} | TX: ${txId}`, txId,
-          'passthrough'))
-        rows.push(makeRow(absFee, null, 'PayPal',
-          `Instant withdrawal fee | TX: ${txId}`, txId,
-          'expense'))
-      } else {
-        rows.push(makeRow(Math.abs(net), null, 'PayPal',
-          `Withdrawal${description ? ' | ' + description : ''} | TX: ${txId}`, txId,
-          'passthrough'))
-      }
+      const absGross = Math.abs(gross); const absFee = Math.abs(fee)
+      if (absFee > 0) { rows.push(makeRow(absGross, null, 'PayPal', `Instant withdrawal${description ? ' | ' + description : ''} | TX: ${txId}`, txId, 'passthrough')); rows.push(makeRow(absFee, null, 'PayPal', `Instant withdrawal fee | TX: ${txId}`, txId, 'expense')) }
+      else { rows.push(makeRow(Math.abs(net), null, 'PayPal', `Withdrawal${description ? ' | ' + description : ''} | TX: ${txId}`, txId, 'passthrough')) }
       return
     }
-
-    if (txType === 'General Payment' && isCredit) {
-      rows.push(makeRow(null, Math.abs(net), name || 'PayPal customer',
-        `PayPal payment received${description ? ' | ' + description : ''} | TX: ${txId}`,
-        invoiceNum || txId))
-      return
-    }
-
-    if (txType === 'Mass Pay Payment') {
-      // Split into gross (payment) + fee (cost)
-      const absGross = Math.abs(gross)
-      const absFee = Math.abs(fee)
-      rows.push(makeRow(absGross, null, name || 'PayPal',
-        `Mass Pay Payment${description ? ' | ' + description : ''} | TX: ${txId}`,
-        refTxId || txId))
-      if (absFee > 0) {
-        rows.push(makeRow(absFee, null, 'PayPal',
-          `Mass Pay Fee${description ? ' | ' + description : ''} | TX: ${txId}`,
-          refTxId || txId))
-      }
-      return
-    }
-
-    if (txType === 'Mass Pay Reversal') {
-      // Reversal credit — show as credit (money returned), mark clearly as reversal
-      rows.push(makeRow(null, Math.abs(net), name || 'PayPal',
-        `⚠️ Mass Pay Reversal${description ? ' | ' + description : ''} | TX: ${txId}`,
-        refTxId || txId))
-      return
-    }
-
-    if (txType === 'Bank Deposit to PP Account') {
-      // Credit — deposit from bank to cover negative balance → passthrough
-      rows.push(makeRow(null, Math.abs(net), 'PayPal',
-        `Bank deposit to PayPal${description ? ' | ' + description : ''} | TX: ${txId}`,
-        txId, 'passthrough'))
-      return
-    }
-
-    // General Payment (debit), Subscription Payment — net amount
-    rows.push(makeRow(Math.abs(net), null, name || 'PayPal',
-      `${txType}${description ? ' | ' + description : ''} | TX: ${txId}`,
-      refTxId || txId))
+    if (txType === 'General Payment' && isCredit) { rows.push(makeRow(null, Math.abs(net), name || 'PayPal customer', `PayPal payment received${description ? ' | ' + description : ''} | TX: ${txId}`, invoiceNum || txId)); return }
+    if (txType === 'Mass Pay Payment') { const absGross = Math.abs(gross); const absFee = Math.abs(fee); rows.push(makeRow(absGross, null, name || 'PayPal', `Mass Pay Payment${description ? ' | ' + description : ''} | TX: ${txId}`, refTxId || txId)); if (absFee > 0) { rows.push(makeRow(absFee, null, 'PayPal', `Mass Pay Fee${description ? ' | ' + description : ''} | TX: ${txId}`, refTxId || txId)) } return }
+    if (txType === 'Mass Pay Reversal') { rows.push(makeRow(null, Math.abs(net), name || 'PayPal', `⚠️ Mass Pay Reversal${description ? ' | ' + description : ''} | TX: ${txId}`, refTxId || txId)); return }
+    if (txType === 'Bank Deposit to PP Account') { rows.push(makeRow(null, Math.abs(net), 'PayPal', `Bank deposit to PayPal${description ? ' | ' + description : ''} | TX: ${txId}`, txId, 'passthrough')); return }
+    rows.push(makeRow(Math.abs(net), null, name || 'PayPal', `${txType}${description ? ' | ' + description : ''} | TX: ${txId}`, refTxId || txId))
   })
-
   return rows
 }
 
@@ -411,31 +286,25 @@ function parseWio(content: string): ParsedRow[] {
   const lines = content.split('\n').filter(l => l.trim())
   if (lines.length < 2) return []
   const parseCSVLine = (line: string): string[] => {
-    const result: string[] = []
-    let current = ''
-    let inQuotes = false
+    const result: string[] = []; let current = ''; let inQuotes = false
     for (let i = 0; i < line.length; i++) {
       if (line[i] === '"') { inQuotes = !inQuotes }
       else if (line[i] === ',' && !inQuotes) { result.push(current.trim()); current = '' }
       else { current += line[i] }
     }
-    result.push(current.trim())
-    return result
+    result.push(current.trim()); return result
   }
   const rows: ParsedRow[] = []
   lines.slice(1).forEach((line, index) => {
     if (!line.trim()) return
     const cols = parseCSVLine(line.replace(/\r/g, ''))
     if (cols.length < 11) return
-    const currency = cols[5]?.trim() || 'AED'
-    const txType = cols[6]?.trim() || ''
-    const rawDate = cols[7]?.trim() || ''
-    const refNum = cols[8]?.trim() || ''
+    const currency = cols[5]?.trim() || 'AED'; const txType = cols[6]?.trim() || ''
+    const rawDate = cols[7]?.trim() || ''; const refNum = cols[8]?.trim() || ''
     const description = cols[9]?.trim() || ''
     const rawAmount = parseFloat(cols[10]?.replace(/,/g, '') || '0') || 0
     const notes = cols[13]?.trim() || ''
-    if (rawAmount === 0) return
-    if (txType === 'Currency exchange') return
+    if (rawAmount === 0) return; if (txType === 'Currency exchange') return
     const dateParts = rawDate.split('/')
     const date = dateParts.length === 3 ? `${dateParts[0]}.${dateParts[1]}.${dateParts[2]}` : rawDate
     const debit = rawAmount < 0 ? Math.abs(rawAmount) : null
@@ -444,14 +313,7 @@ function parseWio(content: string): ParsedRow[] {
     if (description.toLowerCase().startsWith('to ')) partnerName = description.slice(3)
     else if (description.toLowerCase().startsWith('from ')) partnerName = description.slice(5)
     const fullDesc = notes && notes !== 'N/A' && notes !== description ? `${description} — ${notes}` : description
-    rows.push({
-      id: `row_${index}`, source_format: 'wio' as any,
-      date, statement_number: refNum, currency, debit, credit,
-      partner_name: partnerName.slice(0, 80),
-      description: fullDesc.slice(0, 200),
-      reference_number: refNum, model: '',
-      account_number: cols[3]?.trim() || '',
-    })
+    rows.push({ id: `row_${index}`, source_format: 'wio' as any, date, statement_number: refNum, currency, debit, credit, partner_name: partnerName.slice(0, 80), description: fullDesc.slice(0, 200), reference_number: refNum, model: '', account_number: cols[3]?.trim() || '' })
   })
   return rows
 }
@@ -491,12 +353,8 @@ function makeImportRow(parsed: ParsedRow): ImportRow {
 }
 
 const FORMAT_LABELS: Record<string, string> = {
-  raiffeisen: '🇷🇸 Raiffeisen/Intesa',
-  truist: '🇺🇸 Truist',
-  boa: '🇺🇸 Bank of America',
-  amex: '💳 American Express',
-  wio: '🇦🇪 Wio Bank',
-  paypal: '🅿️ PayPal',
+  raiffeisen: '🇷🇸 Raiffeisen/Intesa', truist: '🇺🇸 Truist', boa: '🇺🇸 Bank of America',
+  amex: '💳 American Express', wio: '🇦🇪 Wio Bank', paypal: '🅿️ PayPal',
 }
 
 export default function BulkImport({ onClose, onImported }: Props) {
@@ -537,13 +395,13 @@ export default function BulkImport({ onClose, onImported }: Props) {
       ] = await Promise.all([
         supabase.from('companies').select('*').order('name'),
         supabase.from('banks').select('*').order('name'),
-        supabase.from('partners').select('*').order('name'),
+        supabase.from('partners').select('*').order('name').limit(10000),
         supabase.from('pl_categories').select('id,name,sort_order').order('sort_order'),
         supabase.from('pl_subcategories').select('id,name,category_id,sort_order').order('sort_order'),
         supabase.from('departments').select('id,name,sort_order').order('sort_order'),
         supabase.from('dept_subcategories').select('id,name,department_id,sort_order').order('sort_order'),
         supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_order').order('sort_order'),
-        supabase.from('partner_accounts').select('id,partner_id,account_number,bank_name,is_primary').order('is_primary', { ascending: false }),
+        supabase.from('partner_accounts').select('id,partner_id,account_number,bank_name,is_primary').order('is_primary', { ascending: false }).limit(10000),
       ])
       if (comp) setCompanies(comp)
       if (bnk) setAllBanks(bnk)
@@ -576,22 +434,18 @@ export default function BulkImport({ onClose, onImported }: Props) {
   const getDeptSubs = (deptId: string) => deptSubcategories.filter(s => s.department_id === deptId)
   const getExpDescs = (subId: string) => expenseDescriptions.filter(e => e.dept_subcategory_id === subId)
 
-  // Normalize Serbian bank account for comparison.
-  // Handles both formats:
-  //   NBS/baza format:  160-490637-43       (bank-account-control, 3 segments)
-  //   Izvod format:     160-000000049063743  (bank-fullnumber, last 2 digits = control)
+  // Normalize Serbian bank account numbers for comparison.
+  // Handles NBS format (160-490637-43) and izvod format (160-000000049063743).
   const normalizeAccountNumber = (acc: string): string => {
     if (!acc) return ''
     const a = acc.trim().replace(/\s/g, '')
     const parts = a.split('-')
     if (parts.length === 3) {
-      // NBS format: bank-account-control
       const bank = parts[0].replace(/^0+/, '') || '0'
       const core = parts[1].replace(/^0+/, '') || '0'
       const ctrl = parts[2].replace(/^0+/, '') || '0'
       return `${bank}|${core}|${ctrl}`
     } else if (parts.length === 2) {
-      // Izvod format: bank-fullnumber (last 2 = control, rest = account)
       const bank = parts[0].replace(/^0+/, '') || '0'
       const full = parts[1]
       if (full.length >= 3) {
@@ -601,7 +455,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
       }
       return `${bank}|${full.replace(/^0+/, '') || '0'}`
     }
-    // Fallback: strip all non-digits and leading zeros
     return a.replace(/\D/g, '').replace(/^0+/, '') || '0'
   }
 
@@ -645,6 +498,18 @@ export default function BulkImport({ onClose, onImported }: Props) {
     setParseError('')
     setFileName(file.name)
     setDetectedFormat('')
+
+    // Always fetch fresh data from DB before matching
+    const fetchFreshData = async () => {
+      const [{ data: freshAccounts }, { data: freshPartners }] = await Promise.all([
+        supabase.from('partner_accounts').select('id,partner_id,account_number,bank_name,is_primary').limit(10000),
+        supabase.from('partners').select('id,name').limit(10000),
+      ])
+      if (freshAccounts) setPartnerAccounts(freshAccounts)
+      if (freshPartners) setPartners(freshPartners)
+      return { accList: freshAccounts || partnerAccounts, partList: freshPartners || partners }
+    }
+
     try {
       if (file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')) {
         const buffer = await file.arrayBuffer()
@@ -652,9 +517,11 @@ export default function BulkImport({ onClose, onImported }: Props) {
         const parsed = parseAmex(workbook)
         if (parsed.length === 0) { setParseError('Could not parse Amex file.'); return }
         setDetectedFormat('amex')
+        const { accList, partList } = await fetchFreshData()
         const importRows = parsed.map(makeImportRow)
         setRows(importRows.map(r => {
-          const matched = matchPartnerByAccount(r.parsed.account_number, partnerAccounts, partners)
+          const matched = matchPartnerByAccount(r.parsed.account_number, accList, partList)
+          if (matched) console.log(`✓ Match: ${r.parsed.account_number} → ${matched.name}`)
           return matched ? { ...r, override_partner_name: matched.name, override_partner_id: matched.id } : r
         }))
       } else {
@@ -669,9 +536,11 @@ export default function BulkImport({ onClose, onImported }: Props) {
         else if (format === 'wio') parsed = parseWio(text)
         else if (format === 'paypal') parsed = parsePayPal(text)
         if (parsed.length === 0) { setParseError('No transactions found in file.'); return }
+        const { accList, partList } = await fetchFreshData()
         const importRows = parsed.map(makeImportRow)
         setRows(importRows.map(r => {
-          const matched = matchPartnerByAccount(r.parsed.account_number, partnerAccounts, partners)
+          const matched = matchPartnerByAccount(r.parsed.account_number, accList, partList)
+          if (matched) console.log(`✓ Match: ${r.parsed.account_number} → ${matched.name}`)
           return matched ? { ...r, override_partner_name: matched.name, override_partner_id: matched.id } : r
         }))
       }
@@ -688,9 +557,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
 
   const analyzeWithAI = async () => {
     if (!company || !bank) return
-    setAnalyzing(true)
-    setAnalyzeError('')
-    setProgress(0)
+    setAnalyzing(true); setAnalyzeError(''); setProgress(0)
     const supabaseUrl = process.env.REACT_APP_SUPABASE_URL
     const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY
     const rateCache: Record<string, number> = {}
@@ -703,13 +570,8 @@ export default function BulkImport({ onClose, onImported }: Props) {
       const isoDate = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : date
       const cacheKey = `${currency}_${isoDate}`
       if (!rateCache[cacheKey]) {
-        try {
-          const rateData = await getRate(currency, isoDate)
-          rateCache[cacheKey] = rateData.rate
-        } catch {
-          const fallbacks: Record<string, number> = { RSD: 117.4, EUR: 1.18, AED: 0.272 }
-          rateCache[cacheKey] = fallbacks[currency] || 1
-        }
+        try { const rateData = await getRate(currency, isoDate); rateCache[cacheKey] = rateData.rate }
+        catch { const fallbacks: Record<string, number> = { RSD: 117.4, EUR: 1.18, AED: 0.272 }; rateCache[cacheKey] = fallbacks[currency] || 1 }
       }
       const rate = rateCache[cacheKey]
       const amountUsd = convertToUSD(amount, currency, rate)
@@ -722,11 +584,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
     const result: ImportRow[] = snapshot.map(r => ({ ...r }))
     for (let i = 0; i < snapshot.length; i += batchSize) {
       const batch = snapshot.slice(i, i + batchSize)
-      const batchPayload = batch.map(r => ({
-        row_id: r.parsed.id, date: r.parsed.date, partner: r.parsed.partner_name,
-        description: r.parsed.description, debit: r.parsed.debit, credit: r.parsed.credit,
-        reference: r.parsed.reference_number,
-      }))
+      const batchPayload = batch.map(r => ({ row_id: r.parsed.id, date: r.parsed.date, partner: r.parsed.partner_name, description: r.parsed.description, debit: r.parsed.debit, credit: r.parsed.credit, reference: r.parsed.reference_number }))
       try {
         const response = await fetch(`${supabaseUrl}/functions/v1/ai-categorize`, {
           method: 'POST',
@@ -743,9 +601,10 @@ export default function BulkImport({ onClose, onImported }: Props) {
             const isExpense = (snapshot[j].parsed.debit || 0) > 0
             const matchedCat = plCategories.find(c => c.name === proposal.pl_category)
             const matchedDept = departments.find(d => d.name === proposal.department)
-            // Preserve passthrough if set by parser — AI should not override it
             const existingTxType = result[j].override_tx_type
             const resolvedTxType = existingTxType === 'passthrough' ? 'passthrough' : (proposal.tx_type || 'direct')
+            // Preserve partner_id if already matched by account number
+            const existingPartnerId = result[j].override_partner_id
             result[j] = {
               ...result[j], proposal, status: 'accepted',
               override_tx_type: resolvedTxType,
@@ -758,15 +617,13 @@ export default function BulkImport({ onClose, onImported }: Props) {
               override_dept_subcategory_id: '', override_dept_subcategory_name: '',
               override_expense_description: proposal.expense_description || '',
               override_revenue_stream: proposal.revenue_stream || '',
-              override_partner_name: proposal.partner_match || snapshot[j].parsed.partner_name,
+              // Only override partner if not already matched by account
+              override_partner_name: existingPartnerId ? result[j].override_partner_name : (proposal.partner_match || snapshot[j].parsed.partner_name),
+              override_partner_id: existingPartnerId || '',
             }
           }
         }
-      } catch (err: any) {
-        setAnalyzeError(`AI analysis failed: ${err.message}`)
-        setAnalyzing(false)
-        return
-      }
+      } catch (err: any) { setAnalyzeError(`AI analysis failed: ${err.message}`); setAnalyzing(false); return }
       setProgress(Math.round(((i + batchSize) / snapshot.length) * 100))
     }
     setRows(result)
@@ -785,8 +642,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
   const rejectAll = () => setRows(prev => prev.map(r => ({ ...r, status: 'rejected' as RowStatus })))
 
   const postAccepted = async () => {
-    setStep('posting')
-    setProgress(0)
+    setStep('posting'); setProgress(0)
     const accepted = rows.filter(r => r.status === 'accepted')
     let done = 0
     const localPartners = [...partners]
@@ -798,13 +654,8 @@ export default function BulkImport({ onClose, onImported }: Props) {
       const isoDate = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : p.date
       const cacheKey = `${p.currency}_${isoDate}`
       if (!rateCache[cacheKey]) {
-        try {
-          const rateData = await getRate(p.currency, isoDate)
-          rateCache[cacheKey] = rateData.rate
-        } catch {
-          const fallbacks: Record<string, number> = { RSD: 117.4, EUR: 1.18, AED: 0.272 }
-          rateCache[cacheKey] = fallbacks[p.currency] || 1
-        }
+        try { const rateData = await getRate(p.currency, isoDate); rateCache[cacheKey] = rateData.rate }
+        catch { const fallbacks: Record<string, number> = { RSD: 117.4, EUR: 1.18, AED: 0.272 }; rateCache[cacheKey] = fallbacks[p.currency] || 1 }
       }
       const rate = rateCache[cacheKey]
       return { amount_usd: convertToUSD(amount, p.currency, rate), exchange_rate: rate }
@@ -814,29 +665,22 @@ export default function BulkImport({ onClose, onImported }: Props) {
       const p = row.parsed
       const isExpense = (p.debit || 0) > 0
       const amount = isExpense ? (p.debit || 0) : (p.credit || 0)
-      let partnerId: string | null = null
-      const nameToMatch = row.override_partner_name || p.partner_name
-      if (nameToMatch) {
-        const existing = localPartners.find(pt => pt.name.toLowerCase() === nameToMatch.toLowerCase())
-        if (existing) { partnerId = existing.id }
-        else {
-          const { data: newP } = await supabase.from('partners').insert({ name: nameToMatch }).select().single()
-          if (newP) { partnerId = newP.id; localPartners.push(newP) }
+      let partnerId: string | null = row.override_partner_id || null
+      if (!partnerId) {
+        const nameToMatch = row.override_partner_name || p.partner_name
+        if (nameToMatch) {
+          const existing = localPartners.find(pt => pt.name.toLowerCase() === nameToMatch.toLowerCase())
+          if (existing) { partnerId = existing.id }
+          else {
+            const { data: newP } = await supabase.from('partners').insert({ name: nameToMatch }).select().single()
+            if (newP) { partnerId = newP.id; localPartners.push(newP) }
+          }
         }
       }
       if (row.override_tx_type === 'passthrough') {
         const { amount_usd, exchange_rate } = await getAmountUsd(p, amount)
-        await supabase.from('passthrough').insert({
-          company_id: company, bank_id: bank, partner_id: partnerId,
-          transaction_date: formatDate(p.date), direction: row.override_pt_direction,
-          period_month: row.override_pt_period || null, currency: p.currency, amount,
-          exchange_rate, amount_usd, note: row.override_note || p.description || null,
-          account_number: p.account_number || null, model: p.model || null,
-          reference_number: p.reference_number || null, status: 'unpaired',
-        })
-        done++
-        setProgress(Math.round((done / accepted.length) * 100))
-        continue
+        await supabase.from('passthrough').insert({ company_id: company, bank_id: bank, partner_id: partnerId, transaction_date: formatDate(p.date), direction: row.override_pt_direction, period_month: row.override_pt_period || null, currency: p.currency, amount, exchange_rate, amount_usd, note: row.override_note || p.description || null, account_number: p.account_number || null, model: p.model || null, reference_number: p.reference_number || null, status: 'unpaired' })
+        done++; setProgress(Math.round((done / accepted.length) * 100)); continue
       }
       const isDirectWithPL = row.override_tx_type === 'direct'
       const aimfoxAmount = row.override_rev_alloc === 'byval' ? (parseFloat(row.override_aimfox_val) || null) : null
@@ -845,39 +689,18 @@ export default function BulkImport({ onClose, onImported }: Props) {
       const perfAmount = row.override_opex_type === 'split' ? (parseFloat(row.override_performance_val) || null) : null
       const { amount_usd, exchange_rate } = await getAmountUsd(p, amount)
       const { data: newTx } = await supabase.from('transactions').insert({
-        company_id: company, bank_id: bank, partner_id: partnerId,
-        transaction_date: formatDate(p.date), statement_number: p.statement_number || null,
-        type: row.override_tx_type, tx_subtype: row.override_tx_subtype,
-        payment_method: row.override_payment_method || null,
-        currency: p.currency, amount, exchange_rate, amount_usd,
-        pl_impact: isDirectWithPL,
-        pl_category: isDirectWithPL ? (row.override_pl_category_name || null) : null,
-        pl_subcategory: isDirectWithPL ? (row.override_pl_subcategory_name || null) : null,
-        department: isDirectWithPL ? (row.override_department_name || null) : null,
-        dept_subcategory: isDirectWithPL ? (row.override_dept_subcategory_name || null) : null,
-        expense_description: isDirectWithPL ? (row.override_expense_description || null) : null,
-        revenue_stream: isDirectWithPL ? (row.override_revenue_stream || null) : null,
-        rev_alloc_type: row.override_rev_alloc || 'sg100',
-        rev_alloc_aimfox: aimfoxAmount, rev_alloc_sg: sgAmount,
-        opex_type: isDirectWithPL && row.override_tx_subtype === 'expense' ? (row.override_opex_type || 'opex') : null,
-        opex_amount: opexAmount, performance_amount: perfAmount,
-        cf_type: isDirectWithPL && row.override_tx_subtype === 'expense' ? (row.override_cf_type || null) : null,
-        cf_frequency: row.override_cf_type === 'recurring' ? row.override_cf_frequency : null,
-        cf_next_month_est: row.override_cf_type === 'recurring' ? (row.override_cf_next_month_est ? parseFloat(row.override_cf_next_month_est) : amount) : null,
-        account_number: p.account_number || null, model: p.model || null,
-        reference_number: p.reference_number || null,
-        note: row.override_note || p.description || null, status: 'posted',
+        company_id: company, bank_id: bank, partner_id: partnerId, transaction_date: formatDate(p.date), statement_number: p.statement_number || null, type: row.override_tx_type, tx_subtype: row.override_tx_subtype, payment_method: row.override_payment_method || null, currency: p.currency, amount, exchange_rate, amount_usd, pl_impact: isDirectWithPL,
+        pl_category: isDirectWithPL ? (row.override_pl_category_name || null) : null, pl_subcategory: isDirectWithPL ? (row.override_pl_subcategory_name || null) : null, department: isDirectWithPL ? (row.override_department_name || null) : null, dept_subcategory: isDirectWithPL ? (row.override_dept_subcategory_name || null) : null, expense_description: isDirectWithPL ? (row.override_expense_description || null) : null, revenue_stream: isDirectWithPL ? (row.override_revenue_stream || null) : null,
+        rev_alloc_type: row.override_rev_alloc || 'sg100', rev_alloc_aimfox: aimfoxAmount, rev_alloc_sg: sgAmount, opex_type: isDirectWithPL && row.override_tx_subtype === 'expense' ? (row.override_opex_type || 'opex') : null, opex_amount: opexAmount, performance_amount: perfAmount,
+        cf_type: isDirectWithPL && row.override_tx_subtype === 'expense' ? (row.override_cf_type || null) : null, cf_frequency: row.override_cf_type === 'recurring' ? row.override_cf_frequency : null, cf_next_month_est: row.override_cf_type === 'recurring' ? (row.override_cf_next_month_est ? parseFloat(row.override_cf_next_month_est) : amount) : null,
+        account_number: p.account_number || null, model: p.model || null, reference_number: p.reference_number || null, note: row.override_note || p.description || null, status: 'posted',
       }).select().single()
       if (row.override_tx_type === 'invoice_payment' && row.override_linked_invoice_id && newTx?.id) {
-        await supabase.from('invoice_transaction_links').insert({
-          invoice_id: row.override_linked_invoice_id, transaction_id: newTx.id,
-          allocated_amount: amount, allocated_amount_usd: p.currency === 'USD' ? amount : null,
-        })
+        await supabase.from('invoice_transaction_links').insert({ invoice_id: row.override_linked_invoice_id, transaction_id: newTx.id, allocated_amount: amount, allocated_amount_usd: p.currency === 'USD' ? amount : null })
         const { data: invStatus } = await supabase.from('v_invoice_status').select('calculated_status').eq('id', row.override_linked_invoice_id).single()
         if (invStatus) await supabase.from('invoices').update({ status: invStatus.calculated_status }).eq('id', row.override_linked_invoice_id)
       }
-      done++
-      setProgress(Math.round((done / accepted.length) * 100))
+      done++; setProgress(Math.round((done / accepted.length) * 100))
     }
     setStep('done')
   }
@@ -905,9 +728,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="2"><path d="M5 13l4 4L19 7" /></svg>
         </div>
         <div style={{ fontFamily: 'Georgia,serif', fontSize: '22px', color: '#111' }}>Import complete!</div>
-        <div style={{ fontSize: '13px', color: '#888', textAlign: 'center' as const }}>
-          {accepted} entr{accepted !== 1 ? 'ies' : 'y'} posted.<br />{rejected} skipped.
-        </div>
+        <div style={{ fontSize: '13px', color: '#888', textAlign: 'center' as const }}>{accepted} entr{accepted !== 1 ? 'ies' : 'y'} posted.<br />{rejected} skipped.</div>
         <button style={s.btnPrimary} onClick={() => { onImported(); onClose() }}>View transactions</button>
       </div>
     </div>
@@ -987,12 +808,18 @@ export default function BulkImport({ onClose, onImported }: Props) {
                   <div style={s.infoBox}>
                     <strong>{rows.length} rows</strong> · <strong>{rows.filter(r => (r.parsed.debit || 0) > 0).length} expenses</strong> · <strong>{rows.filter(r => (r.parsed.credit || 0) > 0).length} revenues</strong>
                     {detectedFormat && <span style={{ marginLeft: '8px', opacity: 0.8 }}>· {FORMAT_LABELS[detectedFormat]}</span>}
+                    {rows.filter(r => r.override_partner_id).length > 0 && (
+                      <span style={{ marginLeft: '8px', color: '#085041' }}>· ✓ {rows.filter(r => r.override_partner_id).length} partnera prepoznato po računu</span>
+                    )}
                   </div>
                   <div style={s.previewList}>
                     {rows.slice(0, 5).map(r => (
                       <div key={r.parsed.id} style={s.previewRow}>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: '13px', fontWeight: '500', color: '#111' }}>{r.parsed.partner_name || '—'}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ fontSize: '13px', fontWeight: '500', color: '#111' }}>{r.override_partner_name || r.parsed.partner_name || '—'}</div>
+                            {r.override_partner_id && <span style={{ fontSize: '10px', color: '#085041', background: '#E1F5EE', padding: '1px 6px', borderRadius: '20px' }}>✓ matched</span>}
+                          </div>
                           <div style={{ fontSize: '11px', color: '#888' }}>{r.parsed.date} · {r.parsed.description?.slice(0, 60)}</div>
                         </div>
                         <div style={{ textAlign: 'right' as const }}>
@@ -1022,6 +849,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                 <div style={s.reviewStat}><span style={{ fontSize: '20px', fontWeight: '600', color: '#1D9E75' }}>{accepted}</span><span style={{ fontSize: '11px', color: '#888' }}>Accepted</span></div>
                 <div style={s.reviewStat}><span style={{ fontSize: '20px', fontWeight: '600', color: '#A32D2D' }}>{rejected}</span><span style={{ fontSize: '11px', color: '#888' }}>Rejected</span></div>
                 <div style={s.reviewStat}><span style={{ fontSize: '20px', fontWeight: '600', color: '#633806' }}>{pending}</span><span style={{ fontSize: '11px', color: '#888' }}>Pending</span></div>
+                <div style={s.reviewStat}><span style={{ fontSize: '20px', fontWeight: '600', color: '#085041' }}>{rows.filter(r => r.override_partner_id).length}</span><span style={{ fontSize: '11px', color: '#888' }}>Matched</span></div>
                 <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px' }}>
                   <button style={s.btnSmallGreen} onClick={acceptAll}>✓ Accept all</button>
                   <button style={s.btnSmallRed} onClick={rejectAll}>✕ Reject all</button>
@@ -1040,6 +868,11 @@ export default function BulkImport({ onClose, onImported }: Props) {
                   const expDescs = getExpDescs(row.override_dept_subcategory_id)
                   const linkedInvoice = openInvoices.find(i => i.id === row.override_linked_invoice_id)
                   const typeBadge = getTxTypeBadge(row.override_tx_type)
+                  const rowAccounts = partnerAccounts.filter((pa: any) => pa.partner_id === row.override_partner_id)
+                  const parsedAccount = p.account_number?.trim()
+                  const accountInDB = parsedAccount && rowAccounts.some((a: any) =>
+                    normalizeAccountNumber(a.account_number || '') === normalizeAccountNumber(parsedAccount)
+                  )
 
                   return (
                     <div key={p.id} style={{ ...s.reviewRow, ...(row.status === 'accepted' ? s.reviewRowAccepted : {}), ...(row.status === 'rejected' ? s.reviewRowRejected : {}), ...(row.override_tx_type === 'passthrough' ? s.reviewRowPassthrough : {}) }}>
@@ -1048,6 +881,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px', flexWrap: 'wrap' as const }}>
                             <span style={{ fontSize: '13px', fontWeight: '500', color: '#111' }}>{row.override_partner_name || p.partner_name || '—'}</span>
+                            {row.override_partner_id && <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: '#E1F5EE', color: '#085041' }}>✓ baza</span>}
                             {conf && row.proposal && <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: conf.bg, color: conf.color }}>{row.proposal.confidence}</span>}
                             <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: typeBadge.bg, color: typeBadge.color }}>{typeBadge.label}</span>
                             <span style={{ fontSize: '10px', color: '#aaa' }}>{FORMAT_LABELS[p.source_format]}</span>
@@ -1057,14 +891,10 @@ export default function BulkImport({ onClose, onImported }: Props) {
                             <div style={{ fontSize: '11px', color: '#1D9E75', marginTop: '2px' }}>📊 {row.override_pl_category_name}{row.override_department_name ? ` · ${row.override_department_name}` : ''}</div>
                           )}
                           {row.override_tx_type === 'invoice_payment' && (
-                            <div style={{ fontSize: '11px', color: '#0C447C', marginTop: '2px' }}>
-                              💳 Cash flow only{linkedInvoice ? ` · Closes: ${linkedInvoice.partner_name || '—'}` : ' · No invoice linked'}
-                            </div>
+                            <div style={{ fontSize: '11px', color: '#0C447C', marginTop: '2px' }}>💳 Cash flow only{linkedInvoice ? ` · Closes: ${linkedInvoice.partner_name || '—'}` : ' · No invoice linked'}</div>
                           )}
                           {row.override_tx_type === 'passthrough' && (
-                            <div style={{ fontSize: '11px', color: '#7A5A00', marginTop: '2px' }}>
-                              🔄 {row.override_pt_direction === 'in' ? '📥 IN' : '📤 OUT'} · Period: {row.override_pt_period || '—'}
-                            </div>
+                            <div style={{ fontSize: '11px', color: '#7A5A00', marginTop: '2px' }}>🔄 {row.override_pt_direction === 'in' ? '📥 IN' : '📤 OUT'} · Period: {row.override_pt_period || '—'}</div>
                           )}
                         </div>
                         <div style={{ textAlign: 'right' as const, flexShrink: 0, marginRight: '10px' }}>
@@ -1082,16 +912,12 @@ export default function BulkImport({ onClose, onImported }: Props) {
                           {row.proposal && <div style={s.aiNotes}>🤖 AI: {row.proposal.notes}</div>}
 
                           <div style={s.editGrid2}>
+                            {/* Partner field with dropdown search */}
                             <div style={s.editField}>
                               <label style={s.editLbl}>Partner</label>
                               <div style={{ position: 'relative' as const }}>
                                 <input
-                                  style={{
-                                    ...s.editInput,
-                                    border: row.override_partner_id ? '1.5px solid #1D9E75' : '1.5px solid #e5e5e5',
-                                    background: '#fff',
-                                    paddingRight: '28px',
-                                  }}
+                                  style={{ ...s.editInput, border: row.override_partner_id ? '1.5px solid #1D9E75' : '1.5px solid #e5e5e5', paddingRight: '28px' }}
                                   value={reviewPartnerSearch[p.id] !== undefined ? reviewPartnerSearch[p.id] : row.override_partner_name}
                                   onChange={e => {
                                     setReviewPartnerSearch(prev => ({ ...prev, [p.id]: e.target.value }))
@@ -1113,9 +939,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                         }}>
                                         <span style={{ fontWeight: '500', color: '#111' }}>{pt.name}</span>
                                         {partnerAccounts.filter((pa: any) => pa.partner_id === pt.id).length > 0 && (
-                                          <span style={{ fontSize: '10px', color: '#1D9E75' }}>
-                                            {partnerAccounts.filter((pa: any) => pa.partner_id === pt.id).length} račun(a) u bazi
-                                          </span>
+                                          <span style={{ fontSize: '10px', color: '#1D9E75' }}>{partnerAccounts.filter((pa: any) => pa.partner_id === pt.id).length} račun(a) u bazi</span>
                                         )}
                                       </div>
                                     ))}
@@ -1129,7 +953,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                           <button
                                             style={{ fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '5px 12px', border: 'none', borderRadius: '6px', background: '#1D9E75', color: '#fff', cursor: 'pointer', width: '100%' }}
                                             onMouseDown={e => { e.preventDefault(); setReviewPartnerSearch(prev => ({ ...prev, [p.id]: '' })); openPartnerDialog(p.id, searchTerm, p.account_number || '') }}>
-                                            {`➕ Dodaj "${searchTerm}" kao novog partnera (sa NBS lookup-om)`}
+                                            ➕ Dodaj "{searchTerm}" kao novog partnera (sa NBS lookup-om)
                                           </button>
                                         </div>
                                       )
@@ -1137,55 +961,40 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                   </div>
                                 )}
                               </div>
-                              {(() => {
-                                const rowAccounts = partnerAccounts.filter((pa: any) => pa.partner_id === row.override_partner_id)
-                                const parsedAccount = p.account_number?.trim()
-                                const accountInDB = parsedAccount && rowAccounts.some((a: any) =>
-                                  normalizeAccountNumber(a.account_number || '') === normalizeAccountNumber(parsedAccount)
-                                )
-                                return (
-                                  <>
-                                    {rowAccounts.length > 0 && (
-                                      <div style={{ marginTop: '6px' }}>
-                                        <label style={{ ...s.editLbl, display: 'block', marginBottom: '4px' }}>Račun partnera ({rowAccounts.length})</label>
-                                        <select style={{ ...s.editSelect, border: '1.5px solid #1D9E75', background: '#f0fdf8' }}
-                                          defaultValue={rowAccounts.find((a: any) => a.is_primary)?.account_number || rowAccounts[0]?.account_number || ''}>
-                                          <option value="">— Bez računa —</option>
-                                          {rowAccounts.map((acc: any) => (
-                                            <option key={acc.id} value={acc.account_number}>
-                                              {acc.account_number}{acc.bank_name ? ` · ${acc.bank_name}` : ''}{acc.is_primary ? ' ★' : ''}
-                                            </option>
-                                          ))}
-                                        </select>
-                                      </div>
-                                    )}
-                                    {row.override_partner_id && parsedAccount && !accountInDB && (
-                                      <div style={{ marginTop: '6px', background: '#FAEEDA', border: '0.5px solid #E5B96A', borderRadius: '6px', padding: '7px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                                        <span style={{ fontSize: '11px', color: '#633806' }}>
-                                          Račun <strong>{parsedAccount}</strong> nije u bazi za ovog partnera
-                                        </span>
-                                        <button
-                                          style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '3px 10px', border: 'none', borderRadius: '5px', background: '#E6B432', color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' as const }}
-                                          onClick={() => saveAccountToPartner(p.id, row.override_partner_id, parsedAccount)}>
-                                          {savingAccount[p.id] ? '⏳' : '➕ Sačuvaj račun'}
-                                        </button>
-                                      </div>
-                                    )}
-                                  </>
-                                )
-                              })()}
+
+                              {/* Partner accounts */}
+                              {rowAccounts.length > 0 && (
+                                <div style={{ marginTop: '6px' }}>
+                                  <label style={{ ...s.editLbl, display: 'block', marginBottom: '4px' }}>Račun partnera ({rowAccounts.length})</label>
+                                  <select style={{ ...s.editSelect, border: '1.5px solid #1D9E75', background: '#f0fdf8' }}
+                                    defaultValue={rowAccounts.find((a: any) => normalizeAccountNumber(a.account_number) === normalizeAccountNumber(parsedAccount || ''))?.account_number || rowAccounts.find((a: any) => a.is_primary)?.account_number || rowAccounts[0]?.account_number || ''}>
+                                    <option value="">— Bez računa —</option>
+                                    {rowAccounts.map((acc: any) => (
+                                      <option key={acc.id} value={acc.account_number}>
+                                        {acc.account_number}{acc.bank_name ? ` · ${acc.bank_name}` : ''}{acc.is_primary ? ' ★' : ''}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
+
+                              {/* Save account button if not in DB */}
+                              {row.override_partner_id && parsedAccount && !accountInDB && (
+                                <div style={{ marginTop: '6px', background: '#FAEEDA', border: '0.5px solid #E5B96A', borderRadius: '6px', padding: '7px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                  <span style={{ fontSize: '11px', color: '#633806' }}>Račun <strong>{parsedAccount}</strong> nije u bazi za ovog partnera</span>
+                                  <button
+                                    style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '3px 10px', border: 'none', borderRadius: '5px', background: '#E6B432', color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' as const }}
+                                    onClick={() => saveAccountToPartner(p.id, row.override_partner_id, parsedAccount)}>
+                                    {savingAccount[p.id] ? '⏳' : '➕ Sačuvaj račun'}
+                                  </button>
+                                </div>
+                              )}
                             </div>
+
                             <div style={s.editField}>
                               <label style={s.editLbl}>Type</label>
                               <select style={s.editSelect} value={row.override_tx_type}
-                                onChange={e => updateRow(p.id, {
-                                  override_tx_type: e.target.value as any,
-                                  override_pl_category_id: '', override_pl_category_name: '',
-                                  override_pl_subcategory_id: '', override_pl_subcategory_name: '',
-                                  override_department_id: '', override_department_name: '',
-                                  override_dept_subcategory_id: '', override_dept_subcategory_name: '',
-                                  override_expense_description: '',
-                                })}>
+                                onChange={e => updateRow(p.id, { override_tx_type: e.target.value as any, override_pl_category_id: '', override_pl_category_name: '', override_pl_subcategory_id: '', override_pl_subcategory_name: '', override_department_id: '', override_department_name: '', override_dept_subcategory_id: '', override_dept_subcategory_name: '', override_expense_description: '' })}>
                                 <option value="direct">⚡ Direct (P&L impact)</option>
                                 <option value="invoice_payment">💳 Invoice payment (cash only)</option>
                                 <option value="passthrough">🔄 Pass-through (transit)</option>
@@ -1199,24 +1008,19 @@ export default function BulkImport({ onClose, onImported }: Props) {
                               <div style={s.editGrid2}>
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>Smer</label>
-                                  <select style={s.editSelect} value={row.override_pt_direction}
-                                    onChange={e => updateRow(p.id, { override_pt_direction: e.target.value as 'in' | 'out' })}>
-                                    <option value="in">📥 IN — Uplata</option>
-                                    <option value="out">📤 OUT — Isplata</option>
+                                  <select style={s.editSelect} value={row.override_pt_direction} onChange={e => updateRow(p.id, { override_pt_direction: e.target.value as 'in' | 'out' })}>
+                                    <option value="in">📥 IN — Uplata</option><option value="out">📤 OUT — Isplata</option>
                                   </select>
                                 </div>
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>Period (mesec)</label>
-                                  <input type="month" style={s.editInput} value={row.override_pt_period}
-                                    onChange={e => updateRow(p.id, { override_pt_period: e.target.value })} />
+                                  <input type="month" style={s.editInput} value={row.override_pt_period} onChange={e => updateRow(p.id, { override_pt_period: e.target.value })} />
                                 </div>
                               </div>
                               <div style={{ marginTop: '8px' }}>
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>Napomena</label>
-                                  <input style={s.editInput} value={row.override_note}
-                                    onChange={e => updateRow(p.id, { override_note: e.target.value })}
-                                    placeholder={p.description?.slice(0, 40)} />
+                                  <input style={s.editInput} value={row.override_note} onChange={e => updateRow(p.id, { override_note: e.target.value })} placeholder={p.description?.slice(0, 40)} />
                                 </div>
                               </div>
                             </>
@@ -1227,8 +1031,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                               <div style={s.editField}>
                                 <label style={s.editLbl}>Subtype</label>
                                 <select style={s.editSelect} value={row.override_tx_subtype} onChange={e => updateRow(p.id, { override_tx_subtype: e.target.value as any })}>
-                                  <option value="expense">📤 Expense</option>
-                                  <option value="revenue">📥 Revenue</option>
+                                  <option value="expense">📤 Expense</option><option value="revenue">📥 Revenue</option>
                                 </select>
                               </div>
                               <div style={s.editField}>
@@ -1288,7 +1091,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                   </select>
                                 </div>
                               </div>
-
                               <div style={s.editSectionTitle}>Department</div>
                               <div style={s.editGrid2}>
                                 <div style={s.editField}>
@@ -1309,7 +1111,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                   </select>
                                 </div>
                               </div>
-
                               <div style={{ marginTop: '8px' }}>
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>Expense description</label>
@@ -1323,8 +1124,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                   )}
                                 </div>
                               </div>
-
-                              {/* ── Revenue stream allocation ── */}
                               <div style={s.editSectionTitle}>Revenue stream allocation</div>
                               <div style={s.allocGrid}>
                                 {[{ id: 'sg100', label: '100% Social Growth', sub: 'Full allocation' }, { id: 'af100', label: '100% Aimfox', sub: 'Full allocation' }, { id: 'shared', label: 'Shared 50/50', sub: 'Both streams' }, { id: 'byval', label: 'By value', sub: 'Custom split' }].map(a => (
@@ -1334,154 +1133,54 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                   </div>
                                 ))}
                               </div>
-
                               {row.override_rev_alloc === 'byval' && (() => {
-                                const total = (p.debit || 0)
-                                const af = parseFloat(row.override_aimfox_val) || 0
-                                const sg = parseFloat(row.override_sg_val) || 0
+                                const total = (p.debit || 0); const af = parseFloat(row.override_aimfox_val) || 0; const sg = parseFloat(row.override_sg_val) || 0
                                 const splitOk = total > 0 && Math.abs(af + sg - total) < 0.01
-                                const afPct = total > 0 ? (af / total * 100).toFixed(1) : '0'
-                                const sgPct = total > 0 ? (sg / total * 100).toFixed(1) : '0'
+                                const afPct = total > 0 ? (af / total * 100).toFixed(1) : '0'; const sgPct = total > 0 ? (sg / total * 100).toFixed(1) : '0'
                                 return (
                                   <div style={{ marginTop: '10px', background: '#f5f5f3', borderRadius: '8px', padding: '12px', border: '0.5px solid #e5e5e5' }}>
-                                    <div style={{ fontSize: '10px', color: '#888', fontWeight: '500', marginBottom: '8px', textTransform: 'uppercase' as const, letterSpacing: '0.07em' }}>
-                                      Split by value · total: {total > 0 ? `${total.toLocaleString()} ${p.currency}` : '—'}
-                                    </div>
                                     <div style={s.editGrid2}>
                                       <div style={s.editField}>
                                         <label style={s.editLbl}>Aimfox ({p.currency})</label>
                                         <input type="number" style={s.editInput} value={row.override_aimfox_val}
-                                          onChange={e => { const val = e.target.value; const afNum = parseFloat(val) || 0; updateRow(p.id, { override_aimfox_val: val, override_sg_val: total > 0 && afNum >= 0 && afNum <= total ? (total - afNum).toFixed(2) : row.override_sg_val }) }}
-                                          placeholder="0.00" />
+                                          onChange={e => { const val = e.target.value; const afNum = parseFloat(val) || 0; updateRow(p.id, { override_aimfox_val: val, override_sg_val: total > 0 && afNum >= 0 && afNum <= total ? (total - afNum).toFixed(2) : row.override_sg_val }) }} placeholder="0.00" />
                                         {row.override_aimfox_val && total > 0 && <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '2px' }}>{afPct}%</div>}
                                       </div>
                                       <div style={s.editField}>
                                         <label style={s.editLbl}>Social Growth ({p.currency})</label>
                                         <input type="number" style={s.editInput} value={row.override_sg_val}
-                                          onChange={e => { const val = e.target.value; const sgNum = parseFloat(val) || 0; updateRow(p.id, { override_sg_val: val, override_aimfox_val: total > 0 && sgNum >= 0 && sgNum <= total ? (total - sgNum).toFixed(2) : row.override_aimfox_val }) }}
-                                          placeholder="0.00" />
+                                          onChange={e => { const val = e.target.value; const sgNum = parseFloat(val) || 0; updateRow(p.id, { override_sg_val: val, override_aimfox_val: total > 0 && sgNum >= 0 && sgNum <= total ? (total - sgNum).toFixed(2) : row.override_aimfox_val }) }} placeholder="0.00" />
                                         {row.override_sg_val && total > 0 && <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '2px' }}>{sgPct}%</div>}
                                       </div>
                                     </div>
-                                    {af > 0 && sg > 0 && (
-                                      <div style={{ marginTop: '8px' }}>
-                                        <div style={{ height: '5px', borderRadius: '3px', background: '#e5e5e5', overflow: 'hidden', display: 'flex' }}>
-                                          <div style={{ height: '100%', width: `${afPct}%`, background: '#0C447C' }} />
-                                          <div style={{ height: '100%', width: `${sgPct}%`, background: '#1D9E75' }} />
-                                        </div>
-                                        {splitOk ? <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '4px' }}>✓ Split ispravan</div> : <div style={{ fontSize: '10px', color: '#A32D2D', marginTop: '4px' }}>⚠ Zbir ≠ ukupno</div>}
-                                      </div>
-                                    )}
+                                    {af > 0 && sg > 0 && <div style={{ marginTop: '6px', fontSize: '10px', color: splitOk ? '#1D9E75' : '#A32D2D' }}>{splitOk ? '✓ Split ispravan' : '⚠ Zbir ≠ ukupno'}</div>}
                                   </div>
                                 )
                               })()}
-
-                              {/* ── OPEX vs Performance ── */}
                               <div style={s.editSectionTitle}>Expense type — OPEX vs Performance</div>
                               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginTop: '6px' }}>
-                                {[
-                                  { id: 'opex', label: '🏢 100% OPEX', sub: 'Fixed operational', color: '#185FA5', bg: '#E6F1FB' },
-                                  { id: 'performance', label: '🚀 100% Performance', sub: 'Revenue-driven', color: '#BA7517', bg: '#FAEEDA' },
-                                  { id: 'split', label: '⚖️ Split by value', sub: 'Custom allocation', color: '#555', bg: '#f0f0ee' },
-                                ].map(a => (
-                                  <div key={a.id}
-                                    style={{ ...s.allocBtn, ...(row.override_opex_type === a.id ? { border: `2px solid ${a.color}`, background: a.bg } : {}) }}
+                                {[{ id: 'opex', label: '🏢 100% OPEX', sub: 'Fixed operational', color: '#185FA5', bg: '#E6F1FB' }, { id: 'performance', label: '🚀 100% Performance', sub: 'Revenue-driven', color: '#BA7517', bg: '#FAEEDA' }, { id: 'split', label: '⚖️ Split by value', sub: 'Custom allocation', color: '#555', bg: '#f0f0ee' }].map(a => (
+                                  <div key={a.id} style={{ ...s.allocBtn, ...(row.override_opex_type === a.id ? { border: `2px solid ${a.color}`, background: a.bg } : {}) }}
                                     onClick={() => updateRow(p.id, { override_opex_type: a.id, override_opex_val: '', override_performance_val: '' })}>
                                     <div style={{ fontSize: '11px', fontWeight: '600', color: row.override_opex_type === a.id ? a.color : '#111' }}>{a.label}</div>
                                     <div style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>{a.sub}</div>
                                   </div>
                                 ))}
                               </div>
-
-                              {row.override_opex_type === 'split' && (() => {
-                                const total = (p.debit || 0)
-                                const op = parseFloat(row.override_opex_val) || 0
-                                const perf = parseFloat(row.override_performance_val) || 0
-                                const splitOk = total > 0 && Math.abs(op + perf - total) < 0.01
-                                const opPct = total > 0 ? (op / total * 100).toFixed(1) : '0'
-                                const perfPct = total > 0 ? (perf / total * 100).toFixed(1) : '0'
-                                return (
-                                  <div style={{ marginTop: '10px', background: '#f5f5f3', borderRadius: '8px', padding: '12px', border: '0.5px solid #e5e5e5' }}>
-                                    <div style={{ fontSize: '10px', color: '#888', fontWeight: '500', marginBottom: '8px', textTransform: 'uppercase' as const, letterSpacing: '0.07em' }}>
-                                      Split by value · total: {total > 0 ? `${total.toLocaleString()} ${p.currency}` : '—'}
-                                    </div>
-                                    <div style={s.editGrid2}>
-                                      <div style={s.editField}>
-                                        <label style={s.editLbl}>OPEX ({p.currency})</label>
-                                        <input type="number" style={s.editInput} value={row.override_opex_val}
-                                          onChange={e => { const val = e.target.value; const opNum = parseFloat(val) || 0; updateRow(p.id, { override_opex_val: val, override_performance_val: total > 0 && opNum >= 0 && opNum <= total ? (total - opNum).toFixed(2) : row.override_performance_val }) }}
-                                          placeholder="0.00" />
-                                        {row.override_opex_val && total > 0 && <div style={{ fontSize: '10px', color: '#185FA5', marginTop: '2px' }}>{opPct}%</div>}
-                                      </div>
-                                      <div style={s.editField}>
-                                        <label style={s.editLbl}>Performance ({p.currency})</label>
-                                        <input type="number" style={s.editInput} value={row.override_performance_val}
-                                          onChange={e => { const val = e.target.value; const perfNum = parseFloat(val) || 0; updateRow(p.id, { override_performance_val: val, override_opex_val: total > 0 && perfNum >= 0 && perfNum <= total ? (total - perfNum).toFixed(2) : row.override_opex_val }) }}
-                                          placeholder="0.00" />
-                                        {row.override_performance_val && total > 0 && <div style={{ fontSize: '10px', color: '#BA7517', marginTop: '2px' }}>{perfPct}%</div>}
-                                      </div>
-                                    </div>
-                                    {op > 0 && perf > 0 && (
-                                      <div style={{ marginTop: '8px' }}>
-                                        <div style={{ height: '5px', borderRadius: '3px', background: '#e5e5e5', overflow: 'hidden', display: 'flex' }}>
-                                          <div style={{ height: '100%', width: `${opPct}%`, background: '#185FA5' }} />
-                                          <div style={{ height: '100%', width: `${perfPct}%`, background: '#BA7517' }} />
-                                        </div>
-                                        {splitOk ? <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '4px' }}>✓ Split ispravan</div> : <div style={{ fontSize: '10px', color: '#A32D2D', marginTop: '4px' }}>⚠ Zbir ≠ ukupno</div>}
-                                      </div>
-                                    )}
-                                  </div>
-                                )
-                              })()}
-                            </>
-                          )}
-
-                          {/* ── Cash Flow Classification ── */}
-                          {row.override_tx_type === 'direct' && row.override_tx_subtype === 'expense' && (
-                            <>
                               <div style={s.editSectionTitle}>Cash flow classification</div>
                               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '6px', marginTop: '6px' }}>
-                                {[
-                                  { id: 'recurring', label: '🔁 Recurring' },
-                                  { id: 'one_time', label: '1️⃣ One-time' },
-                                  { id: 'accrual', label: '📅 Accrual' },
-                                  { id: 'capex', label: '🏗 CapEx' },
-                                  { id: 'reimbursable', label: '↩️ Reimb.' },
-                                ].map(a => (
-                                  <div key={a.id}
-                                    style={{ ...s.allocBtn, padding: '6px 4px', ...(row.override_cf_type === a.id ? { border: '2px solid #1D9E75', background: '#E1F5EE' } : {}) }}
+                                {[{ id: 'recurring', label: '🔁 Recurring' }, { id: 'one_time', label: '1️⃣ One-time' }, { id: 'accrual', label: '📅 Accrual' }, { id: 'capex', label: '🏗 CapEx' }, { id: 'reimbursable', label: '↩️ Reimb.' }].map(a => (
+                                  <div key={a.id} style={{ ...s.allocBtn, padding: '6px 4px', ...(row.override_cf_type === a.id ? { border: '2px solid #1D9E75', background: '#E1F5EE' } : {}) }}
                                     onClick={() => updateRow(p.id, { override_cf_type: row.override_cf_type === a.id ? '' : a.id })}>
                                     <div style={{ fontSize: '10px', fontWeight: '600', color: row.override_cf_type === a.id ? '#085041' : '#111' }}>{a.label}</div>
                                   </div>
                                 ))}
                               </div>
-                              {row.override_cf_type === 'recurring' && (
-                                <div style={{ marginTop: '8px', background: '#f5f5f3', borderRadius: '8px', padding: '10px', border: '0.5px solid #e5e5e5' }}>
-                                  <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
-                                    {[{ id: 'monthly', label: 'Monthly' }, { id: 'quarterly', label: 'Quarterly' }, { id: 'yearly', label: 'Yearly' }].map(f => (
-                                      <div key={f.id}
-                                        style={{ flex: 1, padding: '5px', border: row.override_cf_frequency === f.id ? '2px solid #1D9E75' : '0.5px solid #e5e5e5', borderRadius: '6px', background: row.override_cf_frequency === f.id ? '#E1F5EE' : '#fff', cursor: 'pointer', textAlign: 'center' as const, fontSize: '11px', color: row.override_cf_frequency === f.id ? '#085041' : '#666' }}
-                                        onClick={() => updateRow(p.id, { override_cf_frequency: f.id })}>{f.label}</div>
-                                    ))}
-                                  </div>
-                                  <div style={s.editField}>
-                                    <label style={s.editLbl}>Next month est. ({p.currency})</label>
-                                    <input type="number" style={s.editInput}
-                                      value={row.override_cf_next_month_est}
-                                      onChange={e => updateRow(p.id, { override_cf_next_month_est: e.target.value })}
-                                      placeholder={p.debit ? `Auto: ${p.debit.toLocaleString()}` : '0.00'} />
-                                  </div>
-                                </div>
-                              )}
-                              {row.override_cf_type === 'one_time' && (
-                                <div style={{ marginTop: '6px', fontSize: '11px', color: '#888', background: '#f5f5f3', borderRadius: '6px', padding: '8px 10px' }}>
-                                  One-time — won't be included in future estimates.
-                                </div>
-                              )}
                             </>
                           )}
 
-                          {row.override_tx_type === 'direct' && row.override_tx_subtype === 'revenue' && (                            <div style={{ marginTop: '8px' }}>
+                          {row.override_tx_type === 'direct' && row.override_tx_subtype === 'revenue' && (
+                            <div style={{ marginTop: '8px' }}>
                               <div style={s.editField}>
                                 <label style={s.editLbl}>Revenue stream</label>
                                 <select style={s.editSelect} value={row.override_revenue_stream} onChange={e => updateRow(p.id, { override_revenue_stream: e.target.value })}>
@@ -1512,8 +1211,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
               <span style={{ fontSize: '12px', color: '#888' }}>{rows.length > 0 ? `${rows.length} rows ready` : 'Upload a file to begin'}</span>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button style={s.btnGhost} onClick={onClose}>Cancel</button>
-                <button
-                  style={{ ...s.btnGhost, opacity: (!company || !bank || rows.length === 0 || analyzing) ? 0.5 : 1 }}
+                <button style={{ ...s.btnGhost, opacity: (!company || !bank || rows.length === 0 || analyzing) ? 0.5 : 1 }}
                   onClick={() => { if (company && bank && rows.length > 0) { setRows(prev => prev.map(r => ({ ...r, status: 'pending' as RowStatus }))); setStep('review') } }}
                   disabled={!company || !bank || rows.length === 0 || analyzing}>
                   📋 Skip AI — review manually
@@ -1546,13 +1244,9 @@ export default function BulkImport({ onClose, onImported }: Props) {
           onClose={() => setPartnerDialogRow(null)}
           onSaved={(newPartner) => {
             setPartners(prev => [...prev, newPartner])
-            setPartnerAccounts(prev => {
-              // Reload accounts from DB after partner saved
-              supabase.from('partner_accounts').select('id,partner_id,account_number,bank_name,is_primary')
-                .eq('partner_id', newPartner.id)
-                .then(({ data }) => { if (data) setPartnerAccounts(all => [...all, ...data]) })
-              return prev
-            })
+            supabase.from('partner_accounts').select('id,partner_id,account_number,bank_name,is_primary')
+              .eq('partner_id', newPartner.id)
+              .then(({ data }) => { if (data) setPartnerAccounts(prev => [...prev, ...data]) })
             const rowId = partnerDialogRow.rowId
             updateRow(rowId, { override_partner_name: newPartner.name, override_partner_id: newPartner.id })
             setReviewPartnerSearch(prev => ({ ...prev, [rowId]: newPartner.name }))
