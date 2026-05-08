@@ -721,7 +721,8 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                           <div style={s.field}>
                             <label style={s.lbl}>Account number {rowPartnerAccounts.length > 0 ? `(${rowPartnerAccounts.length} from partner)` : ''}</label>
                             {rowPartnerAccounts.length > 0 ? (
-                              <select style={s.select} value={row.account_number}
+                              <select style={s.select}
+                                value={rowPartnerAccounts.find(a => normalizeAccountNumber(a.account_number) === normalizeAccountNumber(row.account_number))?.account_number || row.account_number}
                                 onChange={e => {
                                   const acc = rowPartnerAccounts.find(a => a.account_number === e.target.value)
                                   updateRow(row.id, { account_number: e.target.value, model: acc?.model || row.model })
