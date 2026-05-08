@@ -509,6 +509,8 @@ export default function BulkImport({ onClose, onImported }: Props) {
       ])
       if (freshAccounts) setPartnerAccounts(freshAccounts)
       if (freshPartners) setPartners(freshPartners)
+      console.log('🔍 DB accounts loaded:', (freshAccounts || []).length, 'entries')
+      console.log('🔍 DB accounts sample:', (freshAccounts || []).slice(0, 5).map((a: any) => ({ acc: JSON.stringify(a.account_number), partner_id: a.partner_id })))
       return { accList: freshAccounts || partnerAccounts, partList: freshPartners || partners }
     }
 
@@ -541,8 +543,11 @@ export default function BulkImport({ onClose, onImported }: Props) {
         const { accList, partList } = await fetchFreshData()
         const importRows = parsed.map(makeImportRow)
         setRows(importRows.map(r => {
-          const matched = matchPartnerByAccount(r.parsed.account_number, accList, partList)
-          if (matched) console.log(`✓ Match: ${r.parsed.account_number} → ${matched.name}`)
+          const rawAcc = r.parsed.account_number
+          console.log(`🔎 Trying to match: ${JSON.stringify(rawAcc)} (len=${rawAcc.length}, codes=${Array.from(rawAcc).map((c:any)=>c.charCodeAt(0)).join(',')})`)
+          const matched = matchPartnerByAccount(rawAcc, accList, partList)
+          if (matched) console.log(`✓ Match: ${rawAcc} → ${matched.name}`)
+          else if (rawAcc) console.log(`✗ No match for: ${JSON.stringify(rawAcc)}`)
           return matched ? { ...r, override_partner_name: matched.name, override_partner_id: matched.id } : r
         }))
       }
