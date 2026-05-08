@@ -517,7 +517,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
   const [parseError, setParseError] = useState('')
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const [reviewPartnerSearch, setReviewPartnerSearch] = useState<Record<string, string>>({})
-  const [creatingPartner, setCreatingPartner] = useState<Record<string, boolean>>({})
   const [savingAccount, setSavingAccount] = useState<Record<string, boolean>>({})
   const [partnerDialogRow, setPartnerDialogRow] = useState<{ rowId: string; initialName: string; initialAccount: string } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
