@@ -423,8 +423,9 @@ export default function BulkImport({ onClose, onImported }: Props) {
   useEffect(() => {
     if (!company) return
     const fetchInvoices = async () => {
-      const { data } = await supabase.from('v_invoice_status').select('*').eq('company_id', company)
+      const { data, error } = await supabase.from('v_invoice_status').select('*').eq('company_id', company)
         .in('calculated_status', ['unpaid', 'partial']).order('due_date', { ascending: true })
+      if (error) console.warn('v_invoice_status error (non-critical):', error.message)
       if (data) setOpenInvoices(data)
     }
     fetchInvoices()
@@ -523,8 +524,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
 
       if (allAccounts.length > 0) setPartnerAccounts(allAccounts)
       if (freshPartners) setPartners(freshPartners)
-      console.log('🔍 DB accounts loaded:', allAccounts.length, 'entries (paginated)')
-      console.log('🔍 DB accounts sample:', allAccounts.slice(0, 5).map((a: any) => ({ acc: JSON.stringify(a.account_number), pid: a.partner_id })))
+
       return { accList: allAccounts.length > 0 ? allAccounts : partnerAccounts, partList: freshPartners || partners }
     }
 
@@ -557,20 +557,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
         const { accList, partList } = await fetchFreshData()
         const importRows = parsed.map(makeImportRow)
         setRows(importRows.map(r => {
-          const rawAcc = r.parsed.account_number
-          if (!rawAcc) return r
-          const normInput = normalizeAccountNumber(rawAcc)
-          // Find any DB account that matches this normalized form
-          const dbMatches = accList.filter((pa: any) => normalizeAccountNumber(pa.account_number || '') === normInput)
-          if (dbMatches.length > 0) {
-            console.log(`✓ DB match for '${rawAcc}' → norm='${normInput}':`, dbMatches.map((a:any) => ({ acc: a.account_number, partner_id: a.partner_id })))
-          } else {
-            // Show closest DB accounts for this bank prefix
-            const prefix = rawAcc.split('-')[0]
-            const sameBank = accList.filter((pa: any) => (pa.account_number || '').startsWith(prefix))
-            console.log(`✗ No match for '${rawAcc}' (norm='${normInput}'). Same bank (${prefix}-*) in DB:`, sameBank.map((a:any) => ({ acc: a.account_number, norm: normalizeAccountNumber(a.account_number), partner_id: a.partner_id })))
-          }
-          const matched = matchPartnerByAccount(rawAcc, accList, partList)
+          const matched = matchPartnerByAccount(r.parsed.account_number, accList, partList)
           return matched ? { ...r, override_partner_name: matched.name, override_partner_id: matched.id } : r
         }))
       }
