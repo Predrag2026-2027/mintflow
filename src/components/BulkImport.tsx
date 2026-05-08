@@ -401,7 +401,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
         supabase.from('departments').select('id,name,sort_order').order('sort_order'),
         supabase.from('dept_subcategories').select('id,name,department_id,sort_order').order('sort_order'),
         supabase.from('expense_descriptions').select('id,name,dept_subcategory_id,sort_order').order('sort_order'),
-        supabase.from('partner_accounts').select('id,partner_id,account_number,bank_name,is_primary').order('is_primary', { ascending: false }).limit(10000),
+        supabase.from('partner_accounts').select('id,partner_id,account_number,bank_name,is_primary').order('is_primary', { ascending: false }).range(0, 999),
       ])
       if (comp) setCompanies(comp)
       if (bnk) setAllBanks(bnk)
@@ -503,15 +503,29 @@ export default function BulkImport({ onClose, onImported }: Props) {
 
     // Always fetch fresh data from DB before matching
     const fetchFreshData = async () => {
-      const [{ data: freshAccounts }, { data: freshPartners }] = await Promise.all([
-        supabase.from('partner_accounts').select('id,partner_id,account_number,bank_name,is_primary').limit(10000),
-        supabase.from('partners').select('id,name').limit(10000),
-      ])
-      if (freshAccounts) setPartnerAccounts(freshAccounts)
+      // Paginate partner_accounts (Supabase max 1000/page)
+      let allAccounts: any[] = []
+      let from = 0
+      const pageSize = 1000
+      while (true) {
+        const { data: page, error } = await supabase
+          .from('partner_accounts')
+          .select('id,partner_id,account_number,bank_name,is_primary')
+          .range(from, from + pageSize - 1)
+        if (error || !page || page.length === 0) break
+        allAccounts = [...allAccounts, ...page]
+        if (page.length < pageSize) break
+        from += pageSize
+      }
+
+      const { data: freshPartners } = await supabase
+        .from('partners').select('id,name').range(0, 9999)
+
+      if (allAccounts.length > 0) setPartnerAccounts(allAccounts)
       if (freshPartners) setPartners(freshPartners)
-      console.log('🔍 DB accounts loaded:', (freshAccounts || []).length, 'entries')
-      console.log('🔍 DB accounts sample:', (freshAccounts || []).slice(0, 5).map((a: any) => ({ acc: JSON.stringify(a.account_number), partner_id: a.partner_id })))
-      return { accList: freshAccounts || partnerAccounts, partList: freshPartners || partners }
+      console.log('🔍 DB accounts loaded:', allAccounts.length, 'entries (paginated)')
+      console.log('🔍 DB accounts sample:', allAccounts.slice(0, 5).map((a: any) => ({ acc: JSON.stringify(a.account_number), pid: a.partner_id })))
+      return { accList: allAccounts.length > 0 ? allAccounts : partnerAccounts, partList: freshPartners || partners }
     }
 
     try {
@@ -544,10 +558,19 @@ export default function BulkImport({ onClose, onImported }: Props) {
         const importRows = parsed.map(makeImportRow)
         setRows(importRows.map(r => {
           const rawAcc = r.parsed.account_number
-          console.log(`🔎 Trying to match: ${JSON.stringify(rawAcc)} (len=${rawAcc.length}, codes=${Array.from(rawAcc).map((c:any)=>c.charCodeAt(0)).join(',')})`)
+          if (!rawAcc) return r
+          const normInput = normalizeAccountNumber(rawAcc)
+          // Find any DB account that matches this normalized form
+          const dbMatches = accList.filter((pa: any) => normalizeAccountNumber(pa.account_number || '') === normInput)
+          if (dbMatches.length > 0) {
+            console.log(`✓ DB match for '${rawAcc}' → norm='${normInput}':`, dbMatches.map((a:any) => ({ acc: a.account_number, partner_id: a.partner_id })))
+          } else {
+            // Show closest DB accounts for this bank prefix
+            const prefix = rawAcc.split('-')[0]
+            const sameBank = accList.filter((pa: any) => (pa.account_number || '').startsWith(prefix))
+            console.log(`✗ No match for '${rawAcc}' (norm='${normInput}'). Same bank (${prefix}-*) in DB:`, sameBank.map((a:any) => ({ acc: a.account_number, norm: normalizeAccountNumber(a.account_number), partner_id: a.partner_id })))
+          }
           const matched = matchPartnerByAccount(rawAcc, accList, partList)
-          if (matched) console.log(`✓ Match: ${rawAcc} → ${matched.name}`)
-          else if (rawAcc) console.log(`✗ No match for: ${JSON.stringify(rawAcc)}`)
           return matched ? { ...r, override_partner_name: matched.name, override_partner_id: matched.id } : r
         }))
       }
