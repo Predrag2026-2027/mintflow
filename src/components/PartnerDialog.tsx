@@ -345,14 +345,41 @@ export default function PartnerDialog({ partner, initialName = '', initialAccoun
       const { data: newP, error } = await supabase.from('partners').insert(payload).select().single()
       if (error) { setSaveError(`Greška: ${error.message}`); setSaving(false); return }
       setSavedPartnerId(newP.id)
+
+      // Save all accounts: initialAccountNumber + NBS accounts
+      const accountsToSave: { account_number: string; bank_name: string | null; is_primary: boolean }[] = []
+
       if (initialAccountNumber.trim()) {
-        await supabase.from('partner_accounts').insert({
-          partner_id: newP.id, account_number: initialAccountNumber.trim(),
-          currency: 'RSD', is_primary: true,
+        accountsToSave.push({ account_number: initialAccountNumber.trim(), bank_name: null, is_primary: true })
+      }
+
+      if (nbsResult?.accounts?.length > 0) {
+        nbsResult.accounts.forEach((acc: { account: string; bankName?: string }, idx: number) => {
+          const alreadyAdded = accountsToSave.some(a => a.account_number === acc.account)
+          if (!alreadyAdded) {
+            accountsToSave.push({
+              account_number: acc.account,
+              bank_name: acc.bankName || null,
+              is_primary: accountsToSave.length === 0, // primary only if no other
+            })
+          }
         })
+      }
+
+      if (accountsToSave.length > 0) {
+        for (const acc of accountsToSave) {
+          await supabase.from('partner_accounts').insert({
+            partner_id: newP.id,
+            account_number: acc.account_number,
+            bank_name: acc.bank_name,
+            currency: 'RSD',
+            is_primary: acc.is_primary,
+          })
+        }
         fetchAccounts(newP.id)
         setNewAccNum('')
       }
+
       setSuccess(true)
       setTimeout(() => { setSuccess(false); onSaved(newP) }, 1200)
     }
