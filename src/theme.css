@@ -73,3 +73,17 @@
   --ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   --duration: 0.15s;
 }
+/* Append to src/theme.css */
+:root {
+  --display-font: 'DM Serif Display', Georgia, serif;
+  --num-font: 'DM Mono', 'Fira Mono', monospace;
+  --pill-green-fg: #00D47E;  --pill-green-bg: rgba(0,212,126,0.12);
+  --pill-red-fg:   #FF5B5A;  --pill-red-bg:   rgba(255,91,90,0.12);
+  --pill-amber-fg: #F5A623;  --pill-amber-bg: rgba(245,166,35,0.12);
+  --pill-blue-fg:  #4EA8FF;  --pill-blue-bg:  rgba(78,168,255,0.12);
+  --pill-purple-fg:#A78BFA;  --pill-purple-bg:rgba(167,139,250,0.12);
+  --pill-pink-fg:  #F472B6;  --pill-pink-bg:  rgba(244,114,182,0.12);
+  --pill-neutral-fg: rgba(255,255,255,0.45);
+  --pill-neutral-bg: rgba(255,255,255,0.06);
+}
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap');
