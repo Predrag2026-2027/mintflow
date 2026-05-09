@@ -71,3 +71,17 @@ input[type="date"]:focus {
   transform: translateY(-2px);
   box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.10) !important;
 }
+/* Append to src/theme.css */
+:root {
+  --display-font: 'DM Serif Display', Georgia, serif;
+  --num-font: 'DM Mono', 'Fira Mono', monospace;
+  --pill-green-fg: #00D47E;  --pill-green-bg: rgba(0,212,126,0.12);
+  --pill-red-fg:   #FF5B5A;  --pill-red-bg:   rgba(255,91,90,0.12);
+  --pill-amber-fg: #F5A623;  --pill-amber-bg: rgba(245,166,35,0.12);
+  --pill-blue-fg:  #4EA8FF;  --pill-blue-bg:  rgba(78,168,255,0.12);
+  --pill-purple-fg:#A78BFA;  --pill-purple-bg:rgba(167,139,250,0.12);
+  --pill-pink-fg:  #F472B6;  --pill-pink-bg:  rgba(244,114,182,0.12);
+  --pill-neutral-fg: rgba(255,255,255,0.45);
+  --pill-neutral-bg: rgba(255,255,255,0.06);
+}
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&display=swap');
