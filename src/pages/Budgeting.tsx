@@ -595,18 +595,21 @@ export default function Budgeting() {
     setEditVal(currentEst > 0 ? currentEst.toFixed(0) : '')
   }
 
-  const saveEdit = async () => {
+  const saveEdit = async (val?: string) => {
     if (!editing) return
     const row = rows.find(r => r.key === editing.rowKey)
     if (!row) return
 
     const parts = row.classKey?.split('|') || ['', '', '', '', '']
     const [plCat, plSub, dept, deptSub, desc] = parts
-    const amount = parseFloat(editVal) || 0
+    const amount = parseFloat(val ?? editVal) || 0
     const budgetMonth = `${editing.month}-01`
     const targetCompanyId = companyId || (companies[0]?.id || '')
 
-    await supabase.from('budget_entries').upsert({
+    // Close immediately so UI feels snappy
+    setEditing(null)
+
+    const { error } = await supabase.from('budget_entries').upsert({
       company_id: targetCompanyId,
       budget_month: budgetMonth,
       pl_category: plCat || null,
@@ -619,7 +622,10 @@ export default function Budgeting() {
       is_manual_override: true,
     }, { onConflict: 'company_id,budget_month,pl_category,pl_subcategory,department,dept_subcategory,expense_description', ignoreDuplicates: false })
 
-    setEditing(null)
+    if (error) {
+      console.error('[saveEdit] upsert failed:', error)
+      alert(`Failed to save estimate: ${error.message}`)
+    }
     refresh()
   }
 
@@ -813,8 +819,13 @@ export default function Budgeting() {
                                 style={pg.editInput}
                                 value={editVal}
                                 onChange={e => setEditVal(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditing(null) }}
-                                onBlur={saveEdit}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') {
+                                    const v = (e.target as HTMLInputElement).value
+                                    saveEdit(v)
+                                  }
+                                  if (e.key === 'Escape') setEditing(null)
+                                }}
                               />
                             ) : (
                               <span
