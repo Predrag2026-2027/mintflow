@@ -597,18 +597,18 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                                   <div style={s.field}>
                                     <label style={s.lbl}>Expense description</label>
                                     <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
-                                    {expDescs.length > 0 ? (
-                                      <select style={s.select} value={row.expense_description} onChange={e => updateRow(row.id, { expense_description: e.target.value })}>
-                                        <option value="">Select description...</option>
-                                        {expDescs.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-                                      </select>
-                                    <InlineCategoryAdd table="expense_descriptions" parentId={row.dept_subcategory_id} parentField="dept_subcategory_id"
-                                      currentCount={expDescs.length} theme="light" disabled={!row.dept_subcategory_id}
-                                      onAdded={item => { setExpenseDescriptions(prev => [...prev, { ...item, dept_subcategory_id: row.dept_subcategory_id, sort_order: prev.length + 1 }]); updateRow(row.id, { expense_description: item.name }) }} />
+                                      {expDescs.length > 0 ? (
+                                        <select style={{ ...s.select, flex: 1 }} value={row.expense_description} onChange={e => updateRow(row.id, { expense_description: e.target.value })}>
+                                          <option value="">Select description...</option>
+                                          {expDescs.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                                        </select>
+                                      ) : (
+                                        <input style={{ ...s.input, flex: 1 }} value={row.expense_description} onChange={e => updateRow(row.id, { expense_description: e.target.value })} placeholder="e.g. AWS, Telekom, Rent..." />
+                                      )}
+                                      <InlineCategoryAdd table="expense_descriptions" parentId={row.dept_subcategory_id} parentField="dept_subcategory_id"
+                                        currentCount={expDescs.length} theme="light" disabled={!row.dept_subcategory_id}
+                                        onAdded={item => { setExpenseDescriptions(prev => [...prev, { ...item, dept_subcategory_id: row.dept_subcategory_id, sort_order: prev.length + 1 }]); updateRow(row.id, { expense_description: item.name }) }} />
                                     </div>
-                                    ) : (
-                                      <input style={s.input} value={row.expense_description} onChange={e => updateRow(row.id, { expense_description: e.target.value })} placeholder="e.g. AWS, Telekom, Rent..." />
-                                    )}
                                   </div>
                                 </div>
 

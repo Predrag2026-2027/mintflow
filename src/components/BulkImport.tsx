@@ -1156,18 +1156,18 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>Expense description</label>
                                   <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
-                                  {expDescs.length > 0 ? (
-                                    <select style={s.editSelect} value={row.override_expense_description} onChange={e => updateRow(p.id, { override_expense_description: e.target.value })}>
-                                      <option value="">Select description...</option>
-                                      {expDescs.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-                                    </select>
-                                  <InlineCategoryAdd table="expense_descriptions" parentId={row.override_dept_subcategory_id} parentField="dept_subcategory_id"
-                                    currentCount={expDescs.length} theme="light" disabled={!row.override_dept_subcategory_id}
-                                    onAdded={item => { setExpenseDescriptions(prev => [...prev, { ...item, dept_subcategory_id: row.override_dept_subcategory_id, sort_order: prev.length + 1 }]); updateRow(p.id, { override_expense_description: item.name }) }} />
+                                    {expDescs.length > 0 ? (
+                                      <select style={{ ...s.editSelect, flex: 1 }} value={row.override_expense_description} onChange={e => updateRow(p.id, { override_expense_description: e.target.value })}>
+                                        <option value="">Select description...</option>
+                                        {expDescs.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                                      </select>
+                                    ) : (
+                                      <input style={{ ...s.editInput, flex: 1 }} value={row.override_expense_description} onChange={e => updateRow(p.id, { override_expense_description: e.target.value })} placeholder="e.g. Telekom, AWS, Rent..." />
+                                    )}
+                                    <InlineCategoryAdd table="expense_descriptions" parentId={row.override_dept_subcategory_id} parentField="dept_subcategory_id"
+                                      currentCount={expDescs.length} theme="light" disabled={!row.override_dept_subcategory_id}
+                                      onAdded={item => { setExpenseDescriptions(prev => [...prev, { ...item, dept_subcategory_id: row.override_dept_subcategory_id, sort_order: prev.length + 1 }]); updateRow(p.id, { override_expense_description: item.name }) }} />
                                   </div>
-                                  ) : (
-                                    <input style={s.editInput} value={row.override_expense_description} onChange={e => updateRow(p.id, { override_expense_description: e.target.value })} placeholder="e.g. Telekom, AWS, Rent..." />
-                                  )}
                                 </div>
                               </div>
                               <div style={s.editSectionTitle}>Revenue stream allocation</div>

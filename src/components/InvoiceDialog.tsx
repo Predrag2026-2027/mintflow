@@ -940,18 +940,18 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                     <div style={s.field}>
                       <label style={s.lbl}>Expense description</label>
                       <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
-                      {currentExpDescs.length > 0 ? (
-                        <select style={s.select} value={expDesc} onChange={e => setExpDesc(e.target.value)}>
-                          <option value="">Select description...</option>
-                          {currentExpDescs.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
-                        </select>
-                      <InlineCategoryAdd table="expense_descriptions" parentId={deptSubId} parentField="dept_subcategory_id"
-                        currentCount={currentExpDescs.length} theme="light" disabled={!deptSubId}
-                        onAdded={item => { setExpenseDescriptions(prev => [...prev, { ...item, dept_subcategory_id: deptSubId, sort_order: prev.length + 1 }]); setExpDesc(item.name) }} />
+                        {currentExpDescs.length > 0 ? (
+                          <select style={{ ...s.select, flex: 1 }} value={expDesc} onChange={e => setExpDesc(e.target.value)}>
+                            <option value="">Select description...</option>
+                            {currentExpDescs.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                          </select>
+                        ) : (
+                          <input style={{ ...s.input, flex: 1 }} value={expDesc} onChange={e => setExpDesc(e.target.value)} placeholder="Enter expense description..." />
+                        )}
+                        <InlineCategoryAdd table="expense_descriptions" parentId={deptSubId} parentField="dept_subcategory_id"
+                          currentCount={currentExpDescs.length} theme="light" disabled={!deptSubId}
+                          onAdded={item => { setExpenseDescriptions(prev => [...prev, { ...item, dept_subcategory_id: deptSubId, sort_order: prev.length + 1 }]); setExpDesc(item.name) }} />
                       </div>
-                      ) : (
-                        <input style={s.input} value={expDesc} onChange={e => setExpDesc(e.target.value)} placeholder="Enter expense description..." />
-                      )}
                     </div>
                   </div>
 
