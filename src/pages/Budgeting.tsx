@@ -21,7 +21,7 @@ interface BudgetRow {
   parent?: string
   cells: Record<string, BudgetCell>
   hasChildren: boolean
-  classKey?: string // "pl_cat|pl_sub|dept|dept_sub|desc" for drill-down
+  classKey?: string
 }
 
 interface MonthMeta {
@@ -43,14 +43,13 @@ interface DrillTx {
   cf_type: string | null
   type: string
   note: string | null
-  // invoice linkage
   invoice_id?: string
   invoice_number?: string
   is_invoice_driven?: boolean
 }
 
 interface DrillState {
-  rowKey: string           // e.g. "dept:Employee and Labour||Labour related expenses"
+  rowKey: string
   rowLabel: string
   month: string
   monthLabel: string
@@ -86,17 +85,17 @@ function fmtUSD(n: number, showSign = false): string {
 }
 
 function varianceColor(variance: number): string {
-  if (variance > 0) return '#1D9E75'
-  if (variance < 0) return '#E24B4A'
-  return '#888'
+  if (variance > 0) return '#00D47E'
+  if (variance < 0) return '#FF5B5A'
+  return '#7A9BB8'
 }
 
 const CF_BADGES: Record<string, { label: string; color: string; bg: string }> = {
-  recurring:    { label: '🔁 Recurring',    color: '#085041', bg: '#E1F5EE' },
-  one_time:     { label: '1️⃣ One-time',     color: '#633806', bg: '#FAEEDA' },
-  accrual:      { label: '📅 Accrual',      color: '#0C447C', bg: '#E6F1FB' },
-  capex:        { label: '🏗 CapEx',        color: '#555',    bg: '#f0f0ee' },
-  reimbursable: { label: '↩️ Reimb.',       color: '#6B21A8', bg: '#F3E8FF' },
+  recurring:    { label: 'Recurring',    color: '#00D47E', bg: 'rgba(0,212,126,0.12)' },
+  one_time:     { label: 'One-time',     color: '#F5A623', bg: 'rgba(245,166,35,0.12)' },
+  accrual:      { label: 'Accrual',      color: '#4EA8FF', bg: 'rgba(78,168,255,0.12)' },
+  capex:        { label: 'CapEx',        color: '#7A9BB8', bg: 'rgba(255,255,255,0.05)' },
+  reimbursable: { label: 'Reimb.',       color: '#A78BFA', bg: 'rgba(167,139,250,0.12)' },
 }
 
 // ─── Drill-down Modal ────────────────────────────────────────────────────────
@@ -121,13 +120,6 @@ function DrillModal({
       setLoading(true)
 
       if (drill.mode === 'actual') {
-        // Decode the row.key to get exact filter values
-        // row.key formats:
-        //   cat:PlCat
-        //   sub:PlCat|PlSub
-        //   dept:PlCat|PlSub|Dept
-        //   dsub:PlCat|PlSub|Dept|DeptSub
-        //   leaf:PlCat|PlSub|Dept|DeptSub|Desc
         const rk = drill.rowKey
         let plCat = '', plSub = '', dept = '', deptSub = '', desc = ''
 
@@ -147,11 +139,8 @@ function DrillModal({
           plCat = rk.slice(4)
         }
 
-        console.log('[Drill] filter:', { plCat, plSub, dept, deptSub, desc })
-
-        // Last day of month — correct for all months
         const [yr, mo] = drill.month.split('-').map(Number)
-        const lastDay = new Date(yr, mo, 0).getDate() // day 0 of next month = last day of this month
+        const lastDay = new Date(yr, mo, 0).getDate()
 
         let query = supabase
           .from('transactions')
@@ -177,8 +166,7 @@ function DrillModal({
         if (deptSub) query = query.eq('dept_subcategory', deptSub)
         if (desc) query = query.eq('expense_description', desc)
 
-        const { data, error } = await query.order('transaction_date', { ascending: false })
-        console.log('[Drill] result count:', (data || []).length, 'error:', error)
+        const { data } = await query.order('transaction_date', { ascending: false })
 
         const mapped: DrillTx[] = (data || []).map((tx: any) => {
           const link = (tx.invoice_transaction_links as any[])?.[0]
@@ -208,7 +196,6 @@ function DrillModal({
   }, [drill, companyIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleEdit = async (tx: DrillTx) => {
-    // Fetch full transaction or invoice object for dialog
     if (tx.is_invoice_driven && tx.invoice_id) {
       const { data } = await supabase
         .from('invoices')
@@ -230,7 +217,6 @@ function DrillModal({
     setEditingTx(null)
     setEditingInvoice(null)
     onEditDone()
-    // Reload drill list
     setLoading(true)
     setTxList([])
   }
@@ -257,32 +243,31 @@ function DrillModal({
         {/* Header */}
         <div style={dm.header}>
           <div>
+            <div style={dm.headerKicker}>
+              {drill.mode === 'actual' ? 'ACTUAL TRANSACTIONS' : 'BUDGET ESTIMATE'}
+            </div>
             <div style={dm.headerTitle}>
-              {drill.mode === 'actual' ? '📊 Actual transactions' : '🎯 Budget estimate'}
+              {drill.rowLabel}
             </div>
             <div style={dm.headerSub}>
-              {drill.rowLabel} · {drill.monthLabel}
+              {drill.monthLabel}
               {drill.mode === 'actual' && !loading && (
-                <span style={{ marginLeft: '10px', color: '#FF8080', fontWeight: '600' }}>
+                <span style={{ marginLeft: '12px', color: '#FF5B5A', fontWeight: '600', fontFamily: "'DM Mono', monospace" }}>
                   {fmtUSD(total)} total
                 </span>
               )}
             </div>
           </div>
-          <button style={dm.closeBtn} onClick={onClose}>×</button>
+          <button style={dm.closeBtn} onClick={onClose} aria-label="Close">×</button>
         </div>
 
         {/* Body */}
         <div style={dm.body}>
           {loading ? (
-            <div style={{ padding: '40px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>
-              Loading...
-            </div>
+            <div style={dm.empty}>Loading…</div>
           ) : drill.mode === 'actual' ? (
             txList.length === 0 ? (
-              <div style={{ padding: '40px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>
-                No transactions found for this category and month.
-              </div>
+              <div style={dm.empty}>No transactions found for this category and month.</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {txList.map(tx => {
@@ -290,39 +275,39 @@ function DrillModal({
                   return (
                     <div key={tx.id} style={dm.txRow}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px', flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: '13px', fontWeight: '500', color: '#111' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '13px', fontWeight: '500', color: '#DCE9F6' }}>
                             {tx.partner_name}
                           </span>
                           {tx.is_invoice_driven && (
-                            <span style={{ fontSize: '10px', padding: '1px 7px', borderRadius: '20px', background: '#E6F1FB', color: '#0C447C', fontWeight: '500' }}>
-                              💳 {tx.invoice_number || 'Invoice'}
+                            <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(78,168,255,0.12)', color: '#4EA8FF', fontWeight: '500', letterSpacing: '0.02em' }}>
+                              {tx.invoice_number || 'Invoice'}
                             </span>
                           )}
                           {cfBadge && (
-                            <span style={{ fontSize: '10px', padding: '1px 7px', borderRadius: '20px', background: cfBadge.bg, color: cfBadge.color, fontWeight: '500' }}>
+                            <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: cfBadge.bg, color: cfBadge.color, fontWeight: '500' }}>
                               {cfBadge.label}
                             </span>
                           )}
                         </div>
-                        <div style={{ fontSize: '11px', color: '#888' }}>
+                        <div style={{ fontSize: '11px', color: '#7A9BB8' }}>
                           {tx.transaction_date}
                           {tx.pl_category && <span> · {tx.pl_category}</span>}
                           {tx.department && <span> / {tx.department}</span>}
                           {tx.expense_description && <span> · {tx.expense_description}</span>}
                         </div>
                         {tx.note && (
-                          <div style={{ fontSize: '11px', color: '#aaa', marginTop: '2px', fontStyle: 'italic' }}>
-                            {tx.note.slice(0, 80)}{tx.note.length > 80 ? '...' : ''}
+                          <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.30)', marginTop: '3px', fontStyle: 'italic' }}>
+                            {tx.note.slice(0, 80)}{tx.note.length > 80 ? '…' : ''}
                           </div>
                         )}
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0, marginRight: '12px' }}>
-                        <div style={{ fontSize: '13px', fontWeight: '600', color: '#A32D2D' }}>
+                        <div style={{ fontSize: '13px', fontWeight: '600', color: '#FF5B5A', fontFamily: "'DM Mono', monospace" }}>
                           {tx.amount.toLocaleString()} {tx.currency}
                         </div>
                         {tx.currency !== 'USD' && (
-                          <div style={{ fontSize: '11px', color: '#aaa' }}>
+                          <div style={{ fontSize: '11px', color: '#7A9BB8', fontFamily: "'DM Mono', monospace" }}>
                             ${tx.amount_usd?.toFixed(2)}
                           </div>
                         )}
@@ -331,7 +316,7 @@ function DrillModal({
                         style={dm.editBtn}
                         onClick={() => handleEdit(tx)}
                         title={tx.is_invoice_driven ? 'Edit invoice' : 'Edit transaction'}>
-                        {tx.is_invoice_driven ? '🧾 Edit invoice' : '✏️ Edit'}
+                        Edit
                       </button>
                     </div>
                   )
@@ -339,14 +324,17 @@ function DrillModal({
               </div>
             )
           ) : (
-            // Estimate mode — show info + inline edit hint
-            <div style={{ padding: '20px' }}>
-              <div style={{ background: '#E1F5EE', border: '0.5px solid #5DCAA5', borderRadius: '10px', padding: '16px', fontSize: '13px', color: '#085041', marginBottom: '16px' }}>
-                💡 This estimate is auto-generated from recurring transactions tagged with Cash Flow Classification.
-                Click the estimate value in the table to manually override it.
+            // Estimate mode
+            <div style={{ padding: '8px 4px' }}>
+              <div style={dm.infoBox}>
+                <div style={{ fontSize: '12px', fontWeight: '600', color: '#00D47E', marginBottom: '6px', letterSpacing: '0.04em', textTransform: 'uppercase' }}>How estimates work</div>
+                <div style={{ fontSize: '13px', color: '#DCE9F6', lineHeight: 1.55 }}>
+                  This estimate is auto-generated from recurring transactions tagged with Cash Flow Classification.
+                  Click the estimate value in the table to manually override it.
+                </div>
               </div>
-              <div style={{ fontSize: '12px', color: '#666' }}>
-                To change the estimate for <strong>{drill.rowLabel}</strong> in <strong>{drill.monthLabel}</strong>,
+              <div style={{ fontSize: '12px', color: '#7A9BB8', lineHeight: 1.55 }}>
+                To change the estimate for <strong style={{ color: '#DCE9F6' }}>{drill.rowLabel}</strong> in <strong style={{ color: '#DCE9F6' }}>{drill.monthLabel}</strong>,
                 close this panel and click the green estimate value in the table row.
               </div>
             </div>
@@ -356,8 +344,8 @@ function DrillModal({
         {/* Footer */}
         <div style={dm.footer}>
           {drill.mode === 'actual' && !loading && txList.length > 0 && (
-            <div style={{ fontSize: '12px', color: '#888' }}>
-              {txList.length} transaction{txList.length !== 1 ? 's' : ''} · click ✏️ Edit to modify
+            <div style={{ fontSize: '12px', color: '#7A9BB8' }}>
+              {txList.length} transaction{txList.length !== 1 ? 's' : ''} · click Edit to modify
             </div>
           )}
           <div style={{ marginLeft: 'auto' }}>
@@ -373,7 +361,7 @@ function DrillModal({
 
 export default function Budgeting() {
   const [companies, setCompanies] = useState<Company[]>([])
-  const [companyId, setCompanyId] = useState('')   // '' = all (Constel Group)
+  const [companyId, setCompanyId] = useState('')
   const [loading, setLoading] = useState(false)
   const [rows, setRows] = useState<BudgetRow[]>([])
   const [months, setMonths] = useState<MonthMeta[]>([])
@@ -384,7 +372,6 @@ export default function Budgeting() {
   const [drill, setDrill] = useState<DrillState | null>(null)
   const refresh = () => setRefreshTick(t => t + 1)
 
-  // Build 4-month window: previous + current + 2 ahead
   useEffect(() => {
     const now = new Date()
     const cur = monthKey(now)
@@ -402,12 +389,10 @@ export default function Budgeting() {
     })
   }, [])
 
-  // companyIds to query — '' means all companies
   const companyIds = companyId
     ? [companyId]
     : companies.map(c => c.id)
 
-  // ── Load budget data ───────────────────────────────────────────────────────
   useEffect(() => {
     if (months.length === 0 || companyIds.length === 0) return
     let cancelled = false
@@ -419,7 +404,6 @@ export default function Budgeting() {
       const firstMonth = monthKeys[0]
       const lastMonth = monthKeys[monthKeys.length - 1]
 
-      // 1. Actuals
       const { data: actuals } = await supabase
         .from('transactions')
         .select('transaction_date, pl_category, pl_subcategory, department, dept_subcategory, expense_description, amount_usd, cf_type, cf_frequency, cf_next_month_est')
@@ -429,7 +413,6 @@ export default function Budgeting() {
         .gte('transaction_date', `${firstMonth}-01`)
         .lte('transaction_date', (() => { const [y,m] = lastMonth.split('-').map(Number); return `${lastMonth}-${new Date(y,m,0).getDate()}` })())
 
-      // 2. Budget entries
       const { data: budgetEntries } = await supabase
         .from('budget_entries')
         .select('*')
@@ -437,7 +420,6 @@ export default function Budgeting() {
         .gte('budget_month', `${firstMonth}-01`)
         .lte('budget_month', `${lastMonth}-01`)
 
-      // 3. Recurring from last 3 months
       const threeMonthsAgo = addMonths(monthKey(new Date()), -3)
       const { data: recurring } = await supabase
         .from('transactions')
@@ -447,8 +429,6 @@ export default function Budgeting() {
         .eq('status', 'posted')
         .not('cf_type', 'is', null)
         .gte('transaction_date', `${threeMonthsAgo}-01`)
-
-      // ── Build maps ────────────────────────────────────────────────────────
 
       const makeKey = (t: any) => [
         t.pl_category || '', t.pl_subcategory || '',
@@ -491,8 +471,6 @@ export default function Budgeting() {
         ...Object.keys(estimateMap),
         ...Object.keys(manualMap),
       ])
-
-      // ── Build hierarchy ───────────────────────────────────────────────────
 
       const rowMap: Record<string, BudgetRow> = {}
 
@@ -551,7 +529,6 @@ export default function Budgeting() {
         }
       }
 
-      // Bubble up to parents (deepest first)
       const sortedKeys = Object.keys(rowMap).sort((a, b) => rowMap[b].level - rowMap[a].level)
       for (const rk of sortedKeys) {
         const row = rowMap[rk]
@@ -565,7 +542,6 @@ export default function Budgeting() {
         }
       }
 
-      // Build ordered list
       const finalRows = Object.values(rowMap)
       const ordered: BudgetRow[] = []
       const visited = new Set<string>()
@@ -593,8 +569,6 @@ export default function Budgeting() {
     run()
     return () => { cancelled = true }
   }, [companyId, months, refreshTick]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Helpers ────────────────────────────────────────────────────────────────
 
   const toggleCollapse = (key: string) => {
     setCollapsed(prev => {
@@ -649,7 +623,6 @@ export default function Budgeting() {
     refresh()
   }
 
-  // Get all leaf classKeys under a row (for parent drill-down)
   const getLeafClassKeys = (rowKey: string): string[] => {
     const descendants = rows.filter(r => {
       const rowByKey = Object.fromEntries(rows.map(x => [x.key, x]))
@@ -670,7 +643,6 @@ export default function Budgeting() {
         return
       }
     }
-    // For leaf rows: leafClassKeys = [classKey], for parent rows: all descendant classKeys
     const leafClassKeys = row.hasChildren
       ? getLeafClassKeys(row.key)
       : (row.classKey ? [row.classKey] : [])
@@ -686,7 +658,7 @@ export default function Budgeting() {
     })
   }
 
-  // ── Totals ─────────────────────────────────────────────────────────────────
+  // Totals
   const totals: Record<string, BudgetCell> = {}
   for (const m of months) {
     const rootRows = rows.filter(r => r.level === 0)
@@ -699,34 +671,34 @@ export default function Budgeting() {
 
   const levelIndent = [0, 20, 36, 50]
   const levelStyles = [
-    { fontWeight: '600', fontSize: '12px', color: '#0a1628', background: '#f5f5f3' },
-    { fontWeight: '500', fontSize: '12px', color: '#333', background: '#fafaf9' },
-    { fontWeight: '400', fontSize: '12px', color: '#555', background: '#fff' },
-    { fontWeight: '400', fontSize: '11px', color: '#777', background: '#fff' },
-  ]
+    { fontWeight: '600', fontSize: '12px', color: '#DCE9F6', background: 'rgba(255,255,255,0.025)' },
+    { fontWeight: '500', fontSize: '12px', color: '#DCE9F6', background: 'transparent' },
+    { fontWeight: '400', fontSize: '12px', color: '#7A9BB8', background: 'transparent' },
+    { fontWeight: '400', fontSize: '11px', color: '#7A9BB8', background: 'transparent' },
+  ] as const
 
   return (
     <div style={pg.page}>
-      {/* ── Header ── */}
+      {/* Header */}
       <div style={pg.pageHeader}>
         <div>
           <div style={pg.pageTitle}>Budgeting</div>
           <div style={pg.pageSub}>
             Expense forecast · 3 months ahead · Actual vs Estimate
             {companyId === '' && companies.length > 0 && (
-              <span style={{ marginLeft: '8px', color: '#E6B432', fontWeight: '500' }}>
+              <span style={{ marginLeft: '10px', color: '#F5A623', fontWeight: '500' }}>
                 · Constel Group (all companies)
               </span>
             )}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <select
             style={pg.companySelect}
             value={companyId}
             onChange={e => setCompanyId(e.target.value)}
           >
-            <option value="">🏢 Constel Group (consolidated)</option>
+            <option value="">Constel Group (consolidated)</option>
             {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           {(companyId !== '' || companies.length > 0) && (
@@ -737,50 +709,49 @@ export default function Budgeting() {
 
       {companies.length === 0 && !loading ? (
         <div style={pg.empty}>
-          <div style={{ fontSize: '13px', color: '#aaa' }}>Loading companies...</div>
+          <div style={{ fontSize: '13px', color: '#7A9BB8' }}>Loading companies…</div>
         </div>
       ) : loading ? (
         <div style={pg.empty}>
-          <div style={{ fontSize: '13px', color: '#aaa' }}>Loading budget data...</div>
-          <div style={{ width: '200px', height: '4px', background: '#e5e5e5', borderRadius: '2px', marginTop: '16px', overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: '60%', background: '#1D9E75', borderRadius: '2px', animation: 'bgtpulse 1.5s ease-in-out infinite' }} />
+          <div style={{ fontSize: '13px', color: '#7A9BB8' }}>Loading budget data…</div>
+          <div style={{ width: '200px', height: '3px', background: 'rgba(255,255,255,0.06)', borderRadius: '2px', marginTop: '16px', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: '60%', background: '#00D47E', borderRadius: '2px', animation: 'bgtpulse 1.5s ease-in-out infinite' }} />
           </div>
         </div>
       ) : rows.length === 0 ? (
         <div style={pg.empty}>
-          <div style={{ fontSize: '40px', marginBottom: '16px' }}>🌱</div>
-          <div style={{ fontSize: '16px', fontWeight: '500', color: '#333', marginBottom: '8px' }}>No expense data yet</div>
-          <div style={{ fontSize: '13px', color: '#aaa' }}>Tag transactions with Cash Flow Classification to populate the budget</div>
+          <div style={{ fontSize: '15px', fontWeight: '500', color: '#DCE9F6', marginBottom: '8px' }}>No expense data yet</div>
+          <div style={{ fontSize: '13px', color: '#7A9BB8' }}>Tag transactions with Cash Flow Classification to populate the budget</div>
         </div>
       ) : (
         <div style={pg.tableWrap}>
           <table style={pg.table}>
             <thead>
-              <tr style={{ background: '#0a1628' }}>
-                <th style={{ ...pg.th, textAlign: 'left', width: '240px', color: '#fff', paddingLeft: '16px' }}>
+              <tr>
+                <th style={{ ...pg.th, textAlign: 'left', width: '240px', paddingLeft: '16px', background: '#0A1525' }}>
                   Expense category
                 </th>
                 {months.map(m => (
                   <th key={m.key} colSpan={3} style={{
                     ...pg.th, textAlign: 'center',
-                    color: m.isPast ? 'rgba(255,255,255,0.4)' : '#fff',
-                    borderLeft: '1px solid rgba(255,255,255,0.1)',
-                    fontSize: '12px', fontWeight: '500',
-                    background: m.isPast ? 'rgba(0,0,0,0.15)' : 'transparent',
+                    color: m.isPast ? 'rgba(255,255,255,0.30)' : '#DCE9F6',
+                    fontSize: '12px', fontWeight: '500', textTransform: 'none', letterSpacing: '0',
+                    background: m.isPast ? '#070F1C' : '#0A1525',
+                    borderLeft: '1px solid rgba(255,255,255,0.06)',
                   }}>
-                    {m.isPast ? `◀ ${m.label}` : m.label}
+                    {m.isPast ? `← ${m.label}` : m.label}
                   </th>
                 ))}
               </tr>
-              <tr style={{ background: '#0d1e38', borderBottom: '2px solid #1D9E75' }}>
-                <th style={{ ...pg.th, textAlign: 'left', paddingLeft: '16px', color: 'rgba(255,255,255,0.3)', fontSize: '10px', fontWeight: '400' }}>
-                  {companyId === '' ? '🏢 All companies' : companies.find(c => c.id === companyId)?.name}
+              <tr>
+                <th style={{ ...pg.thSub, paddingLeft: '16px', textAlign: 'left' }}>
+                  {companyId === '' ? 'All companies' : companies.find(c => c.id === companyId)?.name}
                 </th>
                 {months.map(m => (
                   <React.Fragment key={m.key}>
-                    <th style={{ ...pg.th, color: m.isPast ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.55)', fontSize: '10px', fontWeight: '500', letterSpacing: '0.07em', textAlign: 'right', paddingRight: '8px', borderLeft: '1px solid rgba(255,255,255,0.07)' }}>ACTUAL</th>
-                    <th style={{ ...pg.th, color: m.isPast ? 'rgba(255,255,255,0.25)' : '#5DCAA5', fontSize: '10px', fontWeight: '500', letterSpacing: '0.07em', textAlign: 'right', paddingRight: '8px' }}>ESTIMATE</th>
-                    <th style={{ ...pg.th, color: m.isPast ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.35)', fontSize: '10px', fontWeight: '500', letterSpacing: '0.07em', textAlign: 'right', paddingRight: '12px' }}>VAR</th>
+                    <th style={{ ...pg.thSub, color: m.isPast ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.45)', textAlign: 'right', paddingRight: '8px', borderLeft: '1px solid rgba(255,255,255,0.05)' }}>ACTUAL</th>
+                    <th style={{ ...pg.thSub, color: m.isPast ? 'rgba(255,255,255,0.20)' : '#5DCAA5', textAlign: 'right', paddingRight: '8px' }}>ESTIMATE</th>
+                    <th style={{ ...pg.thSub, color: m.isPast ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.30)', textAlign: 'right', paddingRight: '12px' }}>VAR</th>
                   </React.Fragment>
                 ))}
               </tr>
@@ -793,7 +764,7 @@ export default function Budgeting() {
                 const isCollapsed = collapsed.has(row.key)
 
                 return (
-                  <tr key={row.key} style={{ ...pg.tr, background: style.background, borderBottom: row.level === 0 ? '1px solid #e5e5e5' : '0.5px solid #f0f0ee' }}>
+                  <tr key={row.key} style={{ background: style.background, borderBottom: row.level === 0 ? '1px solid rgba(255,255,255,0.06)' : '0.5px solid rgba(255,255,255,0.03)' }}>
                     <td style={{
                       ...pg.td,
                       paddingLeft: `${16 + levelIndent[row.level]}px`,
@@ -805,7 +776,7 @@ export default function Budgeting() {
                     }} onClick={() => isCollapsible && toggleCollapse(row.key)}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         {isCollapsible
-                          ? <span style={{ fontSize: '10px', color: '#bbb', width: '12px', flexShrink: 0 }}>{isCollapsed ? '▶' : '▼'}</span>
+                          ? <span style={{ fontSize: '9px', color: '#7A9BB8', width: '12px', flexShrink: 0 }}>{isCollapsed ? '▶' : '▼'}</span>
                           : <span style={{ width: '12px', flexShrink: 0 }} />
                         }
                         {row.label}
@@ -820,21 +791,21 @@ export default function Budgeting() {
 
                       return (
                         <React.Fragment key={m.key}>
-                          {/* ── ACTUAL ── clickable */}
-                          <td style={{ ...pg.td, textAlign: 'right', paddingRight: '8px', borderLeft: '1px solid #f0f0ee', fontVariantNumeric: 'tabular-nums' }}>
+                          {/* ACTUAL */}
+                          <td style={{ ...pg.td, textAlign: 'right', paddingRight: '8px', borderLeft: '1px solid rgba(255,255,255,0.04)', fontVariantNumeric: 'tabular-nums', fontFamily: "'DM Mono', 'Fira Mono', monospace" }}>
                             {cell.actual > 0 ? (
                               <span
-                                style={{ color: '#A32D2D', cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: '3px' }}
+                                style={{ color: '#FF8080', cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textDecorationColor: 'rgba(255,128,128,0.4)', textUnderlineOffset: '3px' }}
                                 title="Click to view transactions"
                                 onClick={() => openDrill(row, m, 'actual')}
                               >
                                 {fmtUSD(cell.actual)}
                               </span>
-                            ) : <span style={{ color: '#ddd' }}>—</span>}
+                            ) : <span style={{ color: 'rgba(255,255,255,0.15)' }}>—</span>}
                           </td>
 
-                          {/* ── ESTIMATE ── clickable / editable */}
-                          <td style={{ ...pg.td, textAlign: 'right', paddingRight: '8px', fontVariantNumeric: 'tabular-nums' }}>
+                          {/* ESTIMATE */}
+                          <td style={{ ...pg.td, textAlign: 'right', paddingRight: '8px', fontVariantNumeric: 'tabular-nums', fontFamily: "'DM Mono', 'Fira Mono', monospace" }}>
                             {isEditingThis ? (
                               <input
                                 autoFocus
@@ -847,21 +818,21 @@ export default function Budgeting() {
                               />
                             ) : (
                               <span
-                                style={{ color: cell.isManual ? '#185FA5' : (cell.estimate > 0 ? '#1D9E75' : '#ccc'), cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                style={{ color: cell.isManual ? '#4EA8FF' : (cell.estimate > 0 ? '#00D47E' : 'rgba(255,255,255,0.15)'), cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                                 title={cell.estimate > 0 ? 'Click to edit estimate' : 'Click to add estimate'}
                                 onClick={() => openDrill(row, m, 'estimate')}
                               >
-                                {cell.estimate > 0 ? fmtUSD(cell.estimate) : (canEdit ? <span style={{ color: '#ddd', fontSize: '10px' }}>+ add</span> : '—')}
-                                {cell.isManual && <span style={{ fontSize: '8px', color: '#7FB8EE' }}>✎</span>}
+                                {cell.estimate > 0 ? fmtUSD(cell.estimate) : (canEdit ? <span style={{ color: 'rgba(255,255,255,0.20)', fontSize: '10px', fontFamily: "'Inter', sans-serif" }}>+ add</span> : '—')}
+                                {cell.isManual && <span style={{ fontSize: '8px', color: '#4EA8FF' }}>✎</span>}
                               </span>
                             )}
                           </td>
 
-                          {/* ── VARIANCE ── */}
-                          <td style={{ ...pg.td, textAlign: 'right', paddingRight: '12px', fontVariantNumeric: 'tabular-nums' }}>
+                          {/* VARIANCE */}
+                          <td style={{ ...pg.td, textAlign: 'right', paddingRight: '12px', fontVariantNumeric: 'tabular-nums', fontFamily: "'DM Mono', 'Fira Mono', monospace" }}>
                             {(cell.actual > 0 || cell.estimate > 0)
                               ? <span style={{ color: varianceColor(variance), fontSize: '11px', fontWeight: '500' }}>{variance === 0 ? '—' : fmtUSD(variance, true)}</span>
-                              : <span style={{ color: '#ddd' }}>—</span>}
+                              : <span style={{ color: 'rgba(255,255,255,0.15)' }}>—</span>}
                           </td>
                         </React.Fragment>
                       )
@@ -871,22 +842,22 @@ export default function Budgeting() {
               })}
 
               {/* TOTALS */}
-              <tr style={{ background: '#0a1628', borderTop: '2px solid #1D9E75' }}>
-                <td style={{ ...pg.td, paddingLeft: '16px', fontWeight: '700', fontSize: '12px', color: '#fff', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                  TOTAL EXPENSES
+              <tr style={{ background: '#0A1525', borderTop: '2px solid #00D47E' }}>
+                <td style={{ ...pg.td, paddingLeft: '16px', fontWeight: '700', fontSize: '11px', color: '#DCE9F6', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                  Total expenses
                 </td>
                 {months.map(m => {
                   const cell = totals[m.key] || { actual: 0, estimate: 0, isManual: false }
                   const variance = cell.estimate - cell.actual
                   return (
                     <React.Fragment key={m.key}>
-                      <td style={{ ...pg.td, textAlign: 'right', paddingRight: '8px', color: cell.actual > 0 ? '#FF8080' : 'rgba(255,255,255,0.25)', fontWeight: '600', fontVariantNumeric: 'tabular-nums', borderLeft: '1px solid rgba(255,255,255,0.1)' }}>
+                      <td style={{ ...pg.td, textAlign: 'right', paddingRight: '8px', color: cell.actual > 0 ? '#FF8080' : 'rgba(255,255,255,0.20)', fontWeight: '600', fontVariantNumeric: 'tabular-nums', fontFamily: "'DM Mono', monospace", borderLeft: '1px solid rgba(255,255,255,0.06)' }}>
                         {cell.actual > 0 ? fmtUSD(cell.actual) : '—'}
                       </td>
-                      <td style={{ ...pg.td, textAlign: 'right', paddingRight: '8px', color: '#5DCAA5', fontWeight: '600', fontVariantNumeric: 'tabular-nums' }}>
+                      <td style={{ ...pg.td, textAlign: 'right', paddingRight: '8px', color: '#00D47E', fontWeight: '600', fontVariantNumeric: 'tabular-nums', fontFamily: "'DM Mono', monospace" }}>
                         {cell.estimate > 0 ? fmtUSD(cell.estimate) : '—'}
                       </td>
-                      <td style={{ ...pg.td, textAlign: 'right', paddingRight: '12px', fontWeight: '600', fontVariantNumeric: 'tabular-nums' }}>
+                      <td style={{ ...pg.td, textAlign: 'right', paddingRight: '12px', fontWeight: '600', fontVariantNumeric: 'tabular-nums', fontFamily: "'DM Mono', monospace" }}>
                         <span style={{ color: varianceColor(variance) }}>
                           {(cell.actual > 0 || cell.estimate > 0) ? fmtUSD(variance, true) : '—'}
                         </span>
@@ -903,14 +874,13 @@ export default function Budgeting() {
       {/* Legend */}
       {rows.length > 0 && (
         <div style={pg.legend}>
-          <div style={pg.legendItem}><span style={{ ...pg.legendDot, background: '#A32D2D' }} /> Actual — click to view transactions</div>
-          <div style={pg.legendItem}><span style={{ ...pg.legendDot, background: '#1D9E75' }} /> Estimate — click to edit</div>
-          <div style={pg.legendItem}><span style={{ ...pg.legendDot, background: '#185FA5' }} /> <span style={{ fontSize: '9px' }}>✎</span> Manual override</div>
-          <div style={pg.legendItem}><span style={{ color: '#1D9E75' }}>+</span> Under budget · <span style={{ color: '#E24B4A' }}>−</span> Over budget</div>
+          <div style={pg.legendItem}><span style={{ ...pg.legendDot, background: '#FF8080' }} /> Actual — click to view transactions</div>
+          <div style={pg.legendItem}><span style={{ ...pg.legendDot, background: '#00D47E' }} /> Estimate — click to edit</div>
+          <div style={pg.legendItem}><span style={{ ...pg.legendDot, background: '#4EA8FF' }} /> <span style={{ fontSize: '9px' }}>✎</span> Manual override</div>
+          <div style={pg.legendItem}><span style={{ color: '#00D47E', fontWeight: '600' }}>+</span> Under budget · <span style={{ color: '#FF5B5A', fontWeight: '600' }}>−</span> Over budget</div>
         </div>
       )}
 
-      {/* Drill-down modal */}
       {drill && (
         <DrillModal
           drill={drill}
@@ -923,43 +893,260 @@ export default function Budgeting() {
 
       <style>{`
         @keyframes bgtpulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-        tbody tr:hover { filter: brightness(0.97); }
+        tbody tr:hover { background: rgba(255,255,255,0.03) !important; }
       `}</style>
     </div>
   )
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Styles (Obsidian) ───────────────────────────────────────────────────────
 
 const pg: Record<string, React.CSSProperties> = {
-  page: { padding: '2rem', fontFamily: 'system-ui,-apple-system,sans-serif', minHeight: '100vh', background: '#f7f7f5' },
-  pageHeader: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.5rem' },
-  pageTitle: { fontSize: '22px', fontWeight: '600', color: '#0a1628', letterSpacing: '-0.02em', marginBottom: '4px' },
-  pageSub: { fontSize: '13px', color: '#aaa' },
-  companySelect: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 12px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#fff', color: '#111', outline: 'none', minWidth: '240px' },
-  refreshBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '8px 14px', border: '0.5px solid #1D9E75', borderRadius: '8px', background: 'transparent', color: '#1D9E75', cursor: 'pointer' },
-  empty: { display: 'flex', flexDirection: 'column' as const, alignItems: 'center', justifyContent: 'center', minHeight: '400px', color: '#aaa', textAlign: 'center' as const },
-  tableWrap: { borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08),0 4px 16px rgba(0,0,0,0.04)', background: '#fff' },
-  table: { width: '100%', borderCollapse: 'collapse' as const, tableLayout: 'fixed' as const },
-  th: { padding: '10px 8px', fontSize: '10px', fontWeight: '500', letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' as const },
-  tr: { transition: 'filter 0.1s' },
-  td: { padding: '9px 8px', fontSize: '12px', color: '#333', whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis' },
-  editInput: { fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '3px 6px', border: '1.5px solid #1D9E75', borderRadius: '5px', background: '#fff', color: '#111', outline: 'none', width: '80px', textAlign: 'right' as const },
-  legend: { display: 'flex', gap: '20px', marginTop: '12px', flexWrap: 'wrap' as const },
-  legendItem: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#888' },
-  legendDot: { width: '8px', height: '8px', borderRadius: '50%', display: 'inline-block', flexShrink: 0 },
+  page: {
+    padding: '24px 28px',
+    fontFamily: "'Inter', system-ui, sans-serif",
+    minHeight: '100vh',
+    background: '#060E1A',
+    color: '#DCE9F6',
+  },
+  pageHeader: {
+    display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+    marginBottom: '1.25rem',
+  },
+  pageTitle: {
+    fontFamily: "'DM Serif Display', Georgia, serif",
+    fontSize: '24px',
+    fontWeight: '400',
+    color: '#DCE9F6',
+    letterSpacing: '-0.01em',
+    marginBottom: '4px',
+  },
+  pageSub: {
+    fontSize: '13px',
+    color: '#7A9BB8',
+  },
+  companySelect: {
+    fontFamily: "'Inter', sans-serif",
+    fontSize: '13px',
+    padding: '7px 12px',
+    border: '1px solid rgba(255,255,255,0.075)',
+    borderRadius: '8px',
+    background: '#0D1B2C',
+    color: '#DCE9F6',
+    outline: 'none',
+    minWidth: '240px',
+    cursor: 'pointer',
+  },
+  refreshBtn: {
+    fontFamily: "'Inter', sans-serif",
+    fontSize: '12px',
+    padding: '7px 14px',
+    border: '1px solid rgba(0,212,126,0.4)',
+    borderRadius: '8px',
+    background: 'rgba(0,212,126,0.08)',
+    color: '#00D47E',
+    cursor: 'pointer',
+    fontWeight: '500',
+  },
+  empty: {
+    display: 'flex', flexDirection: 'column' as const,
+    alignItems: 'center', justifyContent: 'center',
+    minHeight: '400px',
+    color: '#7A9BB8',
+    textAlign: 'center' as const,
+    background: '#0D1B2C',
+    border: '1px solid rgba(255,255,255,0.06)',
+    borderRadius: '12px',
+  },
+  tableWrap: {
+    borderRadius: '12px',
+    overflow: 'hidden',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+    background: '#0D1B2C',
+    border: '1px solid rgba(255,255,255,0.06)',
+  },
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse' as const,
+    tableLayout: 'fixed' as const,
+  },
+  th: {
+    padding: '11px 8px',
+    fontSize: '10px',
+    fontWeight: '600',
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase' as const,
+    color: '#DCE9F6',
+    whiteSpace: 'nowrap' as const,
+    borderBottom: '1px solid rgba(255,255,255,0.08)',
+  },
+  thSub: {
+    padding: '7px 8px',
+    fontSize: '9.5px',
+    fontWeight: '600',
+    letterSpacing: '0.1em',
+    background: '#0A1525',
+    borderBottom: '1px solid rgba(0,212,126,0.25)',
+    whiteSpace: 'nowrap' as const,
+  },
+  td: {
+    padding: '9px 8px',
+    fontSize: '12px',
+    color: '#DCE9F6',
+    whiteSpace: 'nowrap' as const,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  editInput: {
+    fontFamily: "'DM Mono', monospace",
+    fontSize: '12px',
+    padding: '4px 6px',
+    border: '1.5px solid #00D47E',
+    borderRadius: '5px',
+    background: '#0A1525',
+    color: '#DCE9F6',
+    outline: 'none',
+    width: '80px',
+    textAlign: 'right' as const,
+  },
+  legend: {
+    display: 'flex',
+    gap: '20px',
+    marginTop: '14px',
+    flexWrap: 'wrap' as const,
+    padding: '10px 14px',
+    background: '#0D1B2C',
+    border: '1px solid rgba(255,255,255,0.06)',
+    borderRadius: '10px',
+  },
+  legendItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontSize: '11px',
+    color: '#7A9BB8',
+  },
+  legendDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    display: 'inline-block',
+    flexShrink: 0,
+  },
 }
 
 const dm: Record<string, React.CSSProperties> = {
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1001 },
-  modal: { background: '#fff', borderRadius: '16px', width: '760px', maxWidth: '95vw', maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' },
-  header: { background: '#0a1628', padding: '1rem 1.5rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' },
-  headerTitle: { color: '#fff', fontSize: '15px', fontWeight: '500', marginBottom: '3px' },
-  headerSub: { color: 'rgba(255,255,255,0.5)', fontSize: '12px' },
-  closeBtn: { background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '24px', cursor: 'pointer', padding: '0 4px', lineHeight: 1, flexShrink: 0 },
-  body: { padding: '1.25rem 1.5rem', overflowY: 'auto', flex: 1 },
-  footer: { padding: '0.75rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', alignItems: 'center', background: '#f5f5f3' },
-  txRow: { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', border: '0.5px solid #e5e5e5', borderRadius: '10px', background: '#fff', marginBottom: '4px' },
-  editBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '5px 12px', border: '0.5px solid #1D9E75', borderRadius: '6px', background: 'transparent', color: '#1D9E75', cursor: 'pointer', whiteSpace: 'nowrap' as const, flexShrink: 0 },
-  closeFooterBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '7px 16px', borderRadius: '8px', border: '0.5px solid #e5e5e5', background: 'transparent', color: '#666', cursor: 'pointer' },
+  overlay: {
+    position: 'fixed', inset: 0,
+    background: 'rgba(0,0,0,0.65)',
+    backdropFilter: 'blur(4px)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    zIndex: 1001,
+  },
+  modal: {
+    background: '#0D1B2C',
+    border: '1px solid rgba(255,255,255,0.10)',
+    borderRadius: '16px',
+    width: '760px', maxWidth: '95vw', maxHeight: '85vh',
+    display: 'flex', flexDirection: 'column',
+    overflow: 'hidden',
+    boxShadow: '0 24px 60px rgba(0,0,0,0.6)',
+  },
+  header: {
+    background: '#0A1525',
+    padding: '1.1rem 1.5rem',
+    display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+    borderBottom: '1px solid rgba(255,255,255,0.06)',
+  },
+  headerKicker: {
+    color: '#00D47E',
+    fontSize: '10px',
+    fontWeight: '600',
+    letterSpacing: '0.1em',
+    marginBottom: '4px',
+  },
+  headerTitle: {
+    color: '#DCE9F6',
+    fontFamily: "'DM Serif Display', Georgia, serif",
+    fontSize: '18px',
+    fontWeight: '400',
+    marginBottom: '3px',
+    letterSpacing: '-0.01em',
+  },
+  headerSub: {
+    color: '#7A9BB8',
+    fontSize: '12px',
+  },
+  closeBtn: {
+    background: 'rgba(255,255,255,0.05)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    color: '#7A9BB8',
+    fontSize: '20px',
+    cursor: 'pointer',
+    padding: '0',
+    width: '28px',
+    height: '28px',
+    borderRadius: '8px',
+    lineHeight: 1,
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  body: {
+    padding: '1.25rem 1.5rem',
+    overflowY: 'auto' as const,
+    flex: 1,
+  },
+  empty: {
+    padding: '40px',
+    textAlign: 'center' as const,
+    color: '#7A9BB8',
+    fontSize: '13px',
+  },
+  footer: {
+    padding: '0.75rem 1.5rem',
+    borderTop: '1px solid rgba(255,255,255,0.06)',
+    display: 'flex', alignItems: 'center',
+    background: '#0A1525',
+  },
+  txRow: {
+    display: 'flex', alignItems: 'center', gap: '12px',
+    padding: '11px 14px',
+    border: '1px solid rgba(255,255,255,0.06)',
+    borderRadius: '10px',
+    background: '#111F30',
+    marginBottom: '4px',
+    transition: 'border-color 0.15s, background 0.15s',
+  },
+  editBtn: {
+    fontFamily: "'Inter', sans-serif",
+    fontSize: '11px',
+    fontWeight: '500',
+    padding: '5px 12px',
+    border: '1px solid rgba(0,212,126,0.4)',
+    borderRadius: '6px',
+    background: 'rgba(0,212,126,0.08)',
+    color: '#00D47E',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap' as const,
+    flexShrink: 0,
+  },
+  closeFooterBtn: {
+    fontFamily: "'Inter', sans-serif",
+    fontSize: '13px',
+    padding: '7px 16px',
+    borderRadius: '8px',
+    border: '1px solid rgba(255,255,255,0.08)',
+    background: 'transparent',
+    color: '#7A9BB8',
+    cursor: 'pointer',
+  },
+  infoBox: {
+    background: 'rgba(0,212,126,0.06)',
+    border: '1px solid rgba(0,212,126,0.25)',
+    borderRadius: '10px',
+    padding: '14px 16px',
+    marginBottom: '14px',
+  },
 }
