@@ -2,563 +2,726 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { NavContext } from '../App'
 import type { Page } from '../App'
 import { supabase } from '../supabase'
-import InvoiceDialog from '../components/InvoiceDialog'
+import { fmtUSD as fmt, fmtUSDSigned as fmtN } from '../utils/formatters'
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-interface KPI {
-  revenueYTD: number
-  expensesYTD: number
-  netProfitYTD: number
-  unpaidReceivables: number
-  unpaidPayables: number
-  cashOnHand: number
-  upcomingExpenses30d: number
-  overdueCount: number
+// ── Halcom TKDIS format generator ────────────────────────
+// Halcom kombinovane šifre platnog prometa (polje [166:169] u red 3)
+const HALCOM_SIFRE = [
+  { value: '221', label: '221 – Bezgotovinsko (robe i usluge)' },
+  { value: '240', label: '240 – Zarade' },
+  { value: '253', label: '253 – Javni prihodi' },
+  { value: '254', label: '254 – Porezi i doprinosi (objedinjena naplata)' },
+  { value: '260', label: '260 – Premije osiguranja' },
+  { value: '263', label: '263 – Ostali transferi' },
+  { value: '270', label: '270 – Kratkoročni krediti' },
+  { value: '271', label: '271 – Dugoročni krediti' },
+]
+
+function padR(s: string, n: number): string {
+  return (s || '').substring(0, n).padEnd(n, ' ')
+}
+function cleanAccount(acc: string): string {
+  return (acc || '').replace(/[-\s]/g, '')
+}
+function fmtDatumDDMMYY(date: Date): string {
+  const d = String(date.getDate()).padStart(2, '0')
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const y = String(date.getFullYear()).slice(-2)
+  return `${d}${m}${y}`
 }
 
-interface UnpaidInvoice {
-  id: string
-  invoice_number: string
-  partner_name: string
-  company_name: string
-  invoice_date: string
-  due_date: string | null
-  amount: number
-  amount_usd: number
-  currency: string
-  outstanding_amount: number
-  outstanding_amount_usd: number
-  type: 'receivable' | 'payable'
-  days_overdue: number
-}
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
-function fmtUSD(n: number, compact = false): string {
-  if (compact) {
-    if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
-    if (Math.abs(n) >= 1000) return `$${(n / 1000).toFixed(1)}K`
+function exportHalcom(invoices: any[], companyBankAccount: any, companyProfile: any, halcomSifra: string = '221') {
+  if (!companyBankAccount) {
+    alert('Nije pronađen bankovni račun kompanije. Dodajte ga u Settings → Company profiles → Bank accounts.')
+    return
   }
-  return `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+  const missing = invoices.filter(i => !i.selected_account_number)
+  if (missing.length > 0) {
+    alert(`${missing.length} faktura nema račun primaoca. Odaberite račun za svaku fakturu.`)
+    return
+  }
+
+  const racunPlatilac = cleanAccount(companyBankAccount.account_number)
+  // Ime i grad iz company_profiles, fallback na hardkodovane vrednosti
+  const imeFirma = (companyProfile?.full_legal_name || 'CONSTELLATION D.O.O.').toUpperCase()
+  const gradFirma = (companyProfile?.city || 'BEOGRAD').toUpperCase()
+  const datum = fmtDatumDDMMYY(new Date())
+  const brNaloga = invoices.length
+  const ukupanIznosPare = invoices.reduce((s, i) => s + Math.round((i.amount || 0) * 100), 0)
+
+  const lines: string[] = []
+
+  // Red 1: header (180 chars)
+  lines.push(
+    padR(racunPlatilac, 18) +
+    padR(imeFirma, 35) +
+    padR(gradFirma, 10) +
+    datum +
+    ' '.repeat(98) +
+    'MULTI E-BANK0'
+  )
+
+  // Red 2: kontrolni (180 chars)
+  lines.push(
+    padR(racunPlatilac, 18) +
+    padR(imeFirma, 35) +
+    padR(gradFirma, 10) +
+    String(ukupanIznosPare).padStart(15, '0') +
+    '0000' +
+    String(brNaloga) +
+    ' '.repeat(96) +
+    '9'
+  )
+
+  // Red 3+: stavke (217 chars)
+  invoices.forEach(inv => {
+    const iznos = Math.round((inv.amount || 0) * 100)
+    const svrhaText = `UPLATA PO FAKTURI ${inv.invoice_number || ''}`.toUpperCase().substring(0, 34)
+    const svrhaZona = (' '.repeat(25) + svrhaText).padEnd(61, ' ')
+    const racunPrimaoca = cleanAccount(inv.selected_account_number || '')
+    // Halcom šifra platnog prometa (polje [166:169]) — NE model plaćanja
+    const poziv = padR(inv.reference_number || inv.invoice_number || '', 23)
+
+    lines.push(
+      padR(racunPrimaoca, 18) +
+      padR((inv.partner_name || '').toUpperCase(), 35) +
+      padR((inv.partner_address || '').toUpperCase(), 35) +
+      padR((inv.partner_city || '').toUpperCase(), 10) +
+      '0' +
+      svrhaZona +
+      '00000 ' +
+      padR(halcomSifra, 3) +
+      '  ' +
+      String(iznos).padStart(13, '0') +
+      '  ' +
+      poziv +
+      datum +
+      '01'
+    )
+  })
+
+  const content = lines.join('\r\n') + '\r\n\x1a'
+  const bytes = new Uint8Array(content.length)
+  for (let i = 0; i < content.length; i++) bytes[i] = content.charCodeAt(i) & 0xff
+  const blob = new Blob([bytes], { type: 'application/octet-stream' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `nalozi_${datum}.txt`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
-// ─── Main page ──────────────────────────────────────────────────────────────
-export default function Reports() {
-  const { setPage } = React.useContext(NavContext)
-  const [kpi, setKpi] = useState<KPI | null>(null)
+// ── Unpaid Invoices Panel ────────────────────────────────
+function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
+  const [invoices, setInvoices] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [showUnpaid, setShowUnpaid] = useState<'receivables' | 'payables' | null>(null)
+  const [sortBy, setSortBy] = useState<'due_date' | 'amount' | 'partner'>('due_date')
+  const [filterStatus, setFilterStatus] = useState<'all' | 'overdue' | 'upcoming'>('all')
+  const [search, setSearch] = useState('')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bankAccounts, setBankAccounts] = useState<any[]>([])
+  const [selectedBankId, setSelectedBankId] = useState('')
+  const [halcomSifra, setHalcomSifra] = useState('221')
+  const [companyProfile, setCompanyProfile] = useState<any>(null)
+  // Map: invoice_id → { account_number, model } — odabrani račun po fakturi
+  const [invoiceAccountMap, setInvoiceAccountMap] = useState<Record<string, { account_number: string; model: string; bank_name: string }>>({})
+  // Map: partner_id → lista računa
+  const [partnerAccountsMap, setPartnerAccountsMap] = useState<Record<string, any[]>>({})
+  const today = new Date().toISOString().split('T')[0]
 
-  const loadKPI = useCallback(async () => {
-    setLoading(true)
-    const yr = new Date().getFullYear()
-    const start = `${yr}-01-01`
-    const end = `${yr}-12-31`
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true)
+      const { data: compData } = await supabase
+        .from('companies').select('id').eq('name', 'Constellation LLC').single()
+      if (!compData) { setLoading(false); return }
 
-    const [
-      { data: txs },
-      { data: invR },
-      { data: invP },
-      { data: banks },
-      { data: upcoming },
-    ] = await Promise.all([
-      supabase.from('transactions').select('amount_usd, tx_subtype').eq('status', 'posted').gte('transaction_date', start).lte('transaction_date', end),
-      supabase.from('invoices').select('outstanding_amount_usd, due_date').eq('type', 'receivable').neq('status', 'paid').neq('status', 'cancelled'),
-      supabase.from('invoices').select('outstanding_amount_usd, due_date').eq('type', 'payable').neq('status', 'paid').neq('status', 'cancelled'),
-      supabase.from('banks').select('current_balance_usd'),
-      supabase.from('transactions').select('amount_usd').eq('tx_subtype', 'expense').eq('status', 'pending').gte('transaction_date', new Date().toISOString().split('T')[0]).lte('transaction_date', new Date(Date.now() + 30*24*3600*1000).toISOString().split('T')[0]),
-    ])
+      // Bankovni računi kompanije
+      const { data: bankData } = await supabase
+        .from('company_bank_accounts')
+        .select('*').eq('company_id', compData.id).eq('currency', 'RSD')
+        .order('is_primary', { ascending: false })
+      if (bankData && bankData.length > 0) {
+        setBankAccounts(bankData)
+        setSelectedBankId((bankData.find(b => b.is_primary) || bankData[0]).id)
+      }
 
-    const revenueYTD = (txs || []).filter(t => t.tx_subtype === 'income').reduce((s, t) => s + (t.amount_usd || 0), 0)
-    const expensesYTD = (txs || []).filter(t => t.tx_subtype === 'expense').reduce((s, t) => s + (t.amount_usd || 0), 0)
-    const unpaidReceivables = (invR || []).reduce((s, i) => s + (i.outstanding_amount_usd || 0), 0)
-    const unpaidPayables = (invP || []).reduce((s, i) => s + (i.outstanding_amount_usd || 0), 0)
-    const cashOnHand = (banks || []).reduce((s, b) => s + (b.current_balance_usd || 0), 0)
-    const upcomingExpenses30d = (upcoming || []).reduce((s, t) => s + (t.amount_usd || 0), 0)
-    const today = new Date().toISOString().split('T')[0]
-    const overdueCount = [...(invR || []), ...(invP || [])].filter(i => i.due_date && i.due_date < today).length
+      // Profil kompanije (ime, grad za TKDIS header)
+      const { data: profData } = await supabase
+        .from('company_profiles')
+        .select('full_legal_name, city, address')
+        .eq('company_id', compData.id)
+        .single()
+      if (profData) setCompanyProfile(profData)
 
-    setKpi({
-      revenueYTD, expensesYTD, netProfitYTD: revenueYTD - expensesYTD,
-      unpaidReceivables, unpaidPayables, cashOnHand, upcomingExpenses30d, overdueCount,
-    })
-    setLoading(false)
+      // Fakture
+      const { data: invData } = await supabase
+        .from('invoices')
+        .select('*, partners(id, name, address, city)')
+        .eq('company_id', compData.id)
+        .in('status', ['unpaid', 'partial'])
+        .order('due_date', { ascending: true })
+
+      if (invData && invData.length > 0) {
+        setInvoices(invData)
+
+        // Povuci sve partner račune odjednom
+        const partnerIds = [...new Set(invData.map(i => i.partner_id).filter(Boolean))]
+        if (partnerIds.length > 0) {
+          const { data: pAccounts } = await supabase
+            .from('partner_accounts')
+            .select('*')
+            .in('partner_id', partnerIds)
+            .eq('currency', 'RSD')
+            .order('is_primary', { ascending: false })
+
+          if (pAccounts) {
+            // Grupiši po partner_id
+            const paMap: Record<string, any[]> = {}
+            pAccounts.forEach(pa => {
+              if (!paMap[pa.partner_id]) paMap[pa.partner_id] = []
+              paMap[pa.partner_id].push(pa)
+            })
+            setPartnerAccountsMap(paMap)
+
+            // Auto-selektuj primarni račun za svaku fakturu
+            const accMap: Record<string, { account_number: string; model: string; bank_name: string }> = {}
+            invData.forEach(inv => {
+              if (!inv.partner_id) return
+              const accounts = paMap[inv.partner_id] || []
+              // Faktura već ima account_number (ručno unet) — prioritet
+              if (inv.account_number) {
+                accMap[inv.id] = {
+                  account_number: inv.account_number,
+                  model: inv.model || '97',
+                  bank_name: 'Iz fakture',
+                }
+                return
+              }
+              // Inače uzmi primarni račun
+              const primary = accounts.find(a => a.is_primary) || accounts[0]
+              if (primary) {
+                accMap[inv.id] = {
+                  account_number: primary.account_number,
+                  model: primary.model || inv.model || '97',
+                  bank_name: primary.bank_name || '',
+                }
+              }
+            })
+            setInvoiceAccountMap(accMap)
+          }
+        }
+      }
+      setLoading(false)
+    }
+    load()
   }, [])
 
-  useEffect(() => { loadKPI() }, [loadKPI])
-
-  const reportCards = [
-    { id: 'pl',           title: 'Profit & Loss',      desc: 'Income vs expenses, by month and category',     page: 'pl' as Page },
-    { id: 'cashflow',     title: 'Cash Flow',          desc: 'Cash position, runway, and projections',        page: 'cashflow' as Page },
-    { id: 'budgeting',    title: 'Budgeting',          desc: 'Forecast vs actual, 3-month outlook',           page: 'budgeting' as Page },
-    { id: 'transactions', title: 'Transactions',       desc: 'Full transaction ledger with filters',          page: 'transactions' as Page },
-    { id: 'invoices',     title: 'Invoices',           desc: 'AR/AP aging, unpaid, partial, paid',            page: 'invoices' as Page },
-    { id: 'partners',     title: 'Partners',           desc: 'Customer & vendor performance',                  page: 'partners' as Page },
-  ]
-
-  return (
-    <div style={s.page}>
-      {/* Header */}
-      <div style={s.pageHeader}>
-        <div>
-          <div style={s.pageTitle}>Reports</div>
-          <div style={s.pageSub}>Financial overview and detailed analytics</div>
-        </div>
-        <button style={s.refreshBtn} onClick={loadKPI}>↻ Refresh</button>
-      </div>
-
-      {/* KPI Strip */}
-      <div style={s.kpiGrid}>
-        <KPICard label="Revenue YTD"      value={loading ? '—' : fmtUSD(kpi?.revenueYTD || 0, true)}      accent="#00D47E" />
-        <KPICard label="Expenses YTD"     value={loading ? '—' : fmtUSD(kpi?.expensesYTD || 0, true)}     accent="#FF5B5A" />
-        <KPICard label="Net Profit YTD"   value={loading ? '—' : fmtUSD(kpi?.netProfitYTD || 0, true)}    accent={kpi && kpi.netProfitYTD >= 0 ? '#00D47E' : '#FF5B5A'} />
-        <KPICard label="Cash on Hand"     value={loading ? '—' : fmtUSD(kpi?.cashOnHand || 0, true)}      accent="#4EA8FF" />
-      </div>
-
-      <div style={s.kpiGrid}>
-        <KPICard label="Unpaid Receivables" value={loading ? '—' : fmtUSD(kpi?.unpaidReceivables || 0, true)} accent="#00D47E" onClick={() => setShowUnpaid('receivables')} clickable />
-        <KPICard label="Unpaid Payables"    value={loading ? '—' : fmtUSD(kpi?.unpaidPayables || 0, true)}    accent="#F5A623" onClick={() => setShowUnpaid('payables')}    clickable />
-        <KPICard label="Upcoming 30d Exp."  value={loading ? '—' : fmtUSD(kpi?.upcomingExpenses30d || 0, true)} accent="#A78BFA" />
-        <KPICard label="Overdue Invoices"   value={loading ? '—' : String(kpi?.overdueCount || 0)}            accent={kpi && kpi.overdueCount > 0 ? '#FF5B5A' : '#7A9BB8'} />
-      </div>
-
-      {/* Alert if cash low */}
-      {!loading && kpi && kpi.cashOnHand < kpi.upcomingExpenses30d && (
-        <div style={s.alert}>
-          <div style={s.alertIcon}>⚠</div>
-          <div>
-            <div style={{ fontWeight: '600', fontSize: '13px', color: '#F5A623', marginBottom: '3px' }}>
-              Upcoming expenses exceed cash on hand
-            </div>
-            <div style={{ fontSize: '12px', color: '#DCE9F6' }}>
-              Pending expenses for the next 30 days ({fmtUSD(kpi.upcomingExpenses30d)}) are higher than current cash balance ({fmtUSD(kpi.cashOnHand)}).
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Report Cards */}
-      <div style={{ marginTop: '24px', marginBottom: '12px', fontSize: '11px', fontWeight: '600', color: 'rgba(255,255,255,0.30)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-        Detailed reports
-      </div>
-      <div style={s.reportGrid}>
-        {reportCards.map(r => (
-          <button key={r.id} style={s.reportCard} onClick={() => setPage(r.page)}>
-            <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '17px', color: '#DCE9F6', fontWeight: '400', marginBottom: '4px', letterSpacing: '-0.01em' }}>
-              {r.title}
-            </div>
-            <div style={{ fontSize: '12px', color: '#7A9BB8', lineHeight: 1.5 }}>{r.desc}</div>
-            <div style={s.reportArrow}>→</div>
-          </button>
-        ))}
-      </div>
-
-      {showUnpaid && (
-        <UnpaidInvoicesPanel type={showUnpaid} onClose={() => { setShowUnpaid(null); loadKPI() }} />
-      )}
-    </div>
-  )
-}
-
-// ─── KPI Card ───────────────────────────────────────────────────────────────
-function KPICard({ label, value, accent, onClick, clickable }: {
-  label: string
-  value: string
-  accent: string
-  onClick?: () => void
-  clickable?: boolean
-}) {
-  const [hovered, setHovered] = useState(false)
-  return (
-    <button
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onClick={onClick}
-      disabled={!clickable}
-      style={{
-        background: '#0D1B2C',
-        border: '1px solid rgba(255,255,255,0.075)',
-        borderTop: `2.5px solid ${accent}`,
-        borderRadius: '10px',
-        padding: '14px 16px',
-        textAlign: 'left' as const,
-        cursor: clickable ? 'pointer' : 'default',
-        boxShadow: hovered && clickable ? '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.10)' : '0 4px 20px rgba(0,0,0,0.4)',
-        transform: hovered && clickable ? 'translateY(-2px)' : 'none',
-        transition: 'transform 0.15s, box-shadow 0.15s',
-        fontFamily: "'Inter', sans-serif",
-      }}
-    >
-      <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.30)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '6px' }}>
-        {label}
-      </div>
-      <div style={{
-        fontFamily: "'DM Mono', 'Fira Mono', monospace",
-        fontSize: '24px',
-        fontWeight: '500',
-        color: accent,
-        letterSpacing: '-0.02em',
-        lineHeight: 1.1,
-      }}>
-        {value}
-      </div>
-      {clickable && (
-        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.30)', marginTop: '6px' }}>
-          Click to view details →
-        </div>
-      )}
-    </button>
-  )
-}
-
-// ─── Unpaid Invoices Panel ──────────────────────────────────────────────────
-function UnpaidInvoicesPanel({ type, onClose }: { type: 'receivables' | 'payables'; onClose: () => void }) {
-  const [list, setList] = useState<UnpaidInvoice[]>([])
-  const [loading, setLoading] = useState(true)
-  const [editing, setEditing] = useState<any | null>(null)
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    const { data } = await supabase
-      .from('invoices')
-      .select(`
-        id, invoice_number, invoice_date, due_date,
-        amount, amount_usd, currency,
-        outstanding_amount, outstanding_amount_usd, type,
-        partners(name), companies(name)
-      `)
-      .eq('type', type === 'receivables' ? 'receivable' : 'payable')
-      .neq('status', 'paid')
-      .neq('status', 'cancelled')
-      .order('due_date', { ascending: true, nullsFirst: false })
-
-    const today = new Date()
-    const mapped: UnpaidInvoice[] = (data || []).map((inv: any) => {
-      let days_overdue = 0
-      if (inv.due_date) {
-        const due = new Date(inv.due_date)
-        days_overdue = Math.floor((today.getTime() - due.getTime()) / (24*3600*1000))
-      }
-      return {
-        id: inv.id,
-        invoice_number: inv.invoice_number,
-        partner_name: (inv.partners as any)?.name || '—',
-        company_name: (inv.companies as any)?.name || '—',
-        invoice_date: inv.invoice_date,
-        due_date: inv.due_date,
-        amount: inv.amount,
-        amount_usd: inv.amount_usd,
-        currency: inv.currency,
-        outstanding_amount: inv.outstanding_amount,
-        outstanding_amount_usd: inv.outstanding_amount_usd,
-        type: inv.type,
-        days_overdue,
-      }
+  const filtered = invoices
+    .filter(inv => {
+      const partner = inv.partners?.name || ''
+      const matchSearch = !search ||
+        partner.toLowerCase().includes(search.toLowerCase()) ||
+        (inv.invoice_number || '').toLowerCase().includes(search.toLowerCase())
+      const isOverdue = inv.due_date && inv.due_date < today
+      const matchStatus = filterStatus === 'all' ||
+        (filterStatus === 'overdue' && isOverdue) ||
+        (filterStatus === 'upcoming' && !isOverdue)
+      return matchSearch && matchStatus
     })
-    setList(mapped)
-    setLoading(false)
-  }, [type])
+    .sort((a, b) => {
+      if (sortBy === 'amount') return (b.amount_usd || 0) - (a.amount_usd || 0)
+      if (sortBy === 'partner') return (a.partners?.name || '').localeCompare(b.partners?.name || '')
+      return (a.due_date || '9999') < (b.due_date || '9999') ? -1 : 1
+    })
 
-  useEffect(() => { load() }, [load])
+  const totalUnpaid = filtered.reduce((s, i) => s + (i.amount_usd || 0), 0)
+  const overdueCount = filtered.filter(i => i.due_date && i.due_date < today).length
+  const selectedInvoices = filtered.filter(i => selected.has(i.id))
+  const selectedBank = bankAccounts.find(b => b.id === selectedBankId)
 
-  const handleEdit = async (invoiceId: string) => {
-    const { data } = await supabase
-      .from('invoices')
-      .select('*, partners(name)')
-      .eq('id', invoiceId)
-      .single()
-    if (data) setEditing(data)
+  const toggleSelect = (id: string) => {
+    setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  const toggleAll = () => {
+    if (selected.size === filtered.length) setSelected(new Set())
+    else setSelected(new Set(filtered.map(i => i.id)))
   }
 
-  const handleEditDone = () => {
-    setEditing(null)
-    load()
+  const handleAccountSelect = (invId: string, accountId: string, partnerId: string) => {
+    const accounts = partnerAccountsMap[partnerId] || []
+    const acc = accounts.find(a => a.id === accountId)
+    if (acc) {
+      setInvoiceAccountMap(prev => ({
+        ...prev,
+        [invId]: { account_number: acc.account_number, model: acc.model || '97', bank_name: acc.bank_name || '' }
+      }))
+    }
   }
 
-  const total = list.reduce((s, i) => s + (i.outstanding_amount_usd || 0), 0)
-  const overdueCount = list.filter(i => i.days_overdue > 0).length
+  const handleExport = () => {
+    const toExport = (selectedInvoices.length > 0 ? selectedInvoices : filtered).map(i => ({
+      ...i,
+      partner_name: i.partners?.name,
+      partner_address: i.partners?.address || '',
+      partner_city: i.partners?.city || '',
+      selected_account_number: invoiceAccountMap[i.id]?.account_number || i.account_number || '',
+      selected_model: invoiceAccountMap[i.id]?.model || i.model || '97',
+    }))
+    exportHalcom(toExport, selectedBank, companyProfile, halcomSifra)
+  }
 
-  if (editing) return <InvoiceDialog invoice={editing} onClose={handleEditDone} />
+  const daysUntilDue = (dueDate: string | null) => {
+    if (!dueDate) return null
+    return Math.ceil((new Date(dueDate).getTime() - new Date(today).getTime()) / 86400000)
+  }
+
+  const missingAccountCount = filtered.filter(i => !invoiceAccountMap[i.id]?.account_number && !i.account_number).length
 
   return (
-    <div style={ps.overlay} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div style={ps.modal}>
+    <div style={ps.overlay} onClick={onClose}>
+      <div style={ps.panel} onClick={e => e.stopPropagation()}>
         <div style={ps.header}>
           <div>
-            <div style={ps.headerKicker}>UNPAID {type === 'receivables' ? 'RECEIVABLES' : 'PAYABLES'}</div>
-            <div style={ps.headerTitle}>
-              {type === 'receivables' ? "Money owed to you" : "Money you owe"}
-            </div>
+            <div style={ps.headerTitle}>⚠️ Unpaid Invoices — Constellation LLC</div>
             <div style={ps.headerSub}>
-              {!loading && (
-                <span style={{ fontFamily: "'DM Mono', monospace", color: type === 'receivables' ? '#00D47E' : '#F5A623', fontWeight: '600' }}>
-                  {fmtUSD(total)} total
-                </span>
-              )}
-              {overdueCount > 0 && (
-                <span style={{ marginLeft: '12px', color: '#FF5B5A', fontWeight: '500' }}>
-                  · {overdueCount} overdue
-                </span>
-              )}
+              {loading ? 'Loading...' : `${filtered.length} invoices · ${fmt(totalUnpaid)} total · ${overdueCount} overdue`}
             </div>
           </div>
-          <button style={ps.closeBtn} onClick={onClose} aria-label="Close">×</button>
+          <button style={ps.closeBtn} onClick={onClose}>×</button>
         </div>
 
-        <div style={ps.body}>
+        <div style={ps.toolbar}>
+          <input style={ps.searchInput} placeholder="Search partner or invoice #..."
+            value={search} onChange={e => setSearch(e.target.value)} />
+          <select style={ps.sel} value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)}>
+            <option value="all">All unpaid</option>
+            <option value="overdue">Overdue only</option>
+            <option value="upcoming">Upcoming</option>
+          </select>
+          <select style={ps.sel} value={sortBy} onChange={e => setSortBy(e.target.value as any)}>
+            <option value="due_date">Sort: Due date</option>
+            <option value="amount">Sort: Amount</option>
+            <option value="partner">Sort: Partner</option>
+          </select>
+        </div>
+
+        {/* Export bar */}
+        <div style={ps.exportBar}>
+          <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '4px' }}>
+            <div style={{ fontSize: '12px', color: '#633806', fontWeight: '500' }}>
+              🏦 Hal E-Bank — nalog za prenos (TKDIS format)
+              {selected.size > 0 && <span style={{ marginLeft: '8px', color: '#7A9BB8', fontWeight: '400' }}>({selected.size} selektovano)</span>}
+            </div>
+            {bankAccounts.length === 0 ? (
+              <div style={{ fontSize: '11px', color: '#A32D2D' }}>⚠️ Nije pronađen RSD račun kompanije</div>
+            ) : (
+              <div style={{ fontSize: '11px', color: '#854F0B' }}>
+                Platilac: {selectedBank?.bank_name} · {selectedBank?.account_number}
+                {missingAccountCount > 0 && (
+                  <span style={{ marginLeft: '8px', color: '#A32D2D', fontWeight: '500' }}>
+                    ⚠️ {missingAccountCount} faktura bez računa primaoca
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {bankAccounts.length > 1 && (
+              <select style={{ ...ps.sel, fontSize: '11px' }} value={selectedBankId}
+                onChange={e => setSelectedBankId(e.target.value)}>
+                {bankAccounts.map(b => (
+                  <option key={b.id} value={b.id}>{b.bank_name}{b.is_primary ? ' ★' : ''}</option>
+                ))}
+              </select>
+            )}
+            <select
+              style={{ ...ps.sel, fontSize: '11px' }}
+              value={halcomSifra}
+              onChange={e => setHalcomSifra(e.target.value)}
+            >
+              {HALCOM_SIFRE.map(s => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+            <button
+              style={{ ...ps.exportBtn, opacity: bankAccounts.length === 0 ? 0.5 : 1 }}
+              onClick={handleExport} disabled={bankAccounts.length === 0}>
+              📥 Export {selected.size > 0 ? `${selected.size}` : 'all'} naloga
+            </button>
+          </div>
+        </div>
+
+        <div style={ps.tableWrap}>
           {loading ? (
-            <div style={ps.empty}>Loading…</div>
-          ) : list.length === 0 ? (
-            <div style={ps.empty}>No unpaid {type} 🎉</div>
+            <div style={{ padding: '40px', textAlign: 'center' as const, color: '#7A9BB8' }}>Loading...</div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: '60px', textAlign: 'center' as const }}>
+              <div style={{ fontSize: '28px', marginBottom: '10px' }}>✅</div>
+              <div style={{ fontSize: '14px', fontWeight: '500', color: '#DCE9F6' }}>Nema neplaćenih faktura!</div>
+            </div>
           ) : (
             <table style={ps.table}>
               <thead>
-                <tr>
-                  <th style={ps.th}>Invoice</th>
+                <tr style={ps.thead}>
+                  <th style={ps.th}>
+                    <input type="checkbox"
+                      checked={selected.size === filtered.length && filtered.length > 0}
+                      onChange={toggleAll} style={{ cursor: 'pointer' }} />
+                  </th>
+                  <th style={ps.th}>Datum dospeća</th>
                   <th style={ps.th}>Partner</th>
-                  <th style={ps.th}>Due Date</th>
-                  <th style={{ ...ps.th, textAlign: 'right' }}>Outstanding</th>
-                  <th style={ps.th}></th>
+                  <th style={ps.th}>Broj fakture</th>
+                  <th style={ps.th}>Tip</th>
+                  <th style={{ ...ps.th, textAlign: 'right' as const }}>Iznos</th>
+                  <th style={{ ...ps.th, textAlign: 'right' as const }}>USD</th>
+                  <th style={ps.th}>Račun primaoca</th>
+                  <th style={ps.th}>Preostalo</th>
                 </tr>
               </thead>
               <tbody>
-                {list.map(inv => (
-                  <tr key={inv.id} style={ps.tr}>
-                    <td style={ps.td}>
-                      <div style={{ fontWeight: '500', color: '#DCE9F6', fontSize: '12px' }}>
-                        {inv.invoice_number}
-                      </div>
-                      <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.30)' }}>{inv.company_name}</div>
-                    </td>
-                    <td style={ps.td}>
-                      <span style={{ fontSize: '12px', color: '#7A9BB8' }}>{inv.partner_name}</span>
-                    </td>
-                    <td style={ps.td}>
-                      {inv.due_date ? (
-                        <div>
-                          <div style={{ fontSize: '12px', color: '#DCE9F6' }}>{inv.due_date}</div>
-                          {inv.days_overdue > 0 && (
-                            <div style={{ fontSize: '10px', color: '#FF5B5A', fontWeight: '500' }}>
-                              {inv.days_overdue}d overdue
-                            </div>
-                          )}
-                        </div>
-                      ) : <span style={{ color: 'rgba(255,255,255,0.20)' }}>—</span>}
-                    </td>
-                    <td style={{ ...ps.td, textAlign: 'right' }}>
-                      <div style={{ fontFamily: "'DM Mono', monospace", fontWeight: '600', color: type === 'receivables' ? '#00D47E' : '#F5A623', fontSize: '12px' }}>
-                        {fmtUSD(inv.outstanding_amount_usd || 0)}
-                      </div>
-                      {inv.currency !== 'USD' && (
-                        <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.30)', fontFamily: "'DM Mono', monospace" }}>
-                          {(inv.outstanding_amount || 0).toLocaleString()} {inv.currency}
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ ...ps.td, textAlign: 'right' }}>
-                      <button style={ps.editBtn} onClick={() => handleEdit(inv.id)}>Edit</button>
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map((inv, i) => {
+                  const isOverdue = inv.due_date && inv.due_date < today
+                  const days = daysUntilDue(inv.due_date)
+                  const isSelected = selected.has(inv.id)
+                  const partnerId = inv.partner_id
+                  const partnerAccounts = partnerAccountsMap[partnerId] || []
+                  const selectedAcc = invoiceAccountMap[inv.id]
+                  const hasAccount = !!(selectedAcc?.account_number || inv.account_number)
+
+                  return (
+                    <tr key={inv.id} style={{
+                      ...ps.tr,
+                      background: isSelected ? '#FFF8E6' : isOverdue ? '#FFF5F5' : i % 2 === 0 ? '#fff' : '#fafaf9'
+                    }}>
+                      <td style={ps.td}>
+                        <input type="checkbox" checked={isSelected}
+                          onChange={() => toggleSelect(inv.id)} style={{ cursor: 'pointer' }} />
+                      </td>
+                      <td style={ps.td}>
+                        <span style={{ fontSize: '12px', fontWeight: isOverdue ? '600' : '400', color: isOverdue ? '#A32D2D' : '#333', whiteSpace: 'nowrap' as const }}>
+                          {inv.due_date || '—'} {isOverdue && '⚠️'}
+                        </span>
+                      </td>
+                      <td style={ps.td}>
+                        <span style={{ fontSize: '13px', fontWeight: '500', color: '#DCE9F6' }}>{inv.partners?.name || '—'}</span>
+                      </td>
+                      <td style={ps.td}>
+                        <span style={{ fontSize: '11px', fontFamily: 'monospace', background: '#111F30', padding: '2px 6px', borderRadius: '4px', color: '#7A9BB8' }}>
+                          {inv.invoice_number || '—'}
+                        </span>
+                      </td>
+                      <td style={ps.td}>
+                        <span style={{ fontSize: '10px', fontWeight: '500', padding: '2px 8px', borderRadius: '20px', background: inv.type === 'expense' ? '#FCEBEB' : '#E1F5EE', color: inv.type === 'expense' ? '#A32D2D' : '#085041' }}>
+                          {inv.type}
+                        </span>
+                      </td>
+                      <td style={{ ...ps.td, textAlign: 'right' as const }}>
+                        <span style={{ fontSize: '13px', fontWeight: '500', whiteSpace: 'nowrap' as const }}>
+                          {(inv.amount || 0).toLocaleString('sr-RS')} {inv.currency}
+                        </span>
+                      </td>
+                      <td style={{ ...ps.td, textAlign: 'right' as const }}>
+                        <span style={{ fontSize: '13px', fontWeight: '500', color: '#1D9E75' }}>{fmt(inv.amount_usd || 0)}</span>
+                      </td>
+                      {/* Račun primaoca — dropdown ako ima više računa */}
+                      <td style={ps.td}>
+                        {partnerAccounts.length > 1 ? (
+                          <select
+                            style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '4px 6px', border: `0.5px solid ${hasAccount ? '#e5e5e5' : '#E24B4A'}`, borderRadius: '6px', background: '#0D1B2C', color: '#DCE9F6', maxWidth: '200px', cursor: 'pointer' }}
+                            value={partnerAccounts.find(a => a.account_number === selectedAcc?.account_number)?.id || ''}
+                            onChange={e => handleAccountSelect(inv.id, e.target.value, partnerId)}
+                          >
+                            <option value="">Odaberi račun...</option>
+                            {partnerAccounts.map(pa => (
+                              <option key={pa.id} value={pa.id}>
+                                {pa.account_number}{pa.is_primary ? ' ★' : ''}{pa.bank_name ? ` — ${pa.bank_name.substring(0, 20)}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div>
+                            {hasAccount ? (
+                              <div>
+                                <div style={{ fontSize: '11px', fontFamily: 'monospace', color: '#DCE9F6' }}>
+                                  {selectedAcc?.account_number || inv.account_number}
+                                </div>
+                                {selectedAcc?.bank_name && (
+                                  <div style={{ fontSize: '10px', color: '#7A9BB8', marginTop: '1px' }}>
+                                    {selectedAcc.bank_name.substring(0, 30)}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '11px', color: '#A32D2D' }}>⚠️ Nema računa</span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td style={ps.td}>
+                        {days === null ? (
+                          <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.30)' }}>Bez roka</span>
+                        ) : days < 0 ? (
+                          <span style={{ fontSize: '11px', fontWeight: '600', color: '#A32D2D', background: '#FCEBEB', padding: '2px 8px', borderRadius: '20px' }}>
+                            {Math.abs(days)}d kasni
+                          </span>
+                        ) : days === 0 ? (
+                          <span style={{ fontSize: '11px', fontWeight: '600', color: '#BA7517', background: '#FAEEDA', padding: '2px 8px', borderRadius: '20px' }}>
+                            Danas!
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '11px', color: days <= 7 ? '#BA7517' : '#888' }}>
+                            {days}d preostalo
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
+              <tfoot>
+                <tr style={{ background: '#0a1628' }}>
+                  <td colSpan={5} style={{ padding: '12px 14px', fontSize: '12px', fontWeight: '500', color: '#fff' }}>
+                    UKUPNO ({filtered.length} faktura)
+                  </td>
+                  <td style={{ padding: '12px 14px', textAlign: 'right' as const, color: '#fff' }}></td>
+                  <td style={{ padding: '12px 14px', textAlign: 'right' as const, fontSize: '14px', fontWeight: '600', color: '#5DCAA5' }}>
+                    {fmt(totalUnpaid)}
+                  </td>
+                  <td colSpan={2} style={{ padding: '12px 14px', fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>
+                    {overdueCount > 0 ? `${overdueCount} faktura kasni` : 'Sve na vreme'}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           )}
-        </div>
-
-        <div style={ps.footer}>
-          <button style={ps.closeFooterBtn} onClick={onClose}>Close</button>
         </div>
       </div>
     </div>
   )
 }
 
-// ─── Styles ─────────────────────────────────────────────────────────────────
+// ── Main Reports page ────────────────────────────────────
+export default function Reports() {
+  const { setPage } = React.useContext(NavContext)
+  const [activeReport, setActiveReport] = useState('')
+  const [showUnpaidPanel, setShowUnpaidPanel] = useState(false)
+  const [companies, setCompanies] = useState<any[]>([])
+  const [companyId, setCompanyId] = useState('all')
+  const [loading, setLoading] = useState(true)
+
+  const [kpis, setKpis] = useState({
+    netProfit: 0, totalRevenue: 0, totalExpenses: 0, expenseRatio: 0,
+    openInvoicesCount: 0, openInvoicesAmount: 0, unmatchedPassthrough: 0, overdueCount: 0,
+  })
+
+  const currentYear = new Date().getFullYear()
+  const ytdStart = `${currentYear}-01-01`
+  const today = new Date().toISOString().split('T')[0]
+
+  useEffect(() => {
+    const load = async () => {
+      const { data } = await supabase.from('companies').select('id,name').order('name')
+      if (data) setCompanies(data)
+    }
+    load()
+  }, [])
+
+  const fetchKpis = useCallback(async () => {
+    setLoading(true)
+    try {
+      let plQuery = supabase.from('v_pl_entries').select('tx_type,amount_usd')
+        .gte('pl_date', ytdStart).lte('pl_date', today)
+      if (companyId !== 'all') plQuery = plQuery.eq('company_id', companyId)
+      let invQuery = supabase.from('v_invoice_status').select('calculated_status,remaining_usd,due_date')
+        .in('calculated_status', ['unpaid', 'partial'])
+      if (companyId !== 'all') invQuery = invQuery.eq('company_id', companyId)
+      let ptQuery = supabase.from('passthrough').select('id').eq('status', 'unpaired')
+      if (companyId !== 'all') ptQuery = ptQuery.eq('company_id', companyId)
+
+      const [{ data: plData }, { data: invData }, { data: ptData }] = await Promise.all([plQuery, invQuery, ptQuery])
+      const revenue = (plData || []).filter(e => e.tx_type === 'revenue' || e.tx_type === 'invoice_revenue').reduce((s, e) => s + (e.amount_usd || 0), 0)
+      const expenses = (plData || []).filter(e => e.tx_type === 'expense' || e.tx_type === 'invoice_expense').reduce((s, e) => s + (e.amount_usd || 0), 0)
+      const openAmt = (invData || []).reduce((s, i) => s + (i.remaining_usd || 0), 0)
+      const overdue = (invData || []).filter(i => i.due_date && i.due_date < today).length
+      setKpis({
+        netProfit: revenue - expenses, totalRevenue: revenue, totalExpenses: expenses,
+        expenseRatio: revenue > 0 ? (expenses / revenue * 100) : 0,
+        openInvoicesCount: (invData || []).length, openInvoicesAmount: openAmt,
+        unmatchedPassthrough: (ptData || []).length, overdueCount: overdue,
+      })
+    } catch (err) { console.error('Reports KPI fetch error:', err) }
+    setLoading(false)
+  }, [companyId, ytdStart, today])
+
+  useEffect(() => { fetchKpis() }, [fetchKpis])
+
+  const kpiCards = [
+    { label: 'Net Profit (YTD)', value: loading ? '...' : fmtN(kpis.netProfit), sub: `${currentYear} year to date`, up: kpis.netProfit >= 0, trend: loading ? '' : kpis.netProfit >= 0 ? 'Profitable' : 'Loss' },
+    { label: 'Total Revenue (YTD)', value: loading ? '...' : fmt(kpis.totalRevenue), sub: `${currentYear} year to date`, up: true, trend: loading ? '' : `${fmt(kpis.totalExpenses)} expenses` },
+    { label: 'Expense Ratio', value: loading ? '...' : `${kpis.expenseRatio.toFixed(1)}%`, sub: 'Expenses / Revenue YTD', up: kpis.expenseRatio < 90, trend: loading ? '' : kpis.expenseRatio < 80 ? 'Healthy' : kpis.expenseRatio < 90 ? 'Watch' : 'High' },
+    { label: 'Open Invoices', value: loading ? '...' : kpis.openInvoicesCount > 0 ? `${kpis.openInvoicesCount} · ${fmt(kpis.openInvoicesAmount)}` : 'None', sub: loading ? '' : kpis.overdueCount > 0 ? `${kpis.overdueCount} overdue` : 'All on time', up: kpis.overdueCount === 0, trend: loading ? '' : kpis.overdueCount > 0 ? `${kpis.overdueCount} overdue` : 'On time' },
+  ]
+
+  const reports = [
+    { id: 'pl-monthly', title: 'Monthly P&L', desc: 'Profit & Loss by month with revenue stream breakdown', category: 'P&L', icon: '📊', color: '#0F6E56', bg: '#E1F5EE', page: 'pl' as Page, action: null },
+    { id: 'pl-by-dept', title: 'P&L by Department', desc: 'Expense breakdown per organizational unit', category: 'P&L', icon: '👥', color: '#0F6E56', bg: '#E1F5EE', page: 'pl' as Page, action: null },
+    { id: 'cashflow-monthly', title: 'Monthly Cash Flow', desc: 'Operating and financing activities by period', category: 'Cash Flow', icon: '💰', color: '#0C447C', bg: '#E6F1FB', page: 'cashflow' as Page, action: null },
+    { id: 'bank-reconciliation', title: 'Bank Reconciliation', desc: 'Statement vs. recorded transactions per account', category: 'Cash Flow', icon: '🏦', color: '#0C447C', bg: '#E6F1FB', page: 'cashflow' as Page, action: null },
+    { id: 'passthrough', title: 'Pass-through Balance', desc: 'Pass-through IN vs. OUT monthly balance', category: 'Compliance', icon: '⚖️', color: '#633806', bg: '#FAEEDA', page: 'cashflow' as Page, action: null },
+    { id: 'unmatched', title: 'Unmatched Invoices', desc: 'Neplaćene fakture · Constellation LLC · Hal E-Bank TKDIS export', category: 'Compliance', icon: '⚠️', color: '#854F0B', bg: '#FAEEDA', page: 'reports' as Page, action: 'unpaid' },
+    { id: 'exchange-rates', title: 'Exchange Rate Log', desc: 'Rates used per period and transaction', category: 'Reference', icon: '💱', color: '#444', bg: '#f0f0ee', page: 'reports' as Page, action: null },
+    { id: 'partner-summary', title: 'Partner Summary', desc: 'Total transactions per partner across all entities', category: 'Reference', icon: '🤝', color: '#444', bg: '#f0f0ee', page: 'partners' as Page, action: null },
+  ]
+
+  const categories = ['P&L', 'Cash Flow', 'Compliance', 'Reference']
+  const categoryColors: Record<string, { color: string; bg: string }> = {
+    'P&L': { color: '#0F6E56', bg: '#E1F5EE' },
+    'Cash Flow': { color: '#0C447C', bg: '#E6F1FB' },
+    'Compliance': { color: '#633806', bg: '#FAEEDA' },
+    'Reference': { color: '#444', bg: '#f0f0ee' },
+  }
+
+  return (
+    <div style={s.root}>
+      <div style={s.body}>
+        <div style={s.pageHeader}>
+          <div>
+            <div style={s.pageTitle}>Reports</div>
+            <div style={s.pageSub}>Financial reports and analytics · YTD {currentYear}</div>
+          </div>
+          <select style={s.filterSelect} value={companyId} onChange={e => setCompanyId(e.target.value)}>
+            <option value="all">All companies</option>
+            {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+
+        <div style={s.kpiGrid}>
+          {kpiCards.map(k => (
+            <div key={k.label} style={s.kpiCard}>
+              <div style={s.kpiLabel}>{k.label}</div>
+              <div style={s.kpiValue}>{k.value}</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px' }}>
+                <span style={{ ...s.kpiTrend, color: k.up ? '#0F6E56' : '#A32D2D', background: k.up ? '#E1F5EE' : '#FCEBEB' }}>
+                  {k.up ? '↑' : '↓'} {k.trend}
+                </span>
+                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.30)' }}>{k.sub}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {!loading && (kpis.overdueCount > 0 || kpis.unmatchedPassthrough > 0) && (
+          <div style={s.alertBox}>
+            <div style={{ fontSize: '12px', fontWeight: '500', color: '#633806', marginBottom: '8px' }}>⚠️ Attention required</div>
+            {kpis.overdueCount > 0 && (
+              <div style={s.alertRow}>
+                <span style={s.alertDot} />
+                <span style={{ fontSize: '12px', color: '#555' }}>
+                  {kpis.overdueCount} invoice{kpis.overdueCount > 1 ? 's' : ''} past due date —{' '}
+                  <span style={{ color: '#854F0B', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setShowUnpaidPanel(true)}>
+                    open Unmatched Invoices report
+                  </span>.
+                </span>
+              </div>
+            )}
+            {kpis.unmatchedPassthrough > 0 && (
+              <div style={s.alertRow}>
+                <span style={s.alertDot} />
+                <span style={{ fontSize: '12px', color: '#555' }}>{kpis.unmatchedPassthrough} pass-through entr{kpis.unmatchedPassthrough === 1 ? 'y' : 'ies'} unpaired — review Cash Flow tab.</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {categories.map(cat => (
+          <div key={cat} style={s.categorySection}>
+            <div style={s.categoryHeader}>
+              <span style={{ ...s.categoryBadge, color: categoryColors[cat].color, background: categoryColors[cat].bg }}>{cat}</span>
+              <span style={s.categoryCount}>{reports.filter(r => r.category === cat).length} reports</span>
+            </div>
+            <div style={s.reportsGrid}>
+              {reports.filter(r => r.category === cat).map(report => (
+                <div key={report.id}
+                  style={{ ...s.reportCard, ...(activeReport === report.id ? s.reportCardActive : {}) }}
+                  onClick={() => setActiveReport(activeReport === report.id ? '' : report.id)}>
+                  <div style={{ ...s.reportIcon, background: report.bg }}>
+                    <span style={{ fontSize: '18px' }}>{report.icon}</span>
+                  </div>
+                  <div style={s.reportInfo}>
+                    <div style={s.reportTitle}>{report.title}</div>
+                    <div style={s.reportDesc}>{report.desc}</div>
+                  </div>
+                  <div style={s.reportActions}>
+                    <button
+                      style={{ ...s.reportBtn, color: report.color, borderColor: report.color + '40', background: report.bg }}
+                      onClick={e => {
+                        e.stopPropagation()
+                        if (report.action === 'unpaid') setShowUnpaidPanel(true)
+                        else setPage(report.page)
+                      }}>
+                      View
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {showUnpaidPanel && <UnpaidInvoicesPanel onClose={() => setShowUnpaidPanel(false)} />}
+    </div>
+  )
+}
+
 const s: Record<string, React.CSSProperties> = {
-  page: {
-    padding: '24px 28px',
-    fontFamily: "'Inter', system-ui, sans-serif",
-    minHeight: '100vh',
-    background: '#060E1A',
-    color: '#DCE9F6',
-  },
-  pageHeader: {
-    display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-    marginBottom: '1.5rem',
-  },
-  pageTitle: {
-    fontFamily: "'DM Serif Display', Georgia, serif",
-    fontSize: '24px', fontWeight: '400', color: '#DCE9F6',
-    letterSpacing: '-0.01em', marginBottom: '4px',
-  },
+  root: { minHeight: '100vh', background: '#060E1A', fontFamily: "'Inter', system-ui, sans-serif" },
+  body: { padding: '24px 28px' },
+  pageHeader: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.5rem' },
+  pageTitle: { fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '24px', fontWeight: '400', color: '#DCE9F6', marginBottom: '4px' },
   pageSub: { fontSize: '13px', color: '#7A9BB8' },
-  refreshBtn: {
-    fontFamily: "'Inter', sans-serif",
-    fontSize: '12px',
-    padding: '7px 14px',
-    border: '1px solid rgba(0,212,126,0.4)',
-    borderRadius: '8px',
-    background: 'rgba(0,212,126,0.08)',
-    color: '#00D47E',
-    cursor: 'pointer',
-    fontWeight: '500',
-  },
-  kpiGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(4, 1fr)',
-    gap: '12px',
-    marginBottom: '12px',
-  },
-  alert: {
-    marginTop: '12px',
-    padding: '14px 16px',
-    background: 'rgba(245,166,35,0.08)',
-    border: '1px solid rgba(245,166,35,0.30)',
-    borderRadius: '10px',
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '12px',
-  },
-  alertIcon: {
-    fontSize: '20px',
-    color: '#F5A623',
-    lineHeight: 1,
-    flexShrink: 0,
-  },
-  reportGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: '12px',
-  },
-  reportCard: {
-    position: 'relative' as const,
-    background: '#0D1B2C',
-    border: '1px solid rgba(255,255,255,0.075)',
-    borderRadius: '10px',
-    padding: '18px 18px 22px',
-    cursor: 'pointer',
-    textAlign: 'left' as const,
-    fontFamily: "'Inter', sans-serif",
-    transition: 'transform 0.15s, box-shadow 0.15s, border-color 0.15s',
-    boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-  },
-  reportArrow: {
-    position: 'absolute' as const,
-    bottom: '14px',
-    right: '16px',
-    fontSize: '14px',
-    color: '#00D47E',
-    opacity: 0.7,
-  },
+  filterSelect: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '8px', padding: '8px 12px', outline: 'none', background: '#0D1B2C', color: '#DCE9F6', cursor: 'pointer' },
+  kpiGrid: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '1.5rem' },
+  kpiCard: { background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '10px', padding: '1rem 1.25rem' },
+  kpiLabel: { fontSize: '11px', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '8px' },
+  kpiValue: { fontSize: '22px', fontWeight: '500', color: '#DCE9F6' },
+  kpiTrend: { display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '500', padding: '3px 8px', borderRadius: '20px' },
+  alertBox: { background: 'rgba(245,166,35,0.10)', border: '1px solid rgba(245,166,35,0.3)', borderRadius: '10px', padding: '14px 16px', marginBottom: '1.5rem' },
+  alertRow: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' },
+  alertDot: { width: '6px', height: '6px', borderRadius: '50%', background: '#F5A623', flexShrink: 0 },
+  categorySection: { marginBottom: '2rem' },
+  categoryHeader: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' },
+  categoryBadge: { fontSize: '11px', fontWeight: '500', padding: '3px 10px', borderRadius: '20px', textTransform: 'uppercase' as const, letterSpacing: '0.08em' },
+  categoryCount: { fontSize: '12px', color: '#7A9BB8' },
+  reportsGrid: { display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '10px' },
+  reportCard: { background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '10px', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' },
+  reportCardActive: { border: '2px solid #00D47E', background: 'rgba(0,212,126,0.06)' },
+  reportIcon: { width: '44px', height: '44px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  reportInfo: { flex: 1 },
+  reportTitle: { fontSize: '14px', fontWeight: '500', color: '#DCE9F6', marginBottom: '3px' },
+  reportDesc: { fontSize: '12px', color: '#7A9BB8', lineHeight: 1.4 },
+  reportActions: { display: 'flex', gap: '6px', flexShrink: 0 },
+  reportBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '11px', fontWeight: '500', padding: '5px 12px', borderRadius: '6px', border: '1px solid', cursor: 'pointer' },
 }
 
 const ps: Record<string, React.CSSProperties> = {
-  overlay: {
-    position: 'fixed' as const, inset: 0,
-    background: 'rgba(0,0,0,0.65)',
-    backdropFilter: 'blur(4px)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    zIndex: 1001,
-  },
-  modal: {
-    background: '#0D1B2C',
-    border: '1px solid rgba(255,255,255,0.10)',
-    borderRadius: '16px',
-    width: '900px', maxWidth: '95vw', maxHeight: '85vh',
-    display: 'flex', flexDirection: 'column' as const,
-    overflow: 'hidden',
-    boxShadow: '0 24px 60px rgba(0,0,0,0.6)',
-  },
-  header: {
-    background: '#0A1525',
-    padding: '1.1rem 1.5rem',
-    display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-    borderBottom: '1px solid rgba(255,255,255,0.06)',
-  },
-  headerKicker: {
-    color: '#00D47E',
-    fontSize: '10px', fontWeight: '600',
-    letterSpacing: '0.1em',
-    marginBottom: '4px',
-  },
-  headerTitle: {
-    color: '#DCE9F6',
-    fontFamily: "'DM Serif Display', Georgia, serif",
-    fontSize: '18px', fontWeight: '400',
-    marginBottom: '3px',
-    letterSpacing: '-0.01em',
-  },
-  headerSub: { color: '#7A9BB8', fontSize: '12px' },
-  closeBtn: {
-    background: 'rgba(255,255,255,0.05)',
-    border: '1px solid rgba(255,255,255,0.08)',
-    color: '#7A9BB8',
-    fontSize: '20px', cursor: 'pointer',
-    width: '28px', height: '28px',
-    borderRadius: '8px', lineHeight: 1, flexShrink: 0,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-  },
-  body: {
-    padding: '0',
-    overflowY: 'auto' as const,
-    flex: 1,
-  },
-  empty: {
-    padding: '60px 40px',
-    textAlign: 'center' as const,
-    color: '#7A9BB8',
-    fontSize: '13px',
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse' as const,
-  },
-  th: {
-    padding: '10px 16px',
-    fontSize: '10px',
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.30)',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.08em',
-    textAlign: 'left' as const,
-    background: '#0A1525',
-    borderBottom: '1px solid rgba(255,255,255,0.075)',
-    whiteSpace: 'nowrap' as const,
-  },
-  tr: {
-    borderBottom: '1px solid rgba(255,255,255,0.05)',
-    transition: 'background 0.1s',
-  },
-  td: {
-    padding: '10px 16px',
-    fontSize: '12px',
-    color: '#DCE9F6',
-    verticalAlign: 'top' as const,
-  },
-  editBtn: {
-    fontFamily: "'Inter', sans-serif",
-    fontSize: '11px',
-    fontWeight: '500',
-    padding: '5px 12px',
-    border: '1px solid rgba(0,212,126,0.4)',
-    borderRadius: '6px',
-    background: 'rgba(0,212,126,0.08)',
-    color: '#00D47E',
-    cursor: 'pointer',
-  },
-  footer: {
-    padding: '0.75rem 1.5rem',
-    borderTop: '1px solid rgba(255,255,255,0.06)',
-    display: 'flex', justifyContent: 'flex-end',
-    background: '#0A1525',
-  },
-  closeFooterBtn: {
-    fontFamily: "'Inter', sans-serif",
-    fontSize: '13px',
-    padding: '7px 16px',
-    borderRadius: '8px',
-    border: '1px solid rgba(255,255,255,0.08)',
-    background: 'transparent',
-    color: '#7A9BB8',
-    cursor: 'pointer',
-  },
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', zIndex: 1000 },
+  panel: { background: '#0D1B2C', width: '90vw', maxWidth: '1200px', height: '100vh', display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 40px rgba(0,0,0,0.5)' },
+  header: { background: '#060E1A', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 },
+  headerTitle: { color: '#DCE9F6', fontSize: '15px', fontWeight: '500' },
+  headerSub: { color: 'rgba(255,255,255,0.45)', fontSize: '12px', marginTop: '3px' },
+  closeBtn: { background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '24px', cursor: 'pointer', lineHeight: 1, padding: '0 4px' },
+  toolbar: { display: 'flex', gap: '10px', padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.075)', flexShrink: 0, flexWrap: 'wrap' as const },
+  searchInput: { flex: 1, fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '8px', padding: '7px 12px', outline: 'none', minWidth: '180px', background: '#111F30', color: '#DCE9F6' },
+  sel: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '8px', padding: '7px 10px', outline: 'none', background: '#111F30', color: '#DCE9F6', cursor: 'pointer' },
+  exportBar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: 'rgba(245,166,35,0.10)', borderBottom: '1px solid rgba(245,166,35,0.3)', flexShrink: 0, flexWrap: 'wrap' as const, gap: '8px' },
+  exportBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '12px', fontWeight: '500', padding: '7px 16px', borderRadius: '8px', border: 'none', background: '#F5A623', color: '#060E1A', cursor: 'pointer' },
+  tableWrap: { flex: 1, overflowY: 'auto' as const },
+  table: { width: '100%', borderCollapse: 'collapse' as const, fontSize: '13px' },
+  thead: { background: '#111F30', position: 'sticky' as const, top: 0, zIndex: 10 },
+  th: { padding: '10px 14px', textAlign: 'left' as const, fontSize: '10px', fontWeight: '500', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', borderBottom: '1px solid rgba(255,255,255,0.075)', whiteSpace: 'nowrap' as const },
+  tr: { borderBottom: '0.5px solid rgba(255,255,255,0.05)' },
+  td: { padding: '10px 14px', verticalAlign: 'middle' as const },
 }
