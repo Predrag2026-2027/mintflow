@@ -4,8 +4,6 @@ import InlineCategoryAdd from './InlineCategoryAdd'
 import { getRate, convertToUSD } from '../services/currencyService'
 import CreditInstallmentSelector from './CreditInstallmentSelector'
 import { useCreditPayment, closeCreditInstallments } from './useCreditPayment'
-import CreditInstallmentSelector from './CreditInstallmentSelector'
-import { useCreditPayment, closeCreditInstallments } from './useCreditPayment'
 
 interface Props {
   onClose: () => void
