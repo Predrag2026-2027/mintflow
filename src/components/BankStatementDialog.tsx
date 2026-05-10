@@ -4,8 +4,6 @@ import InlineCategoryAdd from './InlineCategoryAdd'
 import { getRate, convertToUSD } from '../services/currencyService'
 import CreditInstallmentSelector from './CreditInstallmentSelector'
 import { closeCreditInstallments } from './useCreditPayment'
-import CreditInstallmentSelector from './CreditInstallmentSelector'
-import { closeCreditInstallments } from './useCreditPayment'
 
 interface Props {
   onClose: () => void
@@ -103,8 +101,6 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
   const [rows, setRows] = useState<StatementRow[]>([makeRow(), makeRow(), makeRow()])
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const [posting, setPosting] = useState(false)
-  const [credits, setCredits] = useState<any[]>([])
-  const [rowInstallments, setRowInstallments] = useState<Record<string, any[]>>({})
   const [credits, setCredits] = useState<any[]>([])
   const [rowInstallments, setRowInstallments] = useState<Record<string, any[]>>({})
   const [posted, setPosted] = useState(false)
