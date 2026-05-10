@@ -495,9 +495,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
         tags: tags.length > 0 ? tags : null, status: 'posted',
       }
 
-      if (txType === 'credit_payment') {
-        // handled below
-      } else if (txType === 'passthrough') {
+      if (txType === 'passthrough') {
         const ptPayload = {
           company_id: companyId || null, bank_id: bankId || null,
           partner_id: finalPartnerId || null, transaction_date: txDate,
@@ -529,16 +527,29 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
           }
         }
       }
-        // ── Credit payment: 2 P&L transactions per installment ─────────────
+        // ── Credit payment: principal → Loans/Credits/Dividend, interest → Financial Expenses ──
         if (txType === 'credit_payment' && selectedInstallmentIds.length > 0) {
-          const postedTxIds: string[] = []
+          const paidAmount = parseFloat(amount) || 0          // amount user entered (RSD)
+          const exRateNum = parseFloat(exRate) || 1            // NBS rate RSD/EUR on payment date
+          const creditName = credits.find(c => c.id === selectedCreditId)?.name || 'Credit'
+          let remainingRSD = paidAmount                        // track partial payment
+
           for (const instId of selectedInstallmentIds) {
             const inst = creditInstallments.find(i => i.id === instId)
             if (!inst) continue
 
-            // 1. Principal → Loans/Credits/Dividend
-            if (inst.principal_amount > 0) {
-              const { data: txPrincipal } = await supabase.from('transactions').insert({
+            // Convert installment amounts from EUR to RSD using payment-day rate
+            const principalRSD = inst.principal_amount * exRateNum
+            const interestRSD = inst.interest_amount * exRateNum
+            const firstTxIds: string[] = []
+
+            // 1. Principal first (Loans/Credits/Dividend)
+            if (inst.principal_amount > 0 && remainingRSD > 0) {
+              const actualPrincipalRSD = Math.min(principalRSD, remainingRSD)
+              const actualPrincipalEUR = actualPrincipalRSD / exRateNum
+              remainingRSD -= actualPrincipalRSD
+
+              const { data: txP } = await supabase.from('transactions').insert({
                 company_id: companyId || null,
                 bank_id: bankId || null,
                 partner_id: finalPartnerId || null,
@@ -547,25 +558,29 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                 type: 'credit_payment',
                 tx_subtype: 'expense',
                 currency,
-                amount: inst.principal_amount,
-                exchange_rate: parseFloat(exRate) || null,
-                amount_usd: convertToUSD(inst.principal_amount, currency, parseFloat(exRate) || 0),
+                amount: Math.round(actualPrincipalRSD * 100) / 100,
+                exchange_rate: exRateNum,
+                amount_usd: convertToUSD(actualPrincipalRSD, currency, exRateNum),
                 pl_impact: true,
                 pl_category: 'Loans/Credits/Dividend',
                 pl_subcategory: null,
                 department: null,
-                expense_description: `Principal — ${credits.find(c => c.id === selectedCreditId)?.name || 'Credit'} #${inst.installment_no}`,
+                expense_description: `Principal — ${creditName} #${inst.installment_no} (€${actualPrincipalEUR.toFixed(2)})`,
                 cf_type: 'recurring',
                 cf_frequency: 'monthly',
                 note: note || null,
                 status: 'posted',
               }).select().single()
-              if (txPrincipal?.id) postedTxIds.push(txPrincipal.id)
+              if (txP?.id) firstTxIds.push(txP.id)
             }
 
-            // 2. Interest → Financial Expenses / Interest
-            if (inst.interest_amount > 0) {
-              const { data: txInterest } = await supabase.from('transactions').insert({
+            // 2. Interest second (Financial Expenses / Interest)
+            if (inst.interest_amount > 0 && remainingRSD > 0) {
+              const actualInterestRSD = Math.min(interestRSD, remainingRSD)
+              const actualInterestEUR = actualInterestRSD / exRateNum
+              remainingRSD -= actualInterestRSD
+
+              await supabase.from('transactions').insert({
                 company_id: companyId || null,
                 bank_id: bankId || null,
                 partner_id: finalPartnerId || null,
@@ -574,41 +589,39 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                 type: 'credit_payment',
                 tx_subtype: 'expense',
                 currency,
-                amount: inst.interest_amount,
-                exchange_rate: parseFloat(exRate) || null,
-                amount_usd: convertToUSD(inst.interest_amount, currency, parseFloat(exRate) || 0),
+                amount: Math.round(actualInterestRSD * 100) / 100,
+                exchange_rate: exRateNum,
+                amount_usd: convertToUSD(actualInterestRSD, currency, exRateNum),
                 pl_impact: true,
                 pl_category: 'Financial Expenses',
                 pl_subcategory: 'Interest',
                 department: null,
-                expense_description: `Interest — ${credits.find(c => c.id === selectedCreditId)?.name || 'Credit'} #${inst.installment_no}`,
+                expense_description: `Interest — ${creditName} #${inst.installment_no} (€${actualInterestEUR.toFixed(2)})`,
                 cf_type: 'recurring',
                 cf_frequency: 'monthly',
                 note: note || null,
                 status: 'posted',
-              }).select().single()
-              if (txInterest?.id) postedTxIds.push(txInterest.id)
+              })
             }
 
-            // Mark installment as paid (link to first tx)
+            // Mark installment as paid
             await supabase.from('credit_installments').update({
               status: 'paid',
               paid_date: txDate,
-              transaction_id: postedTxIds[0] || null,
+              transaction_id: firstTxIds[0] || null,
               updated_at: new Date().toISOString(),
             }).eq('id', instId)
           }
 
-          // Close credit if all installments paid
+          // Close credit if all installments now paid
           if (selectedCreditId) {
             const { data: remaining } = await supabase
               .from('credit_installments').select('id')
               .eq('credit_id', selectedCreditId).eq('status', 'outstanding')
-            if (remaining && remaining.length === 0) {
+            if (remaining && remaining.length === 0)
               await supabase.from('credits')
                 .update({ status: 'closed', updated_at: new Date().toISOString() })
                 .eq('id', selectedCreditId)
-            }
           }
         }
       setSuccess(true)
@@ -1348,7 +1361,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                   <span>✅</span>
                   <div>
                     <div style={{ fontWeight: '500', marginBottom: '2px' }}>All fields valid — ready to post</div>
-                    <div style={{ fontSize: '11px', opacity: 0.85 }}>{txType === 'direct' ? 'This transaction will impact P&L directly.' : `This transaction closes ${linkedInvoices.length} invoice(s). No P&L impact.`}</div>
+                    <div style={{ fontSize: '11px', opacity: 0.85 }}>{txType === 'direct' ? 'This transaction will impact P&L directly.' : txType === 'credit_payment' ? `Creates ${selectedInstallmentIds.length * 2} P&L entries (principal + interest per installment).` : `This transaction closes ${linkedInvoices.length} invoice(s). No P&L impact.`}</div>
                   </div>
                 </div>
               ) : (
