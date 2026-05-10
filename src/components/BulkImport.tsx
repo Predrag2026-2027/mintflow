@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx'
 import { getRate, convertToUSD } from '../services/currencyService'
 import PartnerDialog from './PartnerDialog'
 import CreditInstallmentSelector from './CreditInstallmentSelector'
-import { closeCreditInstallments } from './useCreditPayment'
+// credit payment P&L logic is inline
 
 interface Props {
   onClose: () => void
@@ -725,12 +725,112 @@ export default function BulkImport({ onClose, onImported }: Props) {
         cf_type: isDirectWithPL && row.override_tx_subtype === 'expense' ? (row.override_cf_type || null) : null, cf_frequency: row.override_cf_type === 'recurring' ? row.override_cf_frequency : null, cf_next_month_est: row.override_cf_type === 'recurring' ? (row.override_cf_next_month_est ? parseFloat(row.override_cf_next_month_est) : amount) : null,
         account_number: p.account_number || null, model: p.model || null, reference_number: p.reference_number || null, note: row.override_note || p.description || null, status: 'posted',
       }).select().single()
-      if (row.override_tx_type === 'credit_payment' && row.override_installment_ids.length > 0 && newTx?.id) {
-        await closeCreditInstallments(newTx.id, formatDate(p.date), row.override_installment_ids, row.override_credit_id)
+      if (row.override_tx_type === 'credit_payment' && row.override_installment_ids.length > 0) {
+        const { amount_usd: _u, exchange_rate: rateBI } = await getAmountUsd(p, 0)
+        for (const instId of row.override_installment_ids) {
+          const { data: inst } = await supabase
+            .from('credit_installments')
+            .select('id, installment_no, principal_amount, interest_amount')
+            .eq('id', instId).single()
+          if (!inst) continue
+          const creditName = credits.find((c: any) => c.id === row.override_credit_id)?.name || 'Credit'
+
+          if (inst.principal_amount > 0) {
+            await supabase.from('transactions').insert({
+              company_id: company, bank_id: bank,
+              partner_id: partnerId, transaction_date: formatDate(p.date),
+              statement_number: p.statement_number || null,
+              type: 'credit_payment', tx_subtype: 'expense', currency: p.currency,
+              amount: inst.principal_amount, exchange_rate: rateBI,
+              amount_usd: convertToUSD(inst.principal_amount, p.currency, rateBI || 1),
+              pl_impact: true, pl_category: 'Loans/Credits/Dividend',
+              expense_description: `Principal — ${creditName} #${inst.installment_no}`,
+              cf_type: 'recurring', cf_frequency: 'monthly',
+              note: row.override_note || p.description || null, status: 'posted',
+            })
+          }
+          if (inst.interest_amount > 0) {
+            await supabase.from('transactions').insert({
+              company_id: company, bank_id: bank,
+              partner_id: partnerId, transaction_date: formatDate(p.date),
+              statement_number: p.statement_number || null,
+              type: 'credit_payment', tx_subtype: 'expense', currency: p.currency,
+              amount: inst.interest_amount, exchange_rate: rateBI,
+              amount_usd: convertToUSD(inst.interest_amount, p.currency, rateBI || 1),
+              pl_impact: true, pl_category: 'Financial Expenses',
+              pl_subcategory: 'Interest',
+              expense_description: `Interest — ${creditName} #${inst.installment_no}`,
+              cf_type: 'recurring', cf_frequency: 'monthly',
+              note: row.override_note || p.description || null, status: 'posted',
+            })
+          }
+          await supabase.from('credit_installments').update({
+            status: 'paid', paid_date: formatDate(p.date), updated_at: new Date().toISOString(),
+          }).eq('id', instId)
+        }
+        if (row.override_credit_id) {
+          const { data: rem } = await supabase.from('credit_installments').select('id')
+            .eq('credit_id', row.override_credit_id).eq('status', 'outstanding')
+          if (rem && rem.length === 0)
+            await supabase.from('credits')
+              .update({ status: 'closed', updated_at: new Date().toISOString() })
+              .eq('id', row.override_credit_id)
+        }
+        done++; setProgress(Math.round((done / accepted.length) * 100)); continue
       }
 
-      if (row.override_tx_type === 'credit_payment' && row.override_installment_ids.length > 0 && newTx?.id) {
-        await closeCreditInstallments(newTx.id, formatDate(p.date), row.override_installment_ids, row.override_credit_id)
+      if (row.override_tx_type === 'credit_payment' && row.override_installment_ids.length > 0) {
+        const { amount_usd: _u, exchange_rate: rateBI } = await getAmountUsd(p, 0)
+        for (const instId of row.override_installment_ids) {
+          const { data: inst } = await supabase
+            .from('credit_installments')
+            .select('id, installment_no, principal_amount, interest_amount')
+            .eq('id', instId).single()
+          if (!inst) continue
+          const creditName = credits.find((c: any) => c.id === row.override_credit_id)?.name || 'Credit'
+
+          if (inst.principal_amount > 0) {
+            await supabase.from('transactions').insert({
+              company_id: company, bank_id: bank,
+              partner_id: partnerId, transaction_date: formatDate(p.date),
+              statement_number: p.statement_number || null,
+              type: 'credit_payment', tx_subtype: 'expense', currency: p.currency,
+              amount: inst.principal_amount, exchange_rate: rateBI,
+              amount_usd: convertToUSD(inst.principal_amount, p.currency, rateBI || 1),
+              pl_impact: true, pl_category: 'Loans/Credits/Dividend',
+              expense_description: `Principal — ${creditName} #${inst.installment_no}`,
+              cf_type: 'recurring', cf_frequency: 'monthly',
+              note: row.override_note || p.description || null, status: 'posted',
+            })
+          }
+          if (inst.interest_amount > 0) {
+            await supabase.from('transactions').insert({
+              company_id: company, bank_id: bank,
+              partner_id: partnerId, transaction_date: formatDate(p.date),
+              statement_number: p.statement_number || null,
+              type: 'credit_payment', tx_subtype: 'expense', currency: p.currency,
+              amount: inst.interest_amount, exchange_rate: rateBI,
+              amount_usd: convertToUSD(inst.interest_amount, p.currency, rateBI || 1),
+              pl_impact: true, pl_category: 'Financial Expenses',
+              pl_subcategory: 'Interest',
+              expense_description: `Interest — ${creditName} #${inst.installment_no}`,
+              cf_type: 'recurring', cf_frequency: 'monthly',
+              note: row.override_note || p.description || null, status: 'posted',
+            })
+          }
+          await supabase.from('credit_installments').update({
+            status: 'paid', paid_date: formatDate(p.date), updated_at: new Date().toISOString(),
+          }).eq('id', instId)
+        }
+        if (row.override_credit_id) {
+          const { data: rem } = await supabase.from('credit_installments').select('id')
+            .eq('credit_id', row.override_credit_id).eq('status', 'outstanding')
+          if (rem && rem.length === 0)
+            await supabase.from('credits')
+              .update({ status: 'closed', updated_at: new Date().toISOString() })
+              .eq('id', row.override_credit_id)
+        }
+        done++; setProgress(Math.round((done / accepted.length) * 100)); continue
       }
 
       if (row.override_tx_type === 'invoice_payment' && row.override_linked_invoice_id && newTx?.id) {

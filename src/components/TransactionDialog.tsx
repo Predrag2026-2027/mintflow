@@ -3,7 +3,7 @@ import { supabase } from '../supabase'
 import InlineCategoryAdd from './InlineCategoryAdd'
 import { getRate, convertToUSD } from '../services/currencyService'
 import CreditInstallmentSelector from './CreditInstallmentSelector'
-import { useCreditPayment, closeCreditInstallments } from './useCreditPayment'
+import { useCreditPayment } from './useCreditPayment'
 
 interface Props {
   onClose: () => void
@@ -495,7 +495,9 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
         tags: tags.length > 0 ? tags : null, status: 'posted',
       }
 
-      if (txType === 'passthrough') {
+      if (txType === 'credit_payment') {
+        // handled below
+      } else if (txType === 'passthrough') {
         const ptPayload = {
           company_id: companyId || null, bank_id: bankId || null,
           partner_id: finalPartnerId || null, transaction_date: txDate,
@@ -527,10 +529,88 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
           }
         }
       }
-      // ── Close credit installments ──────────────────────────────────────
-      if (txType === 'credit_payment' && selectedInstallmentIds.length > 0 && txId) {
-        await closeCreditInstallments(txId, txDate, selectedInstallmentIds, selectedCreditId)
-      }
+        // ── Credit payment: 2 P&L transactions per installment ─────────────
+        if (txType === 'credit_payment' && selectedInstallmentIds.length > 0) {
+          const postedTxIds: string[] = []
+          for (const instId of selectedInstallmentIds) {
+            const inst = creditInstallments.find(i => i.id === instId)
+            if (!inst) continue
+
+            // 1. Principal → Loans/Credits/Dividend
+            if (inst.principal_amount > 0) {
+              const { data: txPrincipal } = await supabase.from('transactions').insert({
+                company_id: companyId || null,
+                bank_id: bankId || null,
+                partner_id: finalPartnerId || null,
+                transaction_date: txDate,
+                statement_number: statement || null,
+                type: 'credit_payment',
+                tx_subtype: 'expense',
+                currency,
+                amount: inst.principal_amount,
+                exchange_rate: parseFloat(exRate) || null,
+                amount_usd: convertToUSD(inst.principal_amount, currency, parseFloat(exRate) || 0),
+                pl_impact: true,
+                pl_category: 'Loans/Credits/Dividend',
+                pl_subcategory: null,
+                department: null,
+                expense_description: `Principal — ${credits.find(c => c.id === selectedCreditId)?.name || 'Credit'} #${inst.installment_no}`,
+                cf_type: 'recurring',
+                cf_frequency: 'monthly',
+                note: note || null,
+                status: 'posted',
+              }).select().single()
+              if (txPrincipal?.id) postedTxIds.push(txPrincipal.id)
+            }
+
+            // 2. Interest → Financial Expenses / Interest
+            if (inst.interest_amount > 0) {
+              const { data: txInterest } = await supabase.from('transactions').insert({
+                company_id: companyId || null,
+                bank_id: bankId || null,
+                partner_id: finalPartnerId || null,
+                transaction_date: txDate,
+                statement_number: statement || null,
+                type: 'credit_payment',
+                tx_subtype: 'expense',
+                currency,
+                amount: inst.interest_amount,
+                exchange_rate: parseFloat(exRate) || null,
+                amount_usd: convertToUSD(inst.interest_amount, currency, parseFloat(exRate) || 0),
+                pl_impact: true,
+                pl_category: 'Financial Expenses',
+                pl_subcategory: 'Interest',
+                department: null,
+                expense_description: `Interest — ${credits.find(c => c.id === selectedCreditId)?.name || 'Credit'} #${inst.installment_no}`,
+                cf_type: 'recurring',
+                cf_frequency: 'monthly',
+                note: note || null,
+                status: 'posted',
+              }).select().single()
+              if (txInterest?.id) postedTxIds.push(txInterest.id)
+            }
+
+            // Mark installment as paid (link to first tx)
+            await supabase.from('credit_installments').update({
+              status: 'paid',
+              paid_date: txDate,
+              transaction_id: postedTxIds[0] || null,
+              updated_at: new Date().toISOString(),
+            }).eq('id', instId)
+          }
+
+          // Close credit if all installments paid
+          if (selectedCreditId) {
+            const { data: remaining } = await supabase
+              .from('credit_installments').select('id')
+              .eq('credit_id', selectedCreditId).eq('status', 'outstanding')
+            if (remaining && remaining.length === 0) {
+              await supabase.from('credits')
+                .update({ status: 'closed', updated_at: new Date().toISOString() })
+                .eq('id', selectedCreditId)
+            }
+          }
+        }
       setSuccess(true)
       setTimeout(() => { setSuccess(false); onClose() }, 1500)
     } catch (err) { console.error(err) }

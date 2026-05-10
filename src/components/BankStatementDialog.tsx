@@ -3,7 +3,7 @@ import { supabase } from '../supabase'
 import InlineCategoryAdd from './InlineCategoryAdd'
 import { getRate, convertToUSD } from '../services/currencyService'
 import CreditInstallmentSelector from './CreditInstallmentSelector'
-import { closeCreditInstallments } from './useCreditPayment'
+// credit payment P&L logic is inline
 
 interface Props {
   onClose: () => void
@@ -300,12 +300,112 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
           note: row.note || row.description || null, status: 'posted',
         }).select().single()
 
-        if (row.tx_type === 'credit_payment' && row.selected_installment_ids.length > 0 && newTx?.id) {
-          await closeCreditInstallments(newTx.id, row.date, row.selected_installment_ids, row.selected_credit_id)
+        if (row.tx_type === 'credit_payment' && row.selected_installment_ids.length > 0) {
+          const rateBS = await getExRate(cur, row.date)
+          for (const instId of row.selected_installment_ids) {
+            const { data: inst } = await supabase
+              .from('credit_installments')
+              .select('id, installment_no, principal_amount, interest_amount')
+              .eq('id', instId).single()
+            if (!inst) continue
+            const creditName = credits.find((c: any) => c.id === row.selected_credit_id)?.name || 'Credit'
+
+            if (inst.principal_amount > 0) {
+              await supabase.from('transactions').insert({
+                company_id: company, bank_id: bank,
+                partner_id: partnerId, transaction_date: row.date,
+                statement_number: statementNumber || null,
+                type: 'credit_payment', tx_subtype: 'expense', currency: cur,
+                amount: inst.principal_amount, exchange_rate: rateBS,
+                amount_usd: convertToUSD(inst.principal_amount, cur, rateBS),
+                pl_impact: true, pl_category: 'Loans/Credits/Dividend',
+                expense_description: `Principal — ${creditName} #${inst.installment_no}`,
+                cf_type: 'recurring', cf_frequency: 'monthly',
+                note: row.note || row.description || null, status: 'posted',
+              })
+            }
+            if (inst.interest_amount > 0) {
+              await supabase.from('transactions').insert({
+                company_id: company, bank_id: bank,
+                partner_id: partnerId, transaction_date: row.date,
+                statement_number: statementNumber || null,
+                type: 'credit_payment', tx_subtype: 'expense', currency: cur,
+                amount: inst.interest_amount, exchange_rate: rateBS,
+                amount_usd: convertToUSD(inst.interest_amount, cur, rateBS),
+                pl_impact: true, pl_category: 'Financial Expenses',
+                pl_subcategory: 'Interest',
+                expense_description: `Interest — ${creditName} #${inst.installment_no}`,
+                cf_type: 'recurring', cf_frequency: 'monthly',
+                note: row.note || row.description || null, status: 'posted',
+              })
+            }
+            await supabase.from('credit_installments').update({
+              status: 'paid', paid_date: row.date, updated_at: new Date().toISOString(),
+            }).eq('id', instId)
+          }
+          if (row.selected_credit_id) {
+            const { data: rem } = await supabase.from('credit_installments').select('id')
+              .eq('credit_id', row.selected_credit_id).eq('status', 'outstanding')
+            if (rem && rem.length === 0)
+              await supabase.from('credits')
+                .update({ status: 'closed', updated_at: new Date().toISOString() })
+                .eq('id', row.selected_credit_id)
+          }
+          continue
         }
 
-        if (row.tx_type === 'credit_payment' && row.selected_installment_ids.length > 0 && newTx?.id) {
-          await closeCreditInstallments(newTx.id, row.date, row.selected_installment_ids, row.selected_credit_id)
+        if (row.tx_type === 'credit_payment' && row.selected_installment_ids.length > 0) {
+          const rateBS = await getExRate(cur, row.date)
+          for (const instId of row.selected_installment_ids) {
+            const { data: inst } = await supabase
+              .from('credit_installments')
+              .select('id, installment_no, principal_amount, interest_amount')
+              .eq('id', instId).single()
+            if (!inst) continue
+            const creditName = credits.find((c: any) => c.id === row.selected_credit_id)?.name || 'Credit'
+
+            if (inst.principal_amount > 0) {
+              await supabase.from('transactions').insert({
+                company_id: company, bank_id: bank,
+                partner_id: partnerId, transaction_date: row.date,
+                statement_number: statementNumber || null,
+                type: 'credit_payment', tx_subtype: 'expense', currency: cur,
+                amount: inst.principal_amount, exchange_rate: rateBS,
+                amount_usd: convertToUSD(inst.principal_amount, cur, rateBS),
+                pl_impact: true, pl_category: 'Loans/Credits/Dividend',
+                expense_description: `Principal — ${creditName} #${inst.installment_no}`,
+                cf_type: 'recurring', cf_frequency: 'monthly',
+                note: row.note || row.description || null, status: 'posted',
+              })
+            }
+            if (inst.interest_amount > 0) {
+              await supabase.from('transactions').insert({
+                company_id: company, bank_id: bank,
+                partner_id: partnerId, transaction_date: row.date,
+                statement_number: statementNumber || null,
+                type: 'credit_payment', tx_subtype: 'expense', currency: cur,
+                amount: inst.interest_amount, exchange_rate: rateBS,
+                amount_usd: convertToUSD(inst.interest_amount, cur, rateBS),
+                pl_impact: true, pl_category: 'Financial Expenses',
+                pl_subcategory: 'Interest',
+                expense_description: `Interest — ${creditName} #${inst.installment_no}`,
+                cf_type: 'recurring', cf_frequency: 'monthly',
+                note: row.note || row.description || null, status: 'posted',
+              })
+            }
+            await supabase.from('credit_installments').update({
+              status: 'paid', paid_date: row.date, updated_at: new Date().toISOString(),
+            }).eq('id', instId)
+          }
+          if (row.selected_credit_id) {
+            const { data: rem } = await supabase.from('credit_installments').select('id')
+              .eq('credit_id', row.selected_credit_id).eq('status', 'outstanding')
+            if (rem && rem.length === 0)
+              await supabase.from('credits')
+                .update({ status: 'closed', updated_at: new Date().toISOString() })
+                .eq('id', row.selected_credit_id)
+          }
+          continue
         }
 
         if (row.tx_type === 'invoice_payment' && row.linked_invoice_id && newTx?.id) {
