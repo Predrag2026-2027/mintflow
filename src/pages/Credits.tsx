@@ -36,15 +36,15 @@ interface Installment {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-function fmtRSD(n: number): string {
+function fmtEUR(n: number): string {
   if (n === 0) return '—'
-  return n.toLocaleString('sr-RS', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' RSD'
+  return '€' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
-function fmtRSDCompact(n: number): string {
+function fmtEURCompact(n: number): string {
   if (n === 0) return '—'
-  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M RSD`
-  if (n >= 1000) return `${(n / 1000).toFixed(0)}K RSD`
-  return `${n.toFixed(0)} RSD`
+  if (n >= 1000000) return `€${(n / 1000000).toFixed(1)}M`
+  if (n >= 1000) return `€${(n / 1000).toFixed(0)}K`
+  return `€${n.toFixed(0)}`
 }
 function daysUntil(dateStr: string): number {
   return Math.ceil((new Date(dateStr).getTime() - new Date().getTime()) / 86400000)
@@ -56,7 +56,7 @@ function isOverdue(dateStr: string): boolean {
 // ─── New Credit Dialog ────────────────────────────────────────────────────────
 function NewCreditDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState({
-    name: '', bank: '', principal_amount: '', currency: 'RSD',
+    name: '', bank: '', principal_amount: '', currency: 'EUR',
     interest_rate: '', rate_type: 'fixed' as 'fixed' | 'variable',
     rate_description: '', disbursement_date: '', first_payment_date: '',
     last_payment_date: '', monthly_annuity: '', total_installments: '',
@@ -69,7 +69,7 @@ function NewCreditDialog({ onClose, onSaved }: { onClose: () => void; onSaved: (
 
   const handleSave = async () => {
     if (!form.name || !form.bank || !form.principal_amount) {
-      setError('Naziv, banka i iznos glavnice su obavezni.')
+      setError('Name, bank and principal amount are required.')
       return
     }
     setSaving(true)
@@ -112,8 +112,8 @@ function NewCreditDialog({ onClose, onSaved }: { onClose: () => void; onSaved: (
         {/* Header */}
         <div style={{ background: '#0A1525', padding: '18px 22px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
-            <div style={{ fontSize: '10px', fontWeight: '600', color: '#4EA8FF', letterSpacing: '0.1em', textTransform: 'uppercase' as const, marginBottom: '4px' }}>Novi kredit</div>
-            <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '20px', color: '#E8F1FB', fontWeight: '400' }}>Dodaj bankarski kredit</div>
+            <div style={{ fontSize: '10px', fontWeight: '600', color: '#4EA8FF', letterSpacing: '0.1em', textTransform: 'uppercase' as const, marginBottom: '4px' }}>New Credit</div>
+            <div style={{ fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '20px', color: '#E8F1FB', fontWeight: '400' }}>Add Bank Credit</div>
           </div>
           <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#7A9BB8', width: '30px', height: '30px', borderRadius: '8px', cursor: 'pointer', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
         </div>
@@ -124,55 +124,54 @@ function NewCreditDialog({ onClose, onSaved }: { onClose: () => void; onSaved: (
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
             <div style={{ gridColumn: '1 / -1' }}>
-              <Field label="Naziv kredita *">
-                <input style={inp} placeholder="npr. Intesa 100k — Sep 2025" value={form.name} onChange={e => set('name', e.target.value)} />
+              <Field label="Credit name *">
+                <input style={inp} placeholder="e.g. Intesa 100k — Sep 2025" value={form.name} onChange={e => set('name', e.target.value)} />
               </Field>
             </div>
-            <Field label="Banka *">
-              <input style={inp} placeholder="Intesa Banka" value={form.bank} onChange={e => set('bank', e.target.value)} />
+            <Field label="Bank *">
+              <input style={inp} placeholder="e.g. Intesa Banka" value={form.bank} onChange={e => set('bank', e.target.value)} />
             </Field>
-            <Field label="Valuta">
+            <Field label="Currency">
               <select style={inp} value={form.currency} onChange={e => set('currency', e.target.value)}>
-                <option value="RSD">RSD</option>
                 <option value="EUR">EUR</option>
                 <option value="USD">USD</option>
               </select>
             </Field>
-            <Field label="Iznos glavnice *">
+            <Field label="Principal amount *">
               <input style={inp} type="number" placeholder="100000" value={form.principal_amount} onChange={e => set('principal_amount', e.target.value)} />
             </Field>
-            <Field label="Mesečni anuitet">
+            <Field label="Monthly annuity">
               <input style={inp} type="number" placeholder="5009.18" value={form.monthly_annuity} onChange={e => set('monthly_annuity', e.target.value)} />
             </Field>
-            <Field label="Kamatna stopa (%)">
+            <Field label="Interest rate (%)">
               <input style={inp} type="number" step="0.01" placeholder="5.5" value={form.interest_rate} onChange={e => set('interest_rate', e.target.value)} />
             </Field>
-            <Field label="Tip kamate">
+            <Field label="Rate type">
               <select style={inp} value={form.rate_type} onChange={e => set('rate_type', e.target.value as any)}>
-                <option value="fixed">Fiksna</option>
-                <option value="variable">Varijabilna</option>
+                <option value="fixed">Fixed</option>
+                <option value="variable">Variable</option>
               </select>
             </Field>
             <div style={{ gridColumn: '1 / -1' }}>
-              <Field label="Opis kamatne stope">
-                <input style={inp} placeholder="npr. 3.85% + 3M Euribor" value={form.rate_description} onChange={e => set('rate_description', e.target.value)} />
+              <Field label="Rate description">
+                <input style={inp} placeholder="e.g. 3.85% + 3M Euribor" value={form.rate_description} onChange={e => set('rate_description', e.target.value)} />
               </Field>
             </div>
-            <Field label="Datum isplate kredita">
+            <Field label="Disbursement date">
               <input style={inp} type="date" value={form.disbursement_date} onChange={e => set('disbursement_date', e.target.value)} />
             </Field>
-            <Field label="Broj rata">
+            <Field label="Broj installments">
               <input style={inp} type="number" placeholder="24" value={form.total_installments} onChange={e => set('total_installments', e.target.value)} />
             </Field>
-            <Field label="Prva rata">
+            <Field label="Prva installments">
               <input style={inp} type="date" value={form.first_payment_date} onChange={e => set('first_payment_date', e.target.value)} />
             </Field>
-            <Field label="Poslednja rata">
+            <Field label="Last installment">
               <input style={inp} type="date" value={form.last_payment_date} onChange={e => set('last_payment_date', e.target.value)} />
             </Field>
             <div style={{ gridColumn: '1 / -1' }}>
-              <Field label="Napomena">
-                <textarea style={{ ...inp, height: '72px', resize: 'vertical' as const }} placeholder="Opciona napomena..." value={form.notes} onChange={e => set('notes', e.target.value)} />
+              <Field label="Notes">
+                <textarea style={{ ...inp, height: '72px', resize: 'vertical' as const }} placeholder="Optional note..." value={form.notes} onChange={e => set('notes', e.target.value)} />
               </Field>
             </div>
           </div>
@@ -180,9 +179,9 @@ function NewCreditDialog({ onClose, onSaved }: { onClose: () => void; onSaved: (
 
         {/* Footer */}
         <div style={{ padding: '14px 22px', borderTop: '1px solid rgba(255,255,255,0.06)', background: '#0A1525', display: 'flex', justifyContent: 'flex-end', gap: '10px', flexShrink: 0 }}>
-          <button onClick={onClose} style={{ fontFamily: "'Inter',sans-serif", fontSize: '13px', padding: '8px 18px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#7A9BB8', cursor: 'pointer' }}>Odustani</button>
+          <button onClick={onClose} style={{ fontFamily: "'Inter',sans-serif", fontSize: '13px', padding: '8px 18px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#7A9BB8', cursor: 'pointer' }}>Cancel</button>
           <button onClick={handleSave} disabled={saving} style={{ fontFamily: "'Inter',sans-serif", fontSize: '13px', fontWeight: '600', padding: '8px 20px', borderRadius: '8px', border: 'none', background: '#4EA8FF', color: '#060E1A', cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
-            {saving ? 'Čuvanje...' : 'Sačuvaj kredit'}
+            {saving ? 'Saving...' : 'Save credit'}
           </button>
         </div>
       </div>
@@ -213,23 +212,23 @@ function EditInterestDialog({ installment, onClose, onSaved }: { installment: In
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200 }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div style={{ background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '14px', width: '380px', padding: '24px', boxShadow: '0 20px 50px rgba(0,0,0,0.6)' }}>
-        <div style={{ fontSize: '10px', fontWeight: '600', color: '#F5A623', letterSpacing: '0.1em', textTransform: 'uppercase' as const, marginBottom: '4px' }}>Uredi kamatu</div>
-        <div style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: '18px', color: '#E8F1FB', marginBottom: '6px' }}>Rata #{installment.installment_no}</div>
-        <div style={{ fontSize: '12px', color: '#7A9BB8', marginBottom: '20px' }}>Dospeće: {installment.due_date}</div>
+        <div style={{ fontSize: '10px', fontWeight: '600', color: '#F5A623', letterSpacing: '0.1em', textTransform: 'uppercase' as const, marginBottom: '4px' }}>Edit Interest</div>
+        <div style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: '18px', color: '#E8F1FB', marginBottom: '6px' }}>Installment #{installment.installment_no}</div>
+        <div style={{ fontSize: '12px', color: '#7A9BB8', marginBottom: '20px' }}>Due: {installment.due_date}</div>
 
         <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px', fontSize: '12px', color: '#7A9BB8' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span>Glavnica (fiksna)</span>
-            <span style={{ fontFamily: "'DM Mono',monospace", color: '#4EA8FF' }}>{fmtRSD(installment.principal_amount)}</span>
+            <span>Principal (fixed)</span>
+            <span style={{ fontFamily: "'DM Mono',monospace", color: '#4EA8FF' }}>{fmtEUR(installment.principal_amount)}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Trenutna kamata</span>
-            <span style={{ fontFamily: "'DM Mono',monospace", color: '#F5A623' }}>{fmtRSD(installment.interest_amount)}</span>
+            <span>Current interest</span>
+            <span style={{ fontFamily: "'DM Mono',monospace", color: '#F5A623' }}>{fmtEUR(installment.interest_amount)}</span>
           </div>
         </div>
 
         <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.30)', letterSpacing: '0.1em', textTransform: 'uppercase' as const, marginBottom: '6px' }}>Nova kamata (RSD)</div>
+          <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.30)', letterSpacing: '0.1em', textTransform: 'uppercase' as const, marginBottom: '6px' }}>New interest (EUR)</div>
           <input
             autoFocus
             type="number" step="0.01"
@@ -239,14 +238,14 @@ function EditInterestDialog({ installment, onClose, onSaved }: { installment: In
             style={{ width: '100%', boxSizing: 'border-box' as const, fontFamily: "'DM Mono',monospace", fontSize: '18px', padding: '10px 12px', border: '1.5px solid #F5A623', borderRadius: '8px', background: '#0A1525', color: '#F5A623', outline: 'none' }}
           />
           <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.25)', marginTop: '6px' }}>
-            Novi anuitet: <span style={{ fontFamily: "'DM Mono',monospace", color: '#DCE9F6' }}>{fmtRSD(installment.principal_amount + (parseFloat(val) || 0))}</span>
+            New annuity: <span style={{ fontFamily: "'DM Mono',monospace", color: '#DCE9F6' }}>{fmtEUR(installment.principal_amount + (parseFloat(val) || 0))}</span>
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ fontFamily: "'Inter',sans-serif", fontSize: '13px', padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#7A9BB8', cursor: 'pointer' }}>Odustani</button>
+          <button onClick={onClose} style={{ fontFamily: "'Inter',sans-serif", fontSize: '13px', padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#7A9BB8', cursor: 'pointer' }}>Cancel</button>
           <button onClick={handleSave} disabled={saving} style={{ fontFamily: "'Inter',sans-serif", fontSize: '13px', fontWeight: '600', padding: '8px 18px', borderRadius: '8px', border: 'none', background: '#F5A623', color: '#060E1A', cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
-            {saving ? 'Čuvanje...' : 'Sačuvaj'}
+            {saving ? 'Saving...' : 'Save'}
           </button>
         </div>
       </div>
@@ -328,23 +327,23 @@ function CreditRow({ credit, onRefresh }: { credit: Credit; onRefresh: () => voi
 
           {/* Remaining principal */}
           <div style={{ textAlign: 'right', minWidth: '130px' }}>
-            <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.28)', letterSpacing: '0.1em', textTransform: 'uppercase' as const, marginBottom: '4px' }}>Preostala glavnica</div>
+            <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.28)', letterSpacing: '0.1em', textTransform: 'uppercase' as const, marginBottom: '4px' }}>Remaining Principal</div>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '16px', fontWeight: '500', color: accentColor }}>
-              {fmtRSDCompact(outstandingPrincipal || credit.principal_amount)}
+              {fmtEURCompact(outstandingPrincipal || credit.principal_amount)}
             </div>
           </div>
 
           {/* Outstanding total */}
           <div style={{ textAlign: 'right', minWidth: '130px' }}>
-            <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.28)', letterSpacing: '0.1em', textTransform: 'uppercase' as const, marginBottom: '4px' }}>Ukupno preostalo</div>
+            <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.28)', letterSpacing: '0.1em', textTransform: 'uppercase' as const, marginBottom: '4px' }}>Total Outstanding</div>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '16px', fontWeight: '500', color: '#E8F1FB' }}>
-              {fmtRSDCompact(outstandingTotal)}
+              {fmtEURCompact(outstandingTotal)}
             </div>
           </div>
 
           {/* Next due */}
           <div style={{ textAlign: 'right', minWidth: '120px' }}>
-            <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.28)', letterSpacing: '0.1em', textTransform: 'uppercase' as const, marginBottom: '4px' }}>Sledeća rata</div>
+            <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.28)', letterSpacing: '0.1em', textTransform: 'uppercase' as const, marginBottom: '4px' }}>Next Installment</div>
             {nextDue ? (
               <div>
                 <div style={{ fontSize: '13px', color: isOverdue(nextDue.due_date) ? '#FF5B5A' : '#DCE9F6', fontWeight: isOverdue(nextDue.due_date) ? '600' : '400' }}>
@@ -352,18 +351,18 @@ function CreditRow({ credit, onRefresh }: { credit: Credit; onRefresh: () => voi
                 </div>
                 {isOverdue(nextDue.due_date) && (
                   <span style={{ fontSize: '10px', color: '#FF5B5A', background: 'rgba(255,91,90,0.12)', padding: '1px 6px', borderRadius: '20px', fontWeight: '600' }}>
-                    {Math.abs(daysUntil(nextDue.due_date))}d kasni
+                    {Math.abs(daysUntil(nextDue.due_date))}d overdue
                   </span>
                 )}
               </div>
             ) : (
-              <div style={{ fontSize: '12px', color: '#00D47E' }}>Plaćen ✓</div>
+              <div style={{ fontSize: '12px', color: '#00D47E' }}>Paid ✓</div>
             )}
           </div>
 
           {/* Stats */}
           <div style={{ textAlign: 'right', minWidth: '80px' }}>
-            <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.28)', letterSpacing: '0.1em', textTransform: 'uppercase' as const, marginBottom: '4px' }}>Rate</div>
+            <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.28)', letterSpacing: '0.1em', textTransform: 'uppercase' as const, marginBottom: '4px' }}>Installments</div>
             <div style={{ fontSize: '12px', color: '#7A9BB8' }}>
               <span style={{ color: '#00D47E', fontWeight: '600' }}>{paid.length}</span> / {installments.length > 0 ? installments.length : credit.total_installments}
             </div>
@@ -376,29 +375,29 @@ function CreditRow({ credit, onRefresh }: { credit: Credit; onRefresh: () => voi
         <div style={{ background: '#080F1A', border: '1px solid rgba(255,255,255,0.06)', borderTop: 'none', borderRadius: '0 0 12px 12px', marginBottom: '8px', overflow: 'hidden' }}>
           {/* Installments toolbar */}
           <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: '10px', background: '#0A1525' }}>
-            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.30)', marginRight: '4px' }}>Prikaži:</div>
+            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.30)', marginRight: '4px' }}>Show:</div>
             {(['outstanding', 'paid', 'all'] as const).map(f => (
               <button key={f} onClick={e => { e.stopPropagation(); setFilter(f) }}
                 style={{ fontFamily: "'Inter',sans-serif", fontSize: '11px', fontWeight: '500', padding: '4px 12px', borderRadius: '20px', border: '1px solid', cursor: 'pointer', background: filter === f ? (f === 'outstanding' ? 'rgba(255,91,90,0.12)' : f === 'paid' ? 'rgba(0,212,126,0.12)' : 'rgba(255,255,255,0.08)') : 'transparent', color: filter === f ? (f === 'outstanding' ? '#FF5B5A' : f === 'paid' ? '#00D47E' : '#DCE9F6') : 'rgba(255,255,255,0.30)', borderColor: filter === f ? (f === 'outstanding' ? 'rgba(255,91,90,0.4)' : f === 'paid' ? 'rgba(0,212,126,0.4)' : 'rgba(255,255,255,0.15)') : 'transparent' }}>
-                {f === 'outstanding' ? `Preostale (${outstanding.length})` : f === 'paid' ? `Plaćene (${paid.length})` : 'Sve'}
+                {f === 'outstanding' ? `Outstanding (${outstanding.length})` : f === 'paid' ? `Paid (${paid.length})` : 'Sve'}
               </button>
             ))}
             {isVariable && (
               <div style={{ marginLeft: 'auto', fontSize: '11px', color: '#F5A623', background: 'rgba(245,166,35,0.08)', border: '1px solid rgba(245,166,35,0.25)', padding: '3px 10px', borderRadius: '20px' }}>
-                Varijabilna kamata — klikni ✎ za izmenu
+                Variable rate — click ✎ to edit interest
               </div>
             )}
           </div>
 
           {/* Table */}
           {loadingInst ? (
-            <div style={{ padding: '40px', textAlign: 'center', color: '#7A9BB8', fontSize: '13px' }}>Učitavanje...</div>
+            <div style={{ padding: '40px', textAlign: 'center', color: '#7A9BB8', fontSize: '13px' }}>Loading...</div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#0A1525' }}>
-                  {['#', 'Datum dospeća', 'Glavnica', 'Kamata', 'Anuitet', 'Status', ''].map(h => (
-                    <th key={h} style={{ padding: '9px 16px', fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: h === 'Glavnica' || h === 'Kamata' || h === 'Anuitet' ? 'right' : 'left', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>
+                  {['#', 'Due Date', 'Principal', 'Interest', 'Annuity', 'Status', ''].map(h => (
+                    <th key={h} style={{ padding: '9px 16px', fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: h === 'Principal' || h === 'Interest' || h === 'Annuity' ? 'right' : 'left', borderBottom: '1px solid rgba(255,255,255,0.06)', whiteSpace: 'nowrap' }}>
                       {h}
                     </th>
                   ))}
@@ -412,20 +411,20 @@ function CreditRow({ credit, onRefresh }: { credit: Credit; onRefresh: () => voi
                       <td style={{ padding: '9px 16px', fontSize: '12px', color: 'rgba(255,255,255,0.35)', fontFamily: "'DM Mono',monospace" }}>{inst.installment_no}</td>
                       <td style={{ padding: '9px 16px', fontSize: '12px', color: overdue ? '#FF5B5A' : '#DCE9F6', fontWeight: overdue ? '600' : '400' }}>
                         {inst.due_date}
-                        {overdue && <span style={{ marginLeft: '6px', fontSize: '10px', color: '#FF5B5A', background: 'rgba(255,91,90,0.12)', padding: '1px 5px', borderRadius: '10px' }}>kasni</span>}
+                        {overdue && <span style={{ marginLeft: '6px', fontSize: '10px', color: '#FF5B5A', background: 'rgba(255,91,90,0.12)', padding: '1px 5px', borderRadius: '10px' }}>overdue</span>}
                       </td>
                       <td style={{ padding: '9px 16px', textAlign: 'right', fontFamily: "'DM Mono',monospace", fontSize: '12px', color: inst.principal_amount > 0 ? '#4EA8FF' : 'rgba(255,255,255,0.20)' }}>
-                        {inst.principal_amount > 0 ? inst.principal_amount.toLocaleString('sr-RS', { minimumFractionDigits: 2 }) : '—'}
+                        {inst.principal_amount > 0 ? inst.principal_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
                       </td>
                       <td style={{ padding: '9px 16px', textAlign: 'right', fontFamily: "'DM Mono',monospace", fontSize: '12px', color: '#F5A623' }}>
-                        {inst.interest_amount.toLocaleString('sr-RS', { minimumFractionDigits: 2 })}
+                        {inst.interest_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       <td style={{ padding: '9px 16px', textAlign: 'right', fontFamily: "'DM Mono',monospace", fontSize: '13px', fontWeight: '500', color: '#E8F1FB' }}>
-                        {inst.total_amount.toLocaleString('sr-RS', { minimumFractionDigits: 2 })}
+                        {inst.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       <td style={{ padding: '9px 16px' }}>
                         <span style={{ fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '20px', background: inst.status === 'paid' ? 'rgba(0,212,126,0.12)' : overdue ? 'rgba(255,91,90,0.12)' : 'rgba(255,255,255,0.06)', color: inst.status === 'paid' ? '#00D47E' : overdue ? '#FF5B5A' : '#7A9BB8' }}>
-                          {inst.status === 'paid' ? 'Plaćeno' : overdue ? 'Kasni' : 'Preostalo'}
+                          {inst.status === 'paid' ? 'Paid' : overdue ? 'Overdue' : 'Outstanding'}
                         </span>
                       </td>
                       <td style={{ padding: '9px 16px', textAlign: 'right' }}>
@@ -433,7 +432,7 @@ function CreditRow({ credit, onRefresh }: { credit: Credit; onRefresh: () => voi
                           <button
                             onClick={e => { e.stopPropagation(); setEditingInst(inst) }}
                             style={{ fontFamily: "'Inter',sans-serif", fontSize: '11px', fontWeight: '500', padding: '4px 10px', borderRadius: '6px', border: '1px solid rgba(245,166,35,0.3)', background: 'rgba(245,166,35,0.06)', color: '#F5A623', cursor: 'pointer' }}>
-                            ✎ Kamata
+                            ✎ Interest
                           </button>
                         )}
                       </td>
@@ -445,16 +444,16 @@ function CreditRow({ credit, onRefresh }: { credit: Credit; onRefresh: () => voi
                 <tfoot>
                   <tr style={{ background: '#060E1A', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
                     <td colSpan={2} style={{ padding: '10px 16px', fontSize: '10px', fontWeight: '700', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                      Ukupno ({filteredInst.length} rata)
+                      Total ({filteredInst.length} installments)
                     </td>
                     <td style={{ padding: '10px 16px', textAlign: 'right', fontFamily: "'DM Mono',monospace", fontSize: '13px', fontWeight: '600', color: '#4EA8FF' }}>
-                      {filteredInst.reduce((s, i) => s + i.principal_amount, 0).toLocaleString('sr-RS', { minimumFractionDigits: 2 })}
+                      {filteredInst.reduce((s, i) => s + i.principal_amount, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td style={{ padding: '10px 16px', textAlign: 'right', fontFamily: "'DM Mono',monospace", fontSize: '13px', fontWeight: '600', color: '#F5A623' }}>
-                      {filteredInst.reduce((s, i) => s + i.interest_amount, 0).toLocaleString('sr-RS', { minimumFractionDigits: 2 })}
+                      {filteredInst.reduce((s, i) => s + i.interest_amount, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td style={{ padding: '10px 16px', textAlign: 'right', fontFamily: "'DM Mono',monospace", fontSize: '14px', fontWeight: '700', color: '#E8F1FB' }}>
-                      {filteredInst.reduce((s, i) => s + i.total_amount, 0).toLocaleString('sr-RS', { minimumFractionDigits: 2 })}
+                      {filteredInst.reduce((s, i) => s + i.total_amount, 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td colSpan={2} />
                   </tr>
@@ -523,26 +522,26 @@ export default function Credits() {
             Bank Credits
           </div>
           <div style={{ fontSize: '13px', color: '#7A9BB8' }}>
-            Planski otplatni krediti · Constellation LLC
+            Loan repayment schedule · Constellation LLC
           </div>
         </div>
         <button
           onClick={() => setShowNewDialog(true)}
           style={{ fontFamily: "'Inter',sans-serif", fontSize: '13px', fontWeight: '600', padding: '9px 18px', border: 'none', borderRadius: '9px', background: '#4EA8FF', color: '#060E1A', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '7px' }}>
-          + Novi kredit
+          + New Credit
         </button>
       </div>
 
       {/* ── KPI strip ── */}
       <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.22)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '10px' }}>
-        Pregled stanja
+        Overview
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '28px' }}>
         {[
-          { label: 'Aktivni krediti', value: loading ? '—' : String(credits.filter(c => c.status === 'active').length), accent: '#4EA8FF', sub: 'ukupno' },
-          { label: 'Preostala glavnica', value: loading ? '—' : fmtRSDCompact(stats.totalPrincipal), accent: '#4EA8FF', sub: 'svih kredita' },
-          { label: 'Preostale obaveze', value: loading ? '—' : fmtRSDCompact(stats.totalOutstanding), accent: '#F5A623', sub: 'glavnica + kamata' },
-          { label: stats.overdueCount > 0 ? 'Kasnele rate' : 'Sledeća rata', value: loading ? '—' : stats.overdueCount > 0 ? String(stats.overdueCount) : (stats.nextDueDate || '—'), accent: stats.overdueCount > 0 ? '#FF5B5A' : '#00D47E', sub: stats.overdueCount > 0 ? 'zahtevaju pažnju' : 'datum dospeća' },
+          { label: 'Active Credits', value: loading ? '—' : String(credits.filter(c => c.status === 'active').length), accent: '#4EA8FF', sub: 'total' },
+          { label: 'Remaining Principal', value: loading ? '—' : fmtEURCompact(stats.totalPrincipal), accent: '#4EA8FF', sub: 'across all loans' },
+          { label: 'Total Outstanding', value: loading ? '—' : fmtEURCompact(stats.totalOutstanding), accent: '#F5A623', sub: 'principal + interest' },
+          { label: stats.overdueCount > 0 ? 'Overdue Installments' : 'Next Installment', value: loading ? '—' : stats.overdueCount > 0 ? String(stats.overdueCount) : (stats.nextDueDate || '—'), accent: stats.overdueCount > 0 ? '#FF5B5A' : '#00D47E', sub: stats.overdueCount > 0 ? 'require attention' : 'due date' },
         ].map(k => (
           <div key={k.label} style={{ background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.06)', borderTop: `2.5px solid ${k.accent}`, borderRadius: '12px', padding: '18px 20px' }}>
             <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.28)', textTransform: 'uppercase', letterSpacing: '0.11em', marginBottom: '10px' }}>{k.label}</div>
@@ -554,12 +553,12 @@ export default function Credits() {
 
       {/* ── Filter bar ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-        <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.22)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Krediti</div>
+        <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.22)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Credits</div>
         <div style={{ flex: 1, height: '0.5px', background: 'rgba(255,255,255,0.06)' }} />
         {(['active', 'all'] as const).map(f => (
           <button key={f} onClick={() => setStatusFilter(f)}
             style={{ fontFamily: "'Inter',sans-serif", fontSize: '11px', fontWeight: '500', padding: '4px 12px', borderRadius: '20px', border: '1px solid', cursor: 'pointer', background: statusFilter === f ? 'rgba(78,168,255,0.12)' : 'transparent', color: statusFilter === f ? '#4EA8FF' : 'rgba(255,255,255,0.30)', borderColor: statusFilter === f ? 'rgba(78,168,255,0.4)' : 'transparent' }}>
-            {f === 'active' ? 'Aktivni' : 'Svi'}
+            {f === 'active' ? 'Active' : 'All'}
           </button>
         ))}
       </div>
@@ -568,7 +567,7 @@ export default function Credits() {
       {loading ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '300px', color: '#7A9BB8', fontSize: '13px', background: '#0D1B2C', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)' }}>
           <div>
-            <div style={{ marginBottom: '12px' }}>Učitavanje kredita...</div>
+            <div style={{ marginBottom: '12px' }}>Loading credits...</div>
             <div style={{ width: '160px', height: '3px', background: 'rgba(255,255,255,0.06)', borderRadius: '2px', overflow: 'hidden', margin: '0 auto' }}>
               <div style={{ height: '100%', width: '60%', background: '#4EA8FF', borderRadius: '2px', animation: 'pulse 1.5s infinite' }} />
             </div>
@@ -577,8 +576,8 @@ export default function Credits() {
       ) : filtered.length === 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', color: '#7A9BB8', background: '#0D1B2C', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.06)', gap: '10px' }}>
           <div style={{ fontSize: '28px', opacity: 0.3 }}>🏦</div>
-          <div style={{ fontSize: '15px', fontWeight: '500', color: '#DCE9F6' }}>Nema kredita</div>
-          <div style={{ fontSize: '13px' }}>Dodaj prvi kredit klikom na "+ Novi kredit"</div>
+          <div style={{ fontSize: '15px', fontWeight: '500', color: '#DCE9F6' }}>No credits found</div>
+          <div style={{ fontSize: '13px' }}>Add your first credit using the "+ New Credit" button</div>
         </div>
       ) : (
         <div>
