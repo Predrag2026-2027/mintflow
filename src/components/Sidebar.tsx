@@ -19,6 +19,7 @@ const ICONS: Record<string, React.ReactNode> = {
   budgeting:    <Icon><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M5 3v10M1.5 7h13M1.5 11h13"/></Icon>,
   reports:      <Icon><rect x="2.5" y="1.5" width="11" height="13" rx="1.5"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3"/></Icon>,
   partners:     <Icon><circle cx="5.5" cy="5" r="2.5"/><path d="M1 13.5c0-2.5 2-4.5 4.5-4.5s4.5 2 4.5 4.5"/><circle cx="12" cy="5" r="2"/><path d="M14.5 13c0-1.9-1.1-3.5-2.5-4"/></Icon>,
+  credits:      <Icon><rect x="1.5" y="4.5" width="13" height="9" rx="1.5"/><path d="M1.5 7.5h13"/><path d="M4.5 10.5h3"/><path d="M9.5 10.5h2"/></Icon>,
   settings:     <Icon><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.6 3.6l1.3 1.3M11.1 11.1l1.3 1.3M3.6 12.4l1.3-1.3M11.1 4.9l1.3-1.3"/></Icon>,
 }
 
@@ -31,6 +32,7 @@ const NAV_ITEMS: { key: Page; label: string }[] = [
   { key: 'budgeting',    label: 'Budgeting' },
   { key: 'reports',      label: 'Reports' },
   { key: 'partners',     label: 'Partners' },
+  { key: 'credits',      label: 'Bank Credits' },
   { key: 'settings',     label: 'Settings' },
 ]
 
@@ -62,8 +64,9 @@ export default function Sidebar() {
       <nav style={s.nav}>
         {NAV_ITEMS.map(item => {
           const active = page === item.key
-          const isRevenue = item.key === 'revenue'
+          const isRevenue   = item.key === 'revenue'
           const isBudgeting = item.key === 'budgeting'
+          const isCredits   = item.key === 'credits'
           return (
             <button
               key={item.key}
@@ -71,8 +74,9 @@ export default function Sidebar() {
               style={{
                 ...s.navItem,
                 background: active
-                  ? isRevenue ? 'rgba(157,151,255,0.12)'
+                  ? isRevenue   ? 'rgba(157,151,255,0.12)'
                   : isBudgeting ? 'rgba(230,180,50,0.12)'
+                  : isCredits   ? 'rgba(78,168,255,0.12)'
                   : 'rgba(0,212,126,0.10)'
                   : 'transparent',
                 color: active ? '#fff' : 'rgba(255,255,255,0.44)',
@@ -80,8 +84,9 @@ export default function Sidebar() {
             >
               <span style={{
                 color: active
-                  ? isRevenue ? '#9D97FF'
+                  ? isRevenue   ? '#9D97FF'
                   : isBudgeting ? '#E6B432'
+                  : isCredits   ? '#4EA8FF'
                   : '#00D47E'
                   : 'rgba(255,255,255,0.30)',
                 display: 'flex'
