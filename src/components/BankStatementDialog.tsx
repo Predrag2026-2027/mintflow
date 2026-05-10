@@ -192,14 +192,6 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
     if (data) setRowInstallments(prev => ({ ...prev, [rowId]: data }))
   }
 
-  const loadRowInstallments = async (rowId: string, creditId: string) => {
-    if (!creditId) return
-    const { data } = await supabase
-      .from('credit_installments')
-      .select('id,installment_no,due_date,principal_amount,interest_amount,total_amount,status')
-      .eq('credit_id', creditId).eq('status', 'outstanding').order('due_date')
-    if (data) setRowInstallments(prev => ({ ...prev, [rowId]: data }))
-  }
 
   const addRow = () => setRows(prev => [...prev, makeRow(defaultCurrency)])
   const removeRow = (id: string) => setRows(prev => prev.filter(r => r.id !== id))
