@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import InlineCategoryAdd from './InlineCategoryAdd'
 import { getRate, convertToUSD } from '../services/currencyService'
+import CreditInstallmentSelector from './CreditInstallmentSelector'
+import { useCreditPayment, closeCreditInstallments } from './useCreditPayment'
 
 interface Props {
   onClose: () => void
@@ -65,12 +67,20 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   const [selectedAccountId, setSelectedAccountId] = useState('')
 
   // Step 3
-  const [txType, setTxType] = useState<'invoice_payment' | 'direct' | 'passthrough'>('invoice_payment')
+  const [txType, setTxType] = useState<'invoice_payment' | 'direct' | 'passthrough' | 'credit_payment'>('invoice_payment')
   const [ptDirection, setPtDirection] = useState<'in' | 'out'>('out')
   const [ptPeriodMonth, setPtPeriodMonth] = useState(new Date().toISOString().slice(0, 7))
   const [directSubtype, setDirectSubtype] = useState<'expense' | 'revenue'>('expense')
   const [linkedInvoices, setLinkedInvoices] = useState<LinkedInvoice[]>([])
   const [invoiceSearch, setInvoiceSearch] = useState('')
+
+  // Credit payment
+  const {
+    credits, selectedCreditId, setSelectedCreditId,
+    creditInstallments, selectedInstallmentIds,
+    toggleInstallment, toggleAll: toggleAllInstallments,
+    selectedTotal: creditSelectedTotal, reset: resetCredit,
+  } = useCreditPayment()
 
   const [plCatId, setPlCatId] = useState('')
   const [plCatName, setPlCatName] = useState('')
@@ -191,6 +201,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
     if (!amount || parseFloat(amount) <= 0) e.amount = 'Amount must be greater than 0'
     if (currency && currency !== 'USD' && (!exRate || parseFloat(exRate) <= 0)) e.exRate = 'Exchange rate is required'
     if (txType === 'invoice_payment' && linkedInvoices.length === 0) e.linkedInvoices = 'Select at least one invoice to close'
+    if (txType === 'credit_payment' && selectedInstallmentIds.length === 0) e.creditInstallments = 'Select at least one installment'
     if (txType === 'direct') {
       if (directSubtype === 'expense') {
         if (!plCatId) e.plCat = 'P&L Category is required'
@@ -354,13 +365,13 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   const touchStep = (n: number) => {
     if (n === 1) setTouched(p => ({ ...p, companyId: true, bankId: true, currency: true, txDate: true }))
     if (n === 2) setTouched(p => ({ ...p, amount: true, exRate: true }))
-    if (n === 3) setTouched(p => ({ ...p, linkedInvoices: true, plCat: true, dept: true, revStream: true, split: true, opexSplit: true }))
+    if (n === 3) setTouched(p => ({ ...p, linkedInvoices: true, creditInstallments: true, plCat: true, dept: true, revStream: true, split: true, opexSplit: true }))
   }
   const stepHasError = (n: number) => {
     const stepFields: Record<number, string[]> = {
       1: ['companyId', 'bankId', 'currency', 'txDate'],
       2: ['amount', 'exRate'],
-      3: ['linkedInvoices', 'plCat', 'dept', 'revStream', 'split', 'opexSplit'],
+      3: ['linkedInvoices', 'creditInstallments', 'plCat', 'dept', 'revStream', 'split', 'opexSplit'],
     }
     return (stepFields[n] || []).some(f => !!errors[f])
   }
@@ -515,6 +526,10 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
             if (invStatus) await supabase.from('invoices').update({ status: invStatus.calculated_status }).eq('id', link.invoice_id)
           }
         }
+      }
+      // ── Close credit installments ──────────────────────────────────────
+      if (txType === 'credit_payment' && selectedInstallmentIds.length > 0 && txId) {
+        await closeCreditInstallments(txId, txDate, selectedInstallmentIds, selectedCreditId)
       }
       setSuccess(true)
       setTimeout(() => { setSuccess(false); onClose() }, 1500)
@@ -715,6 +730,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
             {txType === 'direct' && <div style={s.plBadge}>P&L Impact</div>}
             {txType === 'invoice_payment' && <div style={s.cashBadge}>Cash Flow Only</div>}
             {txType === 'passthrough' && <div style={{ ...s.cashBadge, background: 'rgba(230,180,50,0.2)', color: '#E6B432', border: '0.5px solid rgba(230,180,50,0.3)' }}>Pass-through</div>}
+            {txType === 'credit_payment' && <div style={{ ...s.cashBadge, background: 'rgba(78,168,255,0.2)', color: '#4EA8FF', border: '0.5px solid rgba(78,168,255,0.3)' }}>Credit payment</div>}
             <span style={s.logoText}>Mintflow</span>
             <button style={s.closeBtn} onClick={onClose}>×</button>
           </div>
@@ -903,7 +919,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
             <>
               <div style={s.section}>
                 <div style={s.sectionTitle}>Transaction type <span style={s.req}>*</span></div>
-                <div style={{ ...s.typeGrid, gridTemplateColumns: '1fr 1fr 1fr' }}>
+                <div style={{ ...s.typeGrid, gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
                   <div style={{ ...s.typeCard, ...(txType === 'invoice_payment' ? s.typeCardPayment : {}) }} onClick={() => setTxType('invoice_payment')}>
                     <div style={{ fontSize: '24px', marginBottom: '6px' }}>💳</div>
                     <div style={s.typeCardTitle}>Invoice payment</div>
@@ -918,6 +934,11 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                     <div style={{ fontSize: '24px', marginBottom: '6px' }}>🔄</div>
                     <div style={s.typeCardTitle}>Pass-through</div>
                     <div style={s.typeCardSub}>Money in transit — no P&L impact. Paired IN/OUT entries.</div>
+                  </div>
+                  <div style={{ ...s.typeCard, ...(txType === 'credit_payment' ? { border: '2px solid #4EA8FF', background: '#EBF5FF' } : {}) }} onClick={() => { setTxType('credit_payment'); resetCredit() }}>
+                    <div style={{ fontSize: '24px', marginBottom: '6px' }}>🏦</div>
+                    <div style={s.typeCardTitle}>Credit payment</div>
+                    <div style={s.typeCardSub}>Close bank credit installments. Marks them paid in Bank Credits.</div>
                   </div>
                 </div>
               </div>
@@ -943,6 +964,23 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                     <label style={s.lbl}>Note</label>
                     <textarea style={{ ...s.textarea, marginTop: '4px' }} value={note} onChange={e => setNote(e.target.value)} placeholder="Pass-through description..." />
                   </div>
+                </div>
+              )}
+
+              {txType === 'credit_payment' && (
+                <div style={s.section}>
+                  <CreditInstallmentSelector
+                    credits={credits}
+                    selectedCreditId={selectedCreditId}
+                    onCreditChange={setSelectedCreditId}
+                    installments={creditInstallments}
+                    selectedInstallmentIds={selectedInstallmentIds}
+                    onToggle={toggleInstallment}
+                    onToggleAll={toggleAllInstallments}
+                    selectedTotal={creditSelectedTotal}
+                    error={fieldErr('creditInstallments')}
+                    theme="light"
+                  />
                 </div>
               )}
 
@@ -1212,7 +1250,20 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
           {step === 4 && (
             <div style={s.section}>
               <div style={s.sectionTitle}>Review</div>
-              {isValid ? (
+              {txType === 'credit_payment' && selectedInstallmentIds.length > 0 && (
+                <div style={{ ...s.infoBox, background: '#EBF5FF', borderColor: '#7FB8EE', color: '#0C447C', marginBottom: '14px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <span>🏦</span>
+                  <div>
+                    <div style={{ fontWeight: '500', marginBottom: '2px' }}>
+                      Closing {selectedInstallmentIds.length} installment{selectedInstallmentIds.length > 1 ? 's' : ''} from: {credits.find(c => c.id === selectedCreditId)?.name || '—'}
+                    </div>
+                    <div style={{ fontSize: '11px', fontFamily: "'DM Mono',monospace" }}>
+                      Total: {creditSelectedTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} EUR
+                    </div>
+                  </div>
+                </div>
+              )}
+          {isValid ? (
                 <div style={{ ...s.infoBox, marginBottom: '14px', display: 'flex', gap: '10px', alignItems: 'center' }}>
                   <span>✅</span>
                   <div>
@@ -1235,7 +1286,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                   ['Bank', banks.find(b => b.id === bankId)?.name || '—'],
                   ['Partner', showNewPartner ? newPartnerName : (partners.find(p => p.id === partnerId)?.name || partnerSearch || '—')],
                   ['Date', txDate],
-                  ['Type', txType === 'invoice_payment' ? 'Invoice payment' : `Direct (${directSubtype})`],
+                  ['Type', txType === 'invoice_payment' ? 'Invoice payment' : txType === 'credit_payment' ? 'Credit payment' : txType === 'passthrough' ? 'Pass-through' : `Direct (${directSubtype})`],
                 ]},
                 ...(txType === 'invoice_payment' && linkedInvoices.length > 0 ? [{ title: 'Linked invoices', rows: linkedInvoices.map(l => [`${l.partner_name} (${l.invoice_number})`, `$${l.allocated_usd.toFixed(2)} allocated`]) }] : []),
                 ...(txType === 'direct' && directSubtype === 'expense' ? [{ title: 'P&L & expense type', rows: [
