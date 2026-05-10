@@ -726,7 +726,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
         account_number: p.account_number || null, model: p.model || null, reference_number: p.reference_number || null, note: row.override_note || p.description || null, status: 'posted',
       }).select().single()
       if (row.override_tx_type === 'credit_payment' && row.override_installment_ids.length > 0) {
-        const { amount_usd: _u, exchange_rate: rateBI } = await getAmountUsd(p, 0)
+        const { exchange_rate: rateBI } = await getAmountUsd(p, 0)
         for (const instId of row.override_installment_ids) {
           const { data: inst } = await supabase
             .from('credit_installments')
@@ -780,7 +780,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
       }
 
       if (row.override_tx_type === 'credit_payment' && row.override_installment_ids.length > 0) {
-        const { amount_usd: _u, exchange_rate: rateBI } = await getAmountUsd(p, 0)
+        const { exchange_rate: rateBI } = await getAmountUsd(p, 0)
         for (const instId of row.override_installment_ids) {
           const { data: inst } = await supabase
             .from('credit_installments')
