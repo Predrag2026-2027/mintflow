@@ -4,6 +4,8 @@ import InlineCategoryAdd from './InlineCategoryAdd'
 import { getRate, convertToUSD } from '../services/currencyService'
 import CreditInstallmentSelector from './CreditInstallmentSelector'
 import { useCreditPayment, closeCreditInstallments } from './useCreditPayment'
+import CreditInstallmentSelector from './CreditInstallmentSelector'
+import { useCreditPayment, closeCreditInstallments } from './useCreditPayment'
 
 interface Props {
   onClose: () => void
@@ -73,6 +75,14 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   const [directSubtype, setDirectSubtype] = useState<'expense' | 'revenue'>('expense')
   const [linkedInvoices, setLinkedInvoices] = useState<LinkedInvoice[]>([])
   const [invoiceSearch, setInvoiceSearch] = useState('')
+
+  // Credit payment
+  const {
+    credits, selectedCreditId, setSelectedCreditId,
+    creditInstallments, selectedInstallmentIds,
+    toggleInstallment, toggleAll: toggleAllInstallments,
+    selectedTotal: creditSelectedTotal, reset: resetCredit,
+  } = useCreditPayment()
 
   // Credit payment
   const {
@@ -202,6 +212,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
     if (currency && currency !== 'USD' && (!exRate || parseFloat(exRate) <= 0)) e.exRate = 'Exchange rate is required'
     if (txType === 'invoice_payment' && linkedInvoices.length === 0) e.linkedInvoices = 'Select at least one invoice to close'
     if (txType === 'credit_payment' && selectedInstallmentIds.length === 0) e.creditInstallments = 'Select at least one installment'
+    if (txType === 'credit_payment' && selectedInstallmentIds.length === 0) e.creditInstallments = 'Select at least one installment'
     if (txType === 'direct') {
       if (directSubtype === 'expense') {
         if (!plCatId) e.plCat = 'P&L Category is required'
@@ -216,7 +227,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
 
   useEffect(() => {
     setErrors(runValidation())
-  }, [companyId, bankId, currency, txDate, amount, exRate, txType, linkedInvoices, directSubtype, plCatId, deptId, revStream, revAlloc, aimfoxVal, sgVal, opexType, opexVal, performanceVal]) // eslint-disable-line
+  }, [companyId, bankId, currency, txDate, amount, exRate, txType, linkedInvoices, selectedInstallmentIds, directSubtype, plCatId, deptId, revStream, revAlloc, aimfoxVal, sgVal, opexType, opexVal, performanceVal]) // eslint-disable-line
 
   useEffect(() => {
     const load = async () => {
@@ -531,6 +542,10 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
       if (txType === 'credit_payment' && selectedInstallmentIds.length > 0 && txId) {
         await closeCreditInstallments(txId, txDate, selectedInstallmentIds, selectedCreditId)
       }
+      // ── Close credit installments ──────────────────────────────────────
+      if (txType === 'credit_payment' && selectedInstallmentIds.length > 0 && txId) {
+        await closeCreditInstallments(txId, txDate, selectedInstallmentIds, selectedCreditId)
+      }
       setSuccess(true)
       setTimeout(() => { setSuccess(false); onClose() }, 1500)
     } catch (err) { console.error(err) }
@@ -730,6 +745,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
             {txType === 'direct' && <div style={s.plBadge}>P&L Impact</div>}
             {txType === 'invoice_payment' && <div style={s.cashBadge}>Cash Flow Only</div>}
             {txType === 'passthrough' && <div style={{ ...s.cashBadge, background: 'rgba(230,180,50,0.2)', color: '#E6B432', border: '0.5px solid rgba(230,180,50,0.3)' }}>Pass-through</div>}
+            {txType === 'credit_payment' && <div style={{ ...s.cashBadge, background: 'rgba(78,168,255,0.2)', color: '#4EA8FF', border: '0.5px solid rgba(78,168,255,0.3)' }}>Credit payment</div>}
             {txType === 'credit_payment' && <div style={{ ...s.cashBadge, background: 'rgba(78,168,255,0.2)', color: '#4EA8FF', border: '0.5px solid rgba(78,168,255,0.3)' }}>Credit payment</div>}
             <span style={s.logoText}>Mintflow</span>
             <button style={s.closeBtn} onClick={onClose}>×</button>
@@ -964,6 +980,23 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                     <label style={s.lbl}>Note</label>
                     <textarea style={{ ...s.textarea, marginTop: '4px' }} value={note} onChange={e => setNote(e.target.value)} placeholder="Pass-through description..." />
                   </div>
+                </div>
+              )}
+
+              {txType === 'credit_payment' && (
+                <div style={s.section}>
+                  <CreditInstallmentSelector
+                    credits={credits}
+                    selectedCreditId={selectedCreditId}
+                    onCreditChange={setSelectedCreditId}
+                    installments={creditInstallments}
+                    selectedInstallmentIds={selectedInstallmentIds}
+                    onToggle={toggleInstallment}
+                    onToggleAll={toggleAllInstallments}
+                    selectedTotal={creditSelectedTotal}
+                    error={fieldErr('creditInstallments')}
+                    theme="light"
+                  />
                 </div>
               )}
 
@@ -1251,6 +1284,19 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
             <div style={s.section}>
               <div style={s.sectionTitle}>Review</div>
               {txType === 'credit_payment' && selectedInstallmentIds.length > 0 && (
+                <div style={{ ...s.infoBox, background: '#EBF5FF', borderColor: '#7FB8EE', color: '#0C447C', marginBottom: '14px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <span>🏦</span>
+                  <div>
+                    <div style={{ fontWeight: '500', marginBottom: '2px' }}>
+                      Closing {selectedInstallmentIds.length} installment{selectedInstallmentIds.length > 1 ? 's' : ''} from: {credits.find(c => c.id === selectedCreditId)?.name || '—'}
+                    </div>
+                    <div style={{ fontSize: '11px', fontFamily: "'DM Mono',monospace" }}>
+                      Total: {creditSelectedTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} EUR
+                    </div>
+                  </div>
+                </div>
+              )}
+          {txType === 'credit_payment' && selectedInstallmentIds.length > 0 && (
                 <div style={{ ...s.infoBox, background: '#EBF5FF', borderColor: '#7FB8EE', color: '#0C447C', marginBottom: '14px', display: 'flex', gap: '10px', alignItems: 'center' }}>
                   <span>🏦</span>
                   <div>

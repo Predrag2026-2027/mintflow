@@ -4,6 +4,8 @@ import InlineCategoryAdd from './InlineCategoryAdd'
 import { getRate, convertToUSD } from '../services/currencyService'
 import CreditInstallmentSelector from './CreditInstallmentSelector'
 import { closeCreditInstallments } from './useCreditPayment'
+import CreditInstallmentSelector from './CreditInstallmentSelector'
+import { closeCreditInstallments } from './useCreditPayment'
 
 interface Props {
   onClose: () => void
@@ -23,7 +25,7 @@ interface StatementRow {
   model: string
   account_number: string
   // Classification
-  tx_type: 'direct' | 'invoice_payment' | 'passthrough' | 'credit_payment'
+  tx_type: 'direct' | 'invoice_payment' | 'passthrough' | 'credit_payment' | 'credit_payment'
   tx_subtype: 'expense' | 'revenue'
   pt_direction: 'in' | 'out'
   pt_period: string
@@ -101,6 +103,8 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
   const [rows, setRows] = useState<StatementRow[]>([makeRow(), makeRow(), makeRow()])
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const [posting, setPosting] = useState(false)
+  const [credits, setCredits] = useState<any[]>([])
+  const [rowInstallments, setRowInstallments] = useState<Record<string, any[]>>({})
   const [credits, setCredits] = useState<any[]>([])
   const [rowInstallments, setRowInstallments] = useState<Record<string, any[]>>({})
   const [posted, setPosted] = useState(false)
@@ -192,6 +196,15 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
     if (data) setRowInstallments(prev => ({ ...prev, [rowId]: data }))
   }
 
+  const loadRowInstallments = async (rowId: string, creditId: string) => {
+    if (!creditId) return
+    const { data } = await supabase
+      .from('credit_installments')
+      .select('id,installment_no,due_date,principal_amount,interest_amount,total_amount,status')
+      .eq('credit_id', creditId).eq('status', 'outstanding').order('due_date')
+    if (data) setRowInstallments(prev => ({ ...prev, [rowId]: data }))
+  }
+
   const addRow = () => setRows(prev => [...prev, makeRow(defaultCurrency)])
   const removeRow = (id: string) => setRows(prev => prev.filter(r => r.id !== id))
 
@@ -204,6 +217,7 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
   const totalCredit = rows.reduce((s, r) => s + (parseFloat(r.credit) || 0), 0)
 
   const getRowSummary = (row: StatementRow) => {
+    if (row.tx_type === 'credit_payment') return `🏦 Credit payment${row.selected_credit_id ? ' · ' + (credits.find(c => c.id === row.selected_credit_id)?.name || '') : ''}`
     if (row.tx_type === 'credit_payment') return `🏦 Credit payment${row.selected_credit_id ? ' · ' + (credits.find(c => c.id === row.selected_credit_id)?.name || '') : ''}`
     if (row.tx_type === 'passthrough') return `🔄 Pass-through ${row.pt_direction === 'in' ? 'IN' : 'OUT'}`
     if (row.tx_type === 'invoice_payment') {
@@ -297,6 +311,10 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
           model: row.model || null, reference_number: row.reference_number || null,
           note: row.note || row.description || null, status: 'posted',
         }).select().single()
+
+        if (row.tx_type === 'credit_payment' && row.selected_installment_ids.length > 0 && newTx?.id) {
+          await closeCreditInstallments(newTx.id, row.date, row.selected_installment_ids, row.selected_credit_id)
+        }
 
         if (row.tx_type === 'credit_payment' && row.selected_installment_ids.length > 0 && newTx?.id) {
           await closeCreditInstallments(newTx.id, row.date, row.selected_installment_ids, row.selected_credit_id)
@@ -476,6 +494,7 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                             { id: 'direct', icon: '⚡', label: 'Direct transaction', sub: 'Impacts P&L directly', activeColor: '#1D9E75', activeBg: '#E1F5EE' },
                             { id: 'invoice_payment', icon: '💳', label: 'Invoice payment', sub: 'Closes open invoices', activeColor: '#185FA5', activeBg: '#E6F1FB' },
                             { id: 'passthrough', icon: '🔄', label: 'Pass-through', sub: 'Money in transit', activeColor: '#E6B432', activeBg: '#FFFBEB' },
+                            { id: 'credit_payment', icon: '🏦', label: 'Credit payment', sub: 'Close installments', activeColor: '#4EA8FF', activeBg: '#EBF5FF' },
                             { id: 'credit_payment', icon: '🏦', label: 'Credit payment', sub: 'Close installments', activeColor: '#4EA8FF', activeBg: '#EBF5FF' },
                           ].map(t => (
                             <div key={t.id} style={{
@@ -765,6 +784,41 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                                 </div>
                               </>
                             )}
+                          </>
+                        )}
+
+                        {/* Credit payment */}
+                        {row.tx_type === 'credit_payment' && (
+                          <>
+                            <div style={s.classTitle}>Credit installments</div>
+                            <div style={{ marginBottom: '14px' }}>
+                              <CreditInstallmentSelector
+                                credits={credits}
+                                selectedCreditId={row.selected_credit_id}
+                                onCreditChange={id => {
+                                  updateRow(row.id, { selected_credit_id: id, selected_installment_ids: [] })
+                                  loadRowInstallments(row.id, id)
+                                }}
+                                installments={rowInstallments[row.id] || []}
+                                selectedInstallmentIds={row.selected_installment_ids}
+                                onToggle={id => updateRow(row.id, {
+                                  selected_installment_ids: row.selected_installment_ids.includes(id)
+                                    ? row.selected_installment_ids.filter((x: string) => x !== id)
+                                    : [...row.selected_installment_ids, id]
+                                })}
+                                onToggleAll={() => {
+                                  const all = (rowInstallments[row.id] || []).map((i: any) => i.id)
+                                  updateRow(row.id, {
+                                    selected_installment_ids:
+                                      row.selected_installment_ids.length === all.length ? [] : all
+                                  })
+                                }}
+                                selectedTotal={(rowInstallments[row.id] || [])
+                                  .filter((i: any) => row.selected_installment_ids.includes(i.id))
+                                  .reduce((s: number, i: any) => s + i.total_amount, 0)}
+                                theme="light"
+                              />
+                            </div>
                           </>
                         )}
 

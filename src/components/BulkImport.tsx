@@ -45,7 +45,7 @@ interface ImportRow {
   parsed: ParsedRow
   proposal: AIProposal | null
   status: RowStatus
-  override_tx_type: 'direct' | 'invoice_payment' | 'passthrough'
+  override_tx_type: 'direct' | 'invoice_payment' | 'passthrough' | 'credit_payment'
   override_tx_subtype: 'expense' | 'revenue'
   override_pt_direction: 'in' | 'out'
   override_pt_period: string
@@ -729,6 +729,10 @@ export default function BulkImport({ onClose, onImported }: Props) {
         await closeCreditInstallments(newTx.id, formatDate(p.date), row.override_installment_ids, row.override_credit_id)
       }
 
+      if (row.override_tx_type === 'credit_payment' && row.override_installment_ids.length > 0 && newTx?.id) {
+        await closeCreditInstallments(newTx.id, formatDate(p.date), row.override_installment_ids, row.override_credit_id)
+      }
+
       if (row.override_tx_type === 'invoice_payment' && row.override_linked_invoice_id && newTx?.id) {
         await supabase.from('invoice_transaction_links').insert({ invoice_id: row.override_linked_invoice_id, transaction_id: newTx.id, allocated_amount: amount, allocated_amount_usd: p.currency === 'USD' ? amount : null })
         const { data: invStatus } = await supabase.from('v_invoice_status').select('calculated_status').eq('id', row.override_linked_invoice_id).single()
@@ -1036,6 +1040,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                 <option value="invoice_payment">💳 Invoice payment (cash only)</option>
                                 <option value="passthrough">🔄 Pass-through (transit)</option>
                                 <option value="credit_payment">🏦 Credit payment (close installments)</option>
+                                <option value="credit_payment">🏦 Credit payment (close installments)</option>
                               </select>
                             </div>
                           </div>
@@ -1062,6 +1067,44 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                 </div>
                               </div>
                             </>
+                          )}
+
+                          {row.override_tx_type === 'credit_payment' && (
+                            <div style={{ gridColumn: '1 / -1', marginTop: '8px' }}>
+                              <div style={s.editSectionTitle}>Credit installments</div>
+                              <CreditInstallmentSelector
+                                credits={credits}
+                                selectedCreditId={row.override_credit_id}
+                                onCreditChange={async id => {
+                                  updateRow(p.id, { override_credit_id: id, override_installment_ids: [] })
+                                  if (id) {
+                                    const { data } = await supabase
+                                      .from('credit_installments')
+                                      .select('id,installment_no,due_date,principal_amount,interest_amount,total_amount,status')
+                                      .eq('credit_id', id).eq('status', 'outstanding').order('due_date')
+                                    if (data) setBulkInstallments(prev => ({ ...prev, [p.id]: data }))
+                                  }
+                                }}
+                                installments={bulkInstallments[p.id] || []}
+                                selectedInstallmentIds={row.override_installment_ids}
+                                onToggle={id => updateRow(p.id, {
+                                  override_installment_ids: row.override_installment_ids.includes(id)
+                                    ? row.override_installment_ids.filter((x: string) => x !== id)
+                                    : [...row.override_installment_ids, id]
+                                })}
+                                onToggleAll={() => {
+                                  const all = (bulkInstallments[p.id] || []).map((i: any) => i.id)
+                                  updateRow(p.id, {
+                                    override_installment_ids:
+                                      row.override_installment_ids.length === all.length ? [] : all
+                                  })
+                                }}
+                                selectedTotal={(bulkInstallments[p.id] || [])
+                                  .filter((i: any) => row.override_installment_ids.includes(i.id))
+                                  .reduce((s: number, i: any) => s + i.total_amount, 0)}
+                                theme="light"
+                              />
+                            </div>
                           )}
 
                           {row.override_tx_type === 'credit_payment' && (
