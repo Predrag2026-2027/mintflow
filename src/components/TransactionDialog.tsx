@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import InlineCategoryAdd from './InlineCategoryAdd'
-import { getRate, convertToUSD } from '../services/currencyService'
+import { getRate, convertToUSD, getRatesForDate } from '../services/currencyService'
 import CreditInstallmentSelector from './CreditInstallmentSelector'
 import { useCreditPayment } from './useCreditPayment'
 
@@ -520,10 +520,12 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
         const creditName = credits.find(c => c.id === selectedCreditId)?.name || 'Credit'
 
         // Fetch EUR/USD rate to convert USD paid → EUR paid
+        // getRatesForDate vraća oba kursa: usdRsdRate i eurRsdRate
+        // EUR/USD = eurRsdRate / usdRsdRate (npr. 117.38 / 100.03 = 1.1735)
         let eurUsdRate = 1.08  // fallback
         try {
-          const eurRateData = await getRate('EUR', txDate, false)
-          eurUsdRate = eurRateData.rate  // USD per 1 EUR
+          const rates = await getRatesForDate(txDate)
+          eurUsdRate = rates.eurRsdRate / rates.usdRsdRate
         } catch { /* use fallback */ }
 
         let remainingEUR = usdPaid / eurUsdRate  // EUR equivalent of payment
