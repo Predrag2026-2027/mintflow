@@ -511,56 +511,70 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
 
       } else if (txType === 'credit_payment') {
         // ── Credit payment ────────────────────────────────────────────────────
-        // User enters: amount in RSD, exRate = RSD per 1 EUR (NBS middle rate)
-        // EUR amount = RSD / exRate
-        // amount_usd stored as EUR equivalent (credit currency)
-        // Overflow: if payment exceeds selected installment(s), auto-close next ones
-        const exRateNum = parseFloat(exRate) || 1
-        const creditName = credits.find(c => c.id === selectedCreditId)?.name || 'Credit'
-        let remainingRSD = parseFloat(amount) || 0
+        // Existing system: currency=RSD, exRate=RSD/USD, amount_usd=RSD/exRate
+        // Credit installments are in EUR
+        // EUR paid = amount_usd / eur_usd_rate
+        // We fetch EUR/USD rate to calculate how many EUR the payment covers
 
-        // Sort selected installments by due_date ascending (oldest first)
+        const usdPaid = usdAmount  // already computed: RSD / (RSD/USD rate)
+        const creditName = credits.find(c => c.id === selectedCreditId)?.name || 'Credit'
+
+        // Fetch EUR/USD rate to convert USD paid → EUR paid
+        let eurUsdRate = 1.08  // fallback
+        try {
+          const eurRateData = await getRate('EUR', txDate, false)
+          eurUsdRate = eurRateData.rate  // USD per 1 EUR
+        } catch { /* use fallback */ }
+
+        let remainingEUR = usdPaid / eurUsdRate  // EUR equivalent of payment
+
+        // Sort selected installments by due_date (oldest first)
         const sortedInstIds = [...selectedInstallmentIds].sort((a, b) => {
           const ia = creditInstallments.find(i => i.id === a)
           const ib = creditInstallments.find(i => i.id === b)
           return (ia?.due_date || '').localeCompare(ib?.due_date || '')
         })
 
-        // If overflow, also fetch next outstanding installments not in selection
-        let allInstToProcess = [...sortedInstIds]
-        if (remainingRSD > 0) {
-          const { data: nextInsts } = await supabase
-            .from('credit_installments')
-            .select('id, due_date')
-            .eq('credit_id', selectedCreditId)
-            .eq('status', 'outstanding')
-            .not('id', 'in', `(${sortedInstIds.map(id => `"${id}"`).join(',')})`)
-            .order('due_date')
-          if (nextInsts) {
-            allInstToProcess = [...allInstToProcess, ...nextInsts.map(i => i.id)]
-          }
-        }
+        // Fetch next outstanding installments for overflow
+        const { data: nextInsts } = await supabase
+          .from('credit_installments')
+          .select('id, installment_no, due_date, principal_amount, interest_amount, total_amount, status, paid_amount')
+          .eq('credit_id', selectedCreditId)
+          .eq('status', 'outstanding')
+          .order('due_date')
 
-        for (const instId of allInstToProcess) {
-          if (remainingRSD <= 0.01) break
+        // Build full ordered list: selected first (sorted), then remaining for overflow
+        const selectedSet = new Set(sortedInstIds)
+        const overflowIds = (nextInsts || [])
+          .filter(i => !selectedSet.has(i.id))
+          .map(i => i.id)
+        const allInstIds = [...sortedInstIds, ...overflowIds]
 
-          // Fetch fresh installment data (may not be in creditInstallments if overflow)
+        for (const instId of allInstIds) {
+          if (remainingEUR <= 0.01) break
+
+          // Get installment data
           const inst = creditInstallments.find(i => i.id === instId)
-            || (await supabase.from('credit_installments')
-                .select('*').eq('id', instId).single()).data
+            || (nextInsts || []).find(i => i.id === instId)
           if (!inst) continue
 
-          const principalRSD = inst.principal_amount * exRateNum
-          const interestRSD  = inst.interest_amount  * exRateNum
-          let instPaidRSD = 0
+          // Account for already paid amount (partial from previous payment)
+          const alreadyPaidEUR = inst.paid_amount || 0
+          const remainingPrincipal = Math.max(0, inst.principal_amount - alreadyPaidEUR)
+          const remainingInterest = Math.max(0, inst.interest_amount - Math.max(0, alreadyPaidEUR - inst.principal_amount))
+          const remainingTotal = remainingPrincipal + remainingInterest
+
+          if (remainingTotal <= 0.01) continue  // already fully paid
+
+          let instPaidEUR = 0
           const firstTxId: string[] = []
 
           // 1. Principal → Loans/Credits/Dividend
-          if (inst.principal_amount > 0 && remainingRSD > 0) {
-            const paidPrincipalRSD = Math.min(principalRSD, remainingRSD)
-            const paidPrincipalEUR = paidPrincipalRSD / exRateNum
-            remainingRSD -= paidPrincipalRSD
-            instPaidRSD  += paidPrincipalRSD
+          if (remainingPrincipal > 0 && remainingEUR > 0) {
+            const paidPrincipalEUR = Math.min(remainingPrincipal, remainingEUR)
+            const paidPrincipalUSD = paidPrincipalEUR * eurUsdRate
+            remainingEUR -= paidPrincipalEUR
+            instPaidEUR  += paidPrincipalEUR
 
             const { data: txP } = await supabase.from('transactions').insert({
               company_id: companyId || null,
@@ -570,15 +584,15 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
               statement_number: statement || null,
               type: 'credit_payment',
               tx_subtype: 'expense',
-              currency: 'EUR',
-              amount: Math.round(paidPrincipalEUR * 100) / 100,
-              exchange_rate: exRateNum,
-              amount_usd: Math.round(paidPrincipalEUR * 100) / 100,
+              currency,
+              amount: parseFloat(amount),
+              exchange_rate: parseFloat(exRate) || null,
+              amount_usd: Math.round(paidPrincipalUSD * 100) / 100,
               pl_impact: true,
               pl_category: 'Loans/Credits/Dividend',
               pl_subcategory: null,
               department: null,
-              expense_description: `Principal — ${creditName} #${inst.installment_no}`,
+              expense_description: `Principal — ${creditName} #${inst.installment_no} (€${paidPrincipalEUR.toFixed(2)})`,
               cf_type: 'recurring',
               cf_frequency: 'monthly',
               note: note || null,
@@ -588,11 +602,11 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
           }
 
           // 2. Interest → Financial Expenses / Interest
-          if (inst.interest_amount > 0 && remainingRSD > 0) {
-            const paidInterestRSD = Math.min(interestRSD, remainingRSD)
-            const paidInterestEUR = paidInterestRSD / exRateNum
-            remainingRSD -= paidInterestRSD
-            instPaidRSD  += paidInterestRSD
+          if (remainingInterest > 0 && remainingEUR > 0) {
+            const paidInterestEUR = Math.min(remainingInterest, remainingEUR)
+            const paidInterestUSD = paidInterestEUR * eurUsdRate
+            remainingEUR -= paidInterestEUR
+            instPaidEUR  += paidInterestEUR
 
             await supabase.from('transactions').insert({
               company_id: companyId || null,
@@ -602,15 +616,15 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
               statement_number: statement || null,
               type: 'credit_payment',
               tx_subtype: 'expense',
-              currency: 'EUR',
-              amount: Math.round(paidInterestEUR * 100) / 100,
-              exchange_rate: exRateNum,
-              amount_usd: Math.round(paidInterestEUR * 100) / 100,
+              currency,
+              amount: parseFloat(amount),
+              exchange_rate: parseFloat(exRate) || null,
+              amount_usd: Math.round(paidInterestUSD * 100) / 100,
               pl_impact: true,
               pl_category: 'Financial Expenses',
               pl_subcategory: 'Interest',
               department: null,
-              expense_description: `Interest — ${creditName} #${inst.installment_no}`,
+              expense_description: `Interest — ${creditName} #${inst.installment_no} (€${paidInterestEUR.toFixed(2)})`,
               cf_type: 'recurring',
               cf_frequency: 'monthly',
               note: note || null,
@@ -618,16 +632,15 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
             })
           }
 
-          // Update installment status
-          const totalInstRSD = principalRSD + interestRSD
-          const instStatus = instPaidRSD >= totalInstRSD - 0.01 ? 'paid' : 'outstanding'
-          const paidEUR = instPaidRSD / exRateNum
+          // Update installment
+          const totalPaidEUR = alreadyPaidEUR + instPaidEUR
+          const instStatus = totalPaidEUR >= inst.total_amount - 0.01 ? 'paid' : 'outstanding'
 
           await supabase.from('credit_installments').update({
             status: instStatus,
             paid_date: instStatus === 'paid' ? txDate : null,
             transaction_id: firstTxId[0] || null,
-            paid_amount: Math.round(paidEUR * 100) / 100,
+            paid_amount: Math.round(totalPaidEUR * 100) / 100,
             updated_at: new Date().toISOString(),
           }).eq('id', instId)
         }
@@ -642,7 +655,6 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
               .update({ status: 'closed', updated_at: new Date().toISOString() })
               .eq('id', selectedCreditId)
         }
-
       } else {
         // ── Invoice payment or Direct transaction ─────────────────────────────
         let txId: string
@@ -1018,20 +1030,18 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                 </label>
               </div>
               <div style={{ ...s.infoBox, margin: '10px 0' }}>
-                {txType === 'credit_payment'
-                  ? `Enter RSD/EUR rate (NBS middle rate for ${txDate}). Credits are in EUR — amount will be converted automatically.`
-                  : currency === 'USD' ? 'No conversion needed — amount is already in USD.'
-                  : `Rate fetched on transaction date (${txDate}).`}
+                {currency === 'USD' ? 'No conversion needed — amount is already in USD.' : `Rate fetched on transaction date (${txDate}).`}
+                {txType === 'credit_payment' && ' EUR equivalent calculated automatically from USD amount.'}
               </div>
               <div style={s.row2}>
                 <div style={s.field}>
-                  <label style={s.lbl}>{txType === 'credit_payment' ? `Amount paid (RSD)` : `Amount (${currency || '—'})`} <span style={s.req}>*</span></label>
+                  <label style={s.lbl}>Amount ({currency || '—'}) <span style={s.req}>*</span></label>
                   <input type="number" style={{ ...s.input, ...(fieldErr('amount') ? s.inputError : {}) }} value={amount}
                     onChange={e => { setAmount(e.target.value); touch('amount') }} onBlur={() => touch('amount')} placeholder="0.00" />
                   {fieldErr('amount') && <span style={s.errorMsg}>{fieldErr('amount')}</span>}
                 </div>
                 <div style={s.field}>
-                  <label style={s.lbl}>{txType === 'credit_payment' ? 'RSD / EUR rate (NBS)' : 'Exchange rate'} {currency !== 'USD' && <span style={s.req}>*</span>}</label>
+                  <label style={s.lbl}>Exchange rate {currency !== 'USD' && <span style={s.req}>*</span>}</label>
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <input type="number" style={{ ...s.input, flex: 1, ...(fieldErr('exRate') ? s.inputError : {}) }} value={exRate}
                       onChange={e => { setExRate(e.target.value); touch('exRate') }} onBlur={() => touch('exRate')}
@@ -1043,18 +1053,9 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                 </div>
               </div>
               <div style={s.convRow}>
-                <div><div style={s.convLabel}>Original amount</div><div style={s.convVal}>{amount ? `${parseFloat(amount).toLocaleString()} ${txType === 'credit_payment' ? 'RSD' : currency}` : '—'}</div></div>
+                <div><div style={s.convLabel}>Original amount</div><div style={s.convVal}>{amount ? `${parseFloat(amount).toLocaleString()} ${currency}` : '—'}</div></div>
                 <div style={{ fontSize: '20px', color: '#aaa', alignSelf: 'flex-end', paddingBottom: '4px' }}>→</div>
-                {txType === 'credit_payment' ? (
-                  <div>
-                    <div style={s.convLabel}>EUR equivalent</div>
-                    <div style={{ ...s.convVal, color: '#4EA8FF' }}>
-                      {amount && exRate ? `€${(parseFloat(amount) / parseFloat(exRate)).toFixed(2)}` : '€0.00'}
-                    </div>
-                  </div>
-                ) : (
-                  <div><div style={s.convLabel}>USD equivalent</div><div style={{ ...s.convVal, color: '#1D9E75' }}>${usdAmount > 0 ? usdAmount.toFixed(2) : '0.00'}</div></div>
-                )}
+                <div><div style={s.convLabel}>USD equivalent</div><div style={{ ...s.convVal, color: '#1D9E75' }}>${usdAmount > 0 ? usdAmount.toFixed(2) : '0.00'}</div></div>
               </div>
             </div>
           )}
