@@ -1,23 +1,28 @@
 // currencyService.ts
-// Koristi kurs.resenje.org — zvanični NBS srednji kurs, istorijski po datumu
-// Nema potrebe za API key-em. Fallback na exchangerate-api ako resenje.org ne radi.
+// Koristi Supabase Edge Function kao proxy za kurs.resenje.org (NBS zvanični srednji kurs)
+// Rešava CORS problem — pozivi idu kroz naš Supabase backend
+
+declare const process: { env: Record<string, string | undefined> }
 
 export interface ExchangeRate {
   from: string
   to: string
-  rate: number      // koliko RSD = 1 strana valuta (exchange_middle)
-  usdRate: number   // konverzija u USD (amount / usdRate)
+  rate: number      // RSD po jedinici valute (exchange_middle) — za prikaz korisniku
+  usdRate: number   // RSD/USD kurs — za konverziju u USD
   date: string
   source: string
 }
 
-// Cache da ne bismo pravili višestruke pozive za isti datum
+// Cache da ne pravimo višestruke pozive za isti datum
 const rateCache: Map<string, ExchangeRate> = new Map()
 
-// Formatira datum u YYYY-MM-DD za API poziv
+const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL || ''
+const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY || ''
+const NBS_PROXY = `${SUPABASE_URL}/functions/v1/nbs-rate`
+
+// Formatira datum u YYYY-MM-DD
 function toIsoDate(date: string): string {
   if (!date) return new Date().toISOString().split('T')[0]
-  // Već ISO format
   if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date
   // DD.MM.YYYY → YYYY-MM-DD
   const parts = date.split('.')
@@ -34,56 +39,48 @@ function nearestBusinessDay(isoDate: string): string {
   return d.toISOString().split('T')[0]
 }
 
-// Fetchuje kurs sa kurs.resenje.org (NBS podaci)
-// Vraća exchange_middle u RSD za datu valutu
+// Fetchuje kurs kroz Supabase Edge Function proxy
 async function fetchNbsRate(currency: string, isoDate: string): Promise<{ rsdRate: number; source: string }> {
-  const code = currency.toLowerCase()
-  const url = `https://kurs.resenje.org/api/v1/currencies/${code}/rates/${isoDate}`
+  const url = `${NBS_PROXY}?currency=${currency.toLowerCase()}&date=${isoDate}`
 
-  const response = await fetch(url)
-  if (!response.ok) throw new Error(`kurs.resenje.org: ${response.status}`)
+  const response = await fetch(url, {
+    headers: {
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+    }
+  })
+
+  if (!response.ok) throw new Error(`NBS proxy: ${response.status}`)
 
   const data = await response.json()
+  if (data.error) throw new Error(`NBS proxy error: ${data.error}`)
   if (!data.exchange_middle) throw new Error('Nema exchange_middle u odgovoru')
 
-  // exchange_middle je koliko RSD = 1 jedinica strane valute (parity)
-  // npr. USD: exchange_middle = 100.0086 → 1 USD = 100.0086 RSD
-  // EUR: exchange_middle = 117.3801 → 1 EUR = 117.3801 RSD
   return {
     rsdRate: data.exchange_middle / (data.parity || 1),
     source: `NBS (kurs.resenje.org) za ${data.date}`
   }
 }
 
-// Fetchuje kurs sa exchangerate-api.com kao fallback
+// Fallback: exchangerate-api.com
 async function fetchFallbackRate(currency: string): Promise<{ rsdRate: number; source: string }> {
-  const apiKey = process.env.REACT_APP_EXCHANGE_API_KEY
+  const apiKey = process.env.REACT_APP_EXCHANGE_API_KEY || ''
   if (!apiKey) throw new Error('Nema REACT_APP_EXCHANGE_API_KEY')
 
-  // Fetchujemo RSD/currency pair da dobijemo koliko RSD = 1 strana valuta
   const response = await fetch(
-    `https://v6.exchangerate-api.com/v6/${apiKey}/pair/USD/${currency}`
+    `https://v6.exchangerate-api.com/v6/${apiKey}/pair/RSD/${currency}`
   )
   if (!response.ok) throw new Error(`exchangerate-api: ${response.status}`)
 
   const data = await response.json()
   if (data.result !== 'success') throw new Error('exchangerate-api: neuspešan odgovor')
 
-  // data.conversion_rate = koliko currency dobijamo za 1 USD
-  // Trebamo: koliko RSD = 1 currency → fetchujemo RSD/currency
-  const r2 = await fetch(
-    `https://v6.exchangerate-api.com/v6/${apiKey}/pair/RSD/${currency}`
-  )
-  const d2 = await r2.json()
-  if (d2.result !== 'success') throw new Error('exchangerate-api RSD pair: neuspešan')
-
-  // d2.conversion_rate = koliko currency = 1 RSD → invertujemo
-  const rsdRate = 1 / d2.conversion_rate
+  // conversion_rate = koliko currency = 1 RSD → invertujemo da dobijemo RSD/currency
+  const rsdRate = 1 / data.conversion_rate
   return { rsdRate, source: 'Fallback (exchangerate-api.com)' }
 }
 
 // ─── Glavna funkcija ───────────────────────────────────────────────────────────
-// Vraća ExchangeRate objekat sa svim potrebnim podacima
 export async function getRate(
   currency: string,
   date?: string,
@@ -105,37 +102,29 @@ export async function getRate(
   let source: string
 
   try {
-    // Primarni izvor: NBS preko kurs.resenje.org
     const result = await fetchNbsRate(currency, isoDate)
     rsdRate = result.rsdRate
     source = result.source
   } catch (err) {
     console.warn(`NBS rate fetch failed za ${currency} ${isoDate}:`, err)
     try {
-      // Fallback: exchangerate-api.com
       const result = await fetchFallbackRate(currency)
       rsdRate = result.rsdRate
       source = result.source
     } catch (err2) {
       console.error('Fallback rate fetch failed:', err2)
-      // Poslednji resort: hardkodirani kurs
       const hardcoded: Record<string, number> = { RSD: 100.0, EUR: 117.0, AED: 27.2 }
       rsdRate = hardcoded[currency] || 100.0
       source = 'Hardcoded fallback'
     }
   }
 
-  // usdRate = koliko RSD = 1 USD (koristimo za konverziju u USD)
-  // Ako fetchujemo RSD direktno, rsdRate je već RSD/USD
-  // Ako fetchujemo EUR, rsdRate je RSD/EUR — konverzija u USD ide kroz RSD
-  let usdRate = rsdRate // za RSD: amount / usdRate = USD vrednost
-
+  // Za EUR transakcije trebamo i USD/RSD kurs za konverziju
+  let usdRate = rsdRate
   if (currency === 'EUR') {
-    // Za EUR transakcije: EUR → RSD → USD
-    // usdRate čuvamo kao RSD/USD koji dobijamo posebno
     try {
       const usdResult = await fetchNbsRate('USD', isoDate)
-      usdRate = usdResult.rsdRate // RSD/USD
+      usdRate = usdResult.rsdRate
     } catch {
       usdRate = 100.0
     }
@@ -144,8 +133,8 @@ export async function getRate(
   const exchangeRate: ExchangeRate = {
     from: currency,
     to: 'USD',
-    rate: rsdRate,    // RSD po jedinici valute (za prikaz korisniku)
-    usdRate,          // RSD/USD (za konverziju u USD)
+    rate: rsdRate,
+    usdRate,
     date: isoDate,
     source
   }
@@ -155,34 +144,25 @@ export async function getRate(
 }
 
 // ─── Konverzija u USD ──────────────────────────────────────────────────────────
-// Sve transakcije se konvertuju u USD (reporting valuta)
-// RSD i EUR idu kroz RSD/USD kurs
 export function convertToUSD(amount: number, currency: string, rate: number): number {
   if (currency === 'USD') return amount
-  // rate = RSD po jedinici valute (exchange_middle)
-  // za RSD: amount je već u RSD → amount / (RSD/USD kurs)
-  // za EUR: amount * (EUR u RSD) / (RSD/USD kurs) — ali ovo se rešava u getRate
-  // Ovde rate za RSD = RSD/USD, za EUR = RSD/EUR (a usdRate = RSD/USD)
   if (currency === 'RSD') return amount / rate
-  if (currency === 'EUR') return amount / rate  // rate za EUR je RSD/EUR, caller treba da prosledi usdRate
+  if (currency === 'EUR') return amount / rate
   if (currency === 'AED') return amount / rate
   return amount
 }
 
 // ─── Konverzija u EUR (za zatvaranje kredita) ──────────────────────────────────
-// Krediti su u EUR → USD transakcija se konvertuje u EUR za praćenje rata
 export function convertToEUR(amountUsd: number, eurRsdRate: number, usdRsdRate: number): number {
-  if (!eurRsdRate || !usdRsdRate) return amountUsd / 1.1 // fallback
-  // USD → RSD → EUR
+  if (!eurRsdRate || !usdRsdRate) return amountUsd / 1.1
   const amountRsd = amountUsd * usdRsdRate
   return amountRsd / eurRsdRate
 }
 
-// ─── Helper: dohvati i USD i EUR kurs za dati datum ───────────────────────────
-// Korisno za credit_payment transakcije koje trebaju oba kursa
+// ─── Dohvati USD i EUR kurs za dati datum (za credit_payment) ─────────────────
 export async function getRatesForDate(date: string): Promise<{
-  usdRsdRate: number   // koliko RSD = 1 USD
-  eurRsdRate: number   // koliko RSD = 1 EUR
+  usdRsdRate: number
+  eurRsdRate: number
   date: string
   source: string
 }> {
@@ -193,7 +173,6 @@ export async function getRatesForDate(date: string): Promise<{
       fetchNbsRate('USD', isoDate),
       fetchNbsRate('EUR', isoDate)
     ])
-
     return {
       usdRsdRate: usdResult.rsdRate,
       eurRsdRate: eurResult.rsdRate,
