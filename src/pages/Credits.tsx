@@ -274,8 +274,9 @@ function CreditRow({ credit, onRefresh }: { credit: Credit; onRefresh: () => voi
   }, [credit.id])
 
   const handleExpand = () => {
-    setExpanded(e => !e)
-    if (!expanded && installments.length === 0) loadInstallments()
+    const newExpanded = !expanded
+    setExpanded(newExpanded)
+    if (newExpanded) loadInstallments()  // always refetch to get latest paid_amount
   }
 
   const outstanding = installments.filter(i => i.status === 'outstanding')
@@ -350,11 +351,15 @@ function CreditRow({ credit, onRefresh }: { credit: Credit; onRefresh: () => voi
                 <div style={{ fontSize: '13px', color: isOverdue(nextDue.due_date) ? '#FF5B5A' : '#DCE9F6', fontWeight: isOverdue(nextDue.due_date) ? '600' : '400' }}>
                   {nextDue.due_date}
                 </div>
-                {isOverdue(nextDue.due_date) && (
+                {nextDue.paid_amount && nextDue.paid_amount > 0 ? (
+                  <span style={{ fontSize: '10px', color: '#F5A623', background: 'rgba(245,166,35,0.12)', padding: '1px 6px', borderRadius: '20px', fontWeight: '600' }}>
+                    Partial — €{nextDue.paid_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} paid
+                  </span>
+                ) : isOverdue(nextDue.due_date) ? (
                   <span style={{ fontSize: '10px', color: '#FF5B5A', background: 'rgba(255,91,90,0.12)', padding: '1px 6px', borderRadius: '20px', fontWeight: '600' }}>
                     {Math.abs(daysUntil(nextDue.due_date))}d overdue
                   </span>
-                )}
+                ) : null}
               </div>
             ) : (
               <div style={{ fontSize: '12px', color: '#00D47E' }}>Paid ✓</div>
@@ -424,9 +429,29 @@ function CreditRow({ credit, onRefresh }: { credit: Credit; onRefresh: () => voi
                         {inst.total_amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       <td style={{ padding: '9px 16px' }}>
-                        <span style={{ fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '20px', background: inst.status === 'paid' ? 'rgba(0,212,126,0.12)' : overdue ? 'rgba(255,91,90,0.12)' : 'rgba(255,255,255,0.06)', color: inst.status === 'paid' ? '#00D47E' : overdue ? '#FF5B5A' : '#7A9BB8' }}>
-                          {inst.status === 'paid' ? 'Paid' : overdue ? 'Overdue' : 'Outstanding'}
-                        </span>
+                        {(() => {
+                          const isPartial = inst.status === 'outstanding' && inst.paid_amount && inst.paid_amount > 0
+                          const paidPct = isPartial ? Math.min(100, (inst.paid_amount! / inst.total_amount) * 100) : 0
+                          return (
+                            <div>
+                              <span style={{ fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '20px',
+                                background: inst.status === 'paid' ? 'rgba(0,212,126,0.12)' : isPartial ? 'rgba(245,166,35,0.12)' : overdue ? 'rgba(255,91,90,0.12)' : 'rgba(255,255,255,0.06)',
+                                color: inst.status === 'paid' ? '#00D47E' : isPartial ? '#F5A623' : overdue ? '#FF5B5A' : '#7A9BB8' }}>
+                                {inst.status === 'paid' ? 'Paid' : isPartial ? 'Partial' : overdue ? 'Overdue' : 'Outstanding'}
+                              </span>
+                              {isPartial && (
+                                <div style={{ marginTop: '4px', width: '90px' }}>
+                                  <div style={{ height: '3px', background: 'rgba(255,255,255,0.08)', borderRadius: '2px', overflow: 'hidden' }}>
+                                    <div style={{ height: '100%', width: `${paidPct}%`, background: '#F5A623', borderRadius: '2px' }} />
+                                  </div>
+                                  <div style={{ fontSize: '9px', color: '#F5A623', marginTop: '2px', fontFamily: "'DM Mono',monospace" }}>
+                                    €{inst.paid_amount!.toFixed(2)} / €{inst.total_amount.toFixed(2)}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
                       </td>
                       <td style={{ padding: '9px 16px', textAlign: 'right' }}>
                         {inst.status === 'outstanding' && isVariable && (
