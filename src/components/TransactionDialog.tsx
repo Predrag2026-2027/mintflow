@@ -516,6 +516,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
         const exRateNum = parseFloat(exRate) || 1
         const creditName = credits.find(c => c.id === selectedCreditId)?.name || 'Credit'
         let remainingRSD = parseFloat(amount) || 0
+        console.log('[CREDIT] Starting payment:', { exRateNum, creditName, remainingRSD, selectedInstallmentIds, selectedCreditId })
 
         for (const instId of selectedInstallmentIds) {
           const inst = creditInstallments.find(i => i.id === instId)
@@ -534,6 +535,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
             remainingRSD  -= paidPrincipalRSD
             instPaidRSD   += paidPrincipalRSD
 
+            console.log('[CREDIT] Inserting principal tx:', { paidPrincipalRSD, paidPrincipalEUR })
             const { data: txP } = await supabase.from('transactions').insert({
               company_id: companyId || null,
               bank_id: bankId || null,
@@ -566,6 +568,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
             remainingRSD  -= paidInterestRSD
             instPaidRSD   += paidInterestRSD
 
+            console.log('[CREDIT] Inserting interest tx:', { paidInterestRSD, paidInterestEUR })
             await supabase.from('transactions').insert({
               company_id: companyId || null,
               bank_id: bankId || null,
