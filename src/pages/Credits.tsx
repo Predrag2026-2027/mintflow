@@ -508,12 +508,13 @@ export default function Credits() {
 
   // Auto-refetch when another page invalidates credits data
   useEffect(() => {
-    if (versions.credits > 0) fetchCredits()
+    if (versions.credits > 0) { load(); setRefreshKey(k => k + 1) }
   }, [versions.credits]) // eslint-disable-line
   const [credits, setCredits] = useState<Credit[]>([])
   const [loading, setLoading] = useState(true)
   const [showNewDialog, setShowNewDialog] = useState(false)
   const [statusFilter, setStatusFilter] = useState<'active' | 'all'>('active')
+  const [refreshKey, setRefreshKey] = useState(0)
 
   // Aggregate stats from DB
   const [stats, setStats] = useState({ totalOutstanding: 0, totalPrincipal: 0, overdueCount: 0, nextDueDate: '' })
@@ -615,7 +616,7 @@ export default function Credits() {
       ) : (
         <div>
           {filtered.map(credit => (
-            <CreditRow key={credit.id} credit={credit} onRefresh={load} />
+            <CreditRow key={`${credit.id}-${refreshKey}`} credit={credit} onRefresh={load} />
           ))}
         </div>
       )}
