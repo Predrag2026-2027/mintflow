@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { supabase } from '../supabase'
 import InlineCategoryAdd from './InlineCategoryAdd'
 import * as XLSX from 'xlsx'
-import { getRate, convertToUSD } from '../services/currencyService'
+import { getRate, convertToUSD, getRatesForDate } from '../services/currencyService'
 import PartnerDialog from './PartnerDialog'
 import CreditInstallmentSelector from './CreditInstallmentSelector'
 // credit payment P&L logic is inline
@@ -726,23 +726,30 @@ export default function BulkImport({ onClose, onImported }: Props) {
         account_number: p.account_number || null, model: p.model || null, reference_number: p.reference_number || null, note: row.override_note || p.description || null, status: 'posted',
       }).select().single()
       if (row.override_tx_type === 'credit_payment' && row.override_installment_ids.length > 0) {
-        const { exchange_rate: rateBI } = await getAmountUsd(p, 0)
+        // EUR/USD = eurRsdRate / usdRsdRate (NBS zvanični kurs)
+        let eurUsdRateBI = 1.08 // fallback
+        try {
+          const rates = await getRatesForDate(formatDate(p.date))
+          eurUsdRateBI = rates.eurRsdRate / rates.usdRsdRate
+        } catch { /* use fallback */ }
+
+        const creditName = credits.find((c: any) => c.id === row.override_credit_id)?.name || 'Credit'
+
         for (const instId of row.override_installment_ids) {
           const { data: inst } = await supabase
             .from('credit_installments')
             .select('id, installment_no, principal_amount, interest_amount')
             .eq('id', instId).single()
           if (!inst) continue
-          const creditName = credits.find((c: any) => c.id === row.override_credit_id)?.name || 'Credit'
 
           if (inst.principal_amount > 0) {
             await supabase.from('transactions').insert({
               company_id: company, bank_id: bank,
               partner_id: partnerId, transaction_date: formatDate(p.date),
               statement_number: p.statement_number || null,
-              type: 'credit_payment', tx_subtype: 'expense', currency: p.currency,
-              amount: inst.principal_amount, exchange_rate: rateBI,
-              amount_usd: convertToUSD(inst.principal_amount, p.currency, rateBI || 1),
+              type: 'credit_payment', tx_subtype: 'expense', currency: 'EUR',
+              amount: inst.principal_amount, exchange_rate: eurUsdRateBI,
+              amount_usd: Math.round(inst.principal_amount * eurUsdRateBI * 100) / 100,
               pl_impact: true, pl_category: 'Loans/Credits/Dividend',
               expense_description: `Principal — ${creditName} #${inst.installment_no}`,
               cf_type: 'recurring', cf_frequency: 'monthly',
@@ -754,9 +761,9 @@ export default function BulkImport({ onClose, onImported }: Props) {
               company_id: company, bank_id: bank,
               partner_id: partnerId, transaction_date: formatDate(p.date),
               statement_number: p.statement_number || null,
-              type: 'credit_payment', tx_subtype: 'expense', currency: p.currency,
-              amount: inst.interest_amount, exchange_rate: rateBI,
-              amount_usd: convertToUSD(inst.interest_amount, p.currency, rateBI || 1),
+              type: 'credit_payment', tx_subtype: 'expense', currency: 'EUR',
+              amount: inst.interest_amount, exchange_rate: eurUsdRateBI,
+              amount_usd: Math.round(inst.interest_amount * eurUsdRateBI * 100) / 100,
               pl_impact: true, pl_category: 'Financial Expenses',
               pl_subcategory: 'Interest',
               expense_description: `Interest — ${creditName} #${inst.installment_no}`,
@@ -780,23 +787,30 @@ export default function BulkImport({ onClose, onImported }: Props) {
       }
 
       if (row.override_tx_type === 'credit_payment' && row.override_installment_ids.length > 0) {
-        const { exchange_rate: rateBI } = await getAmountUsd(p, 0)
+        // EUR/USD = eurRsdRate / usdRsdRate (NBS zvanični kurs)
+        let eurUsdRateBI = 1.08 // fallback
+        try {
+          const rates = await getRatesForDate(formatDate(p.date))
+          eurUsdRateBI = rates.eurRsdRate / rates.usdRsdRate
+        } catch { /* use fallback */ }
+
+        const creditName = credits.find((c: any) => c.id === row.override_credit_id)?.name || 'Credit'
+
         for (const instId of row.override_installment_ids) {
           const { data: inst } = await supabase
             .from('credit_installments')
             .select('id, installment_no, principal_amount, interest_amount')
             .eq('id', instId).single()
           if (!inst) continue
-          const creditName = credits.find((c: any) => c.id === row.override_credit_id)?.name || 'Credit'
 
           if (inst.principal_amount > 0) {
             await supabase.from('transactions').insert({
               company_id: company, bank_id: bank,
               partner_id: partnerId, transaction_date: formatDate(p.date),
               statement_number: p.statement_number || null,
-              type: 'credit_payment', tx_subtype: 'expense', currency: p.currency,
-              amount: inst.principal_amount, exchange_rate: rateBI,
-              amount_usd: convertToUSD(inst.principal_amount, p.currency, rateBI || 1),
+              type: 'credit_payment', tx_subtype: 'expense', currency: 'EUR',
+              amount: inst.principal_amount, exchange_rate: eurUsdRateBI,
+              amount_usd: Math.round(inst.principal_amount * eurUsdRateBI * 100) / 100,
               pl_impact: true, pl_category: 'Loans/Credits/Dividend',
               expense_description: `Principal — ${creditName} #${inst.installment_no}`,
               cf_type: 'recurring', cf_frequency: 'monthly',
@@ -808,9 +822,9 @@ export default function BulkImport({ onClose, onImported }: Props) {
               company_id: company, bank_id: bank,
               partner_id: partnerId, transaction_date: formatDate(p.date),
               statement_number: p.statement_number || null,
-              type: 'credit_payment', tx_subtype: 'expense', currency: p.currency,
-              amount: inst.interest_amount, exchange_rate: rateBI,
-              amount_usd: convertToUSD(inst.interest_amount, p.currency, rateBI || 1),
+              type: 'credit_payment', tx_subtype: 'expense', currency: 'EUR',
+              amount: inst.interest_amount, exchange_rate: eurUsdRateBI,
+              amount_usd: Math.round(inst.interest_amount * eurUsdRateBI * 100) / 100,
               pl_impact: true, pl_category: 'Financial Expenses',
               pl_subcategory: 'Interest',
               expense_description: `Interest — ${creditName} #${inst.installment_no}`,
