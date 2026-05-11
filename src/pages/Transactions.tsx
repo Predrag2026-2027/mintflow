@@ -15,6 +15,7 @@ type Tab = 'invoices' | 'transactions' | 'passthrough'
 export default function Transactions() {
   useAuth()
 
+  const { invalidate } = useDataRefresh()
   const [activeTab, setActiveTab] = useState<Tab>('invoices')
   const [showMenu, setShowMenu] = useState<string | null>(null)
 
