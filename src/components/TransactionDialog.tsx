@@ -1018,17 +1018,20 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                 </label>
               </div>
               <div style={{ ...s.infoBox, margin: '10px 0' }}>
-                {currency === 'USD' ? 'No conversion needed — amount is already in USD.' : `Rate fetched on transaction date (${txDate}).`}
+                {txType === 'credit_payment'
+                  ? `Enter RSD/EUR rate (NBS middle rate for ${txDate}). Credits are in EUR — amount will be converted automatically.`
+                  : currency === 'USD' ? 'No conversion needed — amount is already in USD.'
+                  : `Rate fetched on transaction date (${txDate}).`}
               </div>
               <div style={s.row2}>
                 <div style={s.field}>
-                  <label style={s.lbl}>Amount ({currency || '—'}) <span style={s.req}>*</span></label>
+                  <label style={s.lbl}>{txType === 'credit_payment' ? `Amount paid (RSD)` : `Amount (${currency || '—'})`} <span style={s.req}>*</span></label>
                   <input type="number" style={{ ...s.input, ...(fieldErr('amount') ? s.inputError : {}) }} value={amount}
                     onChange={e => { setAmount(e.target.value); touch('amount') }} onBlur={() => touch('amount')} placeholder="0.00" />
                   {fieldErr('amount') && <span style={s.errorMsg}>{fieldErr('amount')}</span>}
                 </div>
                 <div style={s.field}>
-                  <label style={s.lbl}>Exchange rate {currency !== 'USD' && <span style={s.req}>*</span>}</label>
+                  <label style={s.lbl}>{txType === 'credit_payment' ? 'RSD / EUR rate (NBS)' : 'Exchange rate'} {currency !== 'USD' && <span style={s.req}>*</span>}</label>
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <input type="number" style={{ ...s.input, flex: 1, ...(fieldErr('exRate') ? s.inputError : {}) }} value={exRate}
                       onChange={e => { setExRate(e.target.value); touch('exRate') }} onBlur={() => touch('exRate')}
@@ -1040,9 +1043,18 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                 </div>
               </div>
               <div style={s.convRow}>
-                <div><div style={s.convLabel}>Original amount</div><div style={s.convVal}>{amount ? `${parseFloat(amount).toLocaleString()} ${currency}` : '—'}</div></div>
+                <div><div style={s.convLabel}>Original amount</div><div style={s.convVal}>{amount ? `${parseFloat(amount).toLocaleString()} ${txType === 'credit_payment' ? 'RSD' : currency}` : '—'}</div></div>
                 <div style={{ fontSize: '20px', color: '#aaa', alignSelf: 'flex-end', paddingBottom: '4px' }}>→</div>
-                <div><div style={s.convLabel}>USD equivalent</div><div style={{ ...s.convVal, color: '#1D9E75' }}>${usdAmount > 0 ? usdAmount.toFixed(2) : '0.00'}</div></div>
+                {txType === 'credit_payment' ? (
+                  <div>
+                    <div style={s.convLabel}>EUR equivalent</div>
+                    <div style={{ ...s.convVal, color: '#4EA8FF' }}>
+                      {amount && exRate ? `€${(parseFloat(amount) / parseFloat(exRate)).toFixed(2)}` : '€0.00'}
+                    </div>
+                  </div>
+                ) : (
+                  <div><div style={s.convLabel}>USD equivalent</div><div style={{ ...s.convVal, color: '#1D9E75' }}>${usdAmount > 0 ? usdAmount.toFixed(2) : '0.00'}</div></div>
+                )}
               </div>
             </div>
           )}

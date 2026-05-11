@@ -41,7 +41,13 @@ export function useCreditPayment() {
       .eq('credit_id', selectedCreditId)
       .eq('status', 'outstanding')
       .order('due_date')
-      .then(({ data }) => { if (data) setCreditInstallments(data) })
+      .then(({ data }) => {
+        if (data) {
+          setCreditInstallments(data)
+          // Auto-select first outstanding installment
+          if (data.length > 0) setSelectedInstallmentIds([data[0].id])
+        }
+      })
   }, [selectedCreditId])
 
   const toggleInstallment = (id: string) =>
