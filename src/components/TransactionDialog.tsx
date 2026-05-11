@@ -511,8 +511,10 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
 
       } else if (txType === 'credit_payment') {
         // ── Credit payment ────────────────────────────────────────────────────
-        // currency = RSD, exRate = RSD per 1 EUR (NBS middle rate)
-        // So: EUR amount = RSD amount / exRate
+        // User enters: amount in RSD, exRate = RSD per 1 EUR (NBS middle rate)
+        // EUR amount = RSD / exRate
+        // amount_usd stored as EUR equivalent (credit currency)
+        // Overflow: if payment exceeds selected installment(s), auto-close next ones
         const exRateNum = parseFloat(exRate) || 1
         const creditName = credits.find(c => c.id === selectedCreditId)?.name || 'Credit'
         let remainingRSD = parseFloat(amount) || 0
@@ -524,11 +526,30 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
           return (ia?.due_date || '').localeCompare(ib?.due_date || '')
         })
 
-        for (const instId of sortedInstIds) {
+        // If overflow, also fetch next outstanding installments not in selection
+        let allInstToProcess = [...sortedInstIds]
+        if (remainingRSD > 0) {
+          const { data: nextInsts } = await supabase
+            .from('credit_installments')
+            .select('id, due_date')
+            .eq('credit_id', selectedCreditId)
+            .eq('status', 'outstanding')
+            .not('id', 'in', `(${sortedInstIds.map(id => `"${id}"`).join(',')})`)
+            .order('due_date')
+          if (nextInsts) {
+            allInstToProcess = [...allInstToProcess, ...nextInsts.map(i => i.id)]
+          }
+        }
+
+        for (const instId of allInstToProcess) {
+          if (remainingRSD <= 0.01) break
+
+          // Fetch fresh installment data (may not be in creditInstallments if overflow)
           const inst = creditInstallments.find(i => i.id === instId)
+            || (await supabase.from('credit_installments')
+                .select('*').eq('id', instId).single()).data
           if (!inst) continue
 
-          // Convert EUR installment amounts to RSD for comparison
           const principalRSD = inst.principal_amount * exRateNum
           const interestRSD  = inst.interest_amount  * exRateNum
           let instPaidRSD = 0
@@ -538,8 +559,8 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
           if (inst.principal_amount > 0 && remainingRSD > 0) {
             const paidPrincipalRSD = Math.min(principalRSD, remainingRSD)
             const paidPrincipalEUR = paidPrincipalRSD / exRateNum
-            remainingRSD  -= paidPrincipalRSD
-            instPaidRSD   += paidPrincipalRSD
+            remainingRSD -= paidPrincipalRSD
+            instPaidRSD  += paidPrincipalRSD
 
             const { data: txP } = await supabase.from('transactions').insert({
               company_id: companyId || null,
@@ -549,15 +570,15 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
               statement_number: statement || null,
               type: 'credit_payment',
               tx_subtype: 'expense',
-              currency,
-              amount: Math.round(paidPrincipalRSD * 100) / 100,
+              currency: 'EUR',
+              amount: Math.round(paidPrincipalEUR * 100) / 100,
               exchange_rate: exRateNum,
               amount_usd: Math.round(paidPrincipalEUR * 100) / 100,
               pl_impact: true,
               pl_category: 'Loans/Credits/Dividend',
               pl_subcategory: null,
               department: null,
-              expense_description: `Principal — ${creditName} #${inst.installment_no} (€${paidPrincipalEUR.toFixed(2)})`,
+              expense_description: `Principal — ${creditName} #${inst.installment_no}`,
               cf_type: 'recurring',
               cf_frequency: 'monthly',
               note: note || null,
@@ -570,8 +591,8 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
           if (inst.interest_amount > 0 && remainingRSD > 0) {
             const paidInterestRSD = Math.min(interestRSD, remainingRSD)
             const paidInterestEUR = paidInterestRSD / exRateNum
-            remainingRSD  -= paidInterestRSD
-            instPaidRSD   += paidInterestRSD
+            remainingRSD -= paidInterestRSD
+            instPaidRSD  += paidInterestRSD
 
             await supabase.from('transactions').insert({
               company_id: companyId || null,
@@ -581,15 +602,15 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
               statement_number: statement || null,
               type: 'credit_payment',
               tx_subtype: 'expense',
-              currency,
-              amount: Math.round(paidInterestRSD * 100) / 100,
+              currency: 'EUR',
+              amount: Math.round(paidInterestEUR * 100) / 100,
               exchange_rate: exRateNum,
               amount_usd: Math.round(paidInterestEUR * 100) / 100,
               pl_impact: true,
               pl_category: 'Financial Expenses',
               pl_subcategory: 'Interest',
               department: null,
-              expense_description: `Interest — ${creditName} #${inst.installment_no} (€${paidInterestEUR.toFixed(2)})`,
+              expense_description: `Interest — ${creditName} #${inst.installment_no}`,
               cf_type: 'recurring',
               cf_frequency: 'monthly',
               note: note || null,
@@ -597,7 +618,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
             })
           }
 
-          // Determine installment status
+          // Update installment status
           const totalInstRSD = principalRSD + interestRSD
           const instStatus = instPaidRSD >= totalInstRSD - 0.01 ? 'paid' : 'outstanding'
           const paidEUR = instPaidRSD / exRateNum
