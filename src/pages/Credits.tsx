@@ -256,7 +256,7 @@ function EditInterestDialog({ installment, onClose, onSaved }: { installment: In
 }
 
 // ─── Credit Row (expandable) ──────────────────────────────────────────────────
-function CreditRow({ credit, onRefresh }: { credit: Credit; onRefresh: () => void }) {
+function CreditRow({ credit, onRefresh, refreshKey }: { credit: Credit; onRefresh: () => void; refreshKey: number }) {
   const [expanded, setExpanded] = useState(false)
   const [installments, setInstallments] = useState<Installment[]>([])
   const [loadingInst, setLoadingInst] = useState(false)
@@ -617,7 +617,7 @@ export default function Credits() {
       ) : (
         <div>
           {filtered.map(credit => (
-            <CreditRow key={`${credit.id}-${refreshKey}`} credit={credit} onRefresh={load} />
+            <CreditRow key={`${credit.id}-${refreshKey}`} credit={credit} onRefresh={load} refreshKey={refreshKey} />
           ))}
         </div>
       )}
