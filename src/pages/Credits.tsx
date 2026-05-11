@@ -506,10 +506,6 @@ function CreditRow({ credit, onRefresh }: { credit: Credit; onRefresh: () => voi
 export default function Credits() {
   const { versions } = useDataRefresh()
 
-  // Auto-refetch when another page invalidates credits data
-  useEffect(() => {
-    if (versions.credits > 0) { load(); setRefreshKey(k => k + 1) }
-  }, [versions.credits]) // eslint-disable-line
   const [credits, setCredits] = useState<Credit[]>([])
   const [loading, setLoading] = useState(true)
   const [showNewDialog, setShowNewDialog] = useState(false)
@@ -543,6 +539,11 @@ export default function Credits() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // Refetch + remount CreditRows when data invalidated from another page
+  useEffect(() => {
+    if (versions.credits > 0) { load(); setRefreshKey(k => k + 1) }
+  }, [versions.credits, load]) // eslint-disable-line
 
   const filtered = statusFilter === 'active' ? credits.filter(c => c.status === 'active') : credits
 
