@@ -1,6 +1,5 @@
 // currencyService.ts
 // Koristi Supabase Edge Function kao proxy za kurs.resenje.org (NBS zvanični srednji kurs)
-// Rešava CORS problem — pozivi idu kroz naš Supabase backend
 
 declare const process: { env: Record<string, string | undefined> }
 
@@ -13,24 +12,21 @@ export interface ExchangeRate {
   source: string
 }
 
-// Cache da ne pravimo višestruke pozive za isti datum
 const rateCache: Map<string, ExchangeRate> = new Map()
 
-const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL || ''
-const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY || ''
+// Vite koristi import.meta.env, React CRA koristi process.env
+const SUPABASE_URL = (import.meta as any).env?.VITE_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || ''
+const SUPABASE_ANON_KEY = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY || ''
 const NBS_PROXY = `${SUPABASE_URL}/functions/v1/nbs-rate`
 
-// Formatira datum u YYYY-MM-DD
 function toIsoDate(date: string): string {
   if (!date) return new Date().toISOString().split('T')[0]
   if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date
-  // DD.MM.YYYY → YYYY-MM-DD
   const parts = date.split('.')
   if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`
   return date
 }
 
-// Vraća najbliži radni dan unazad (NBS ne objavljuje vikendom)
 function nearestBusinessDay(isoDate: string): string {
   const d = new Date(isoDate)
   const day = d.getDay()
@@ -39,7 +35,6 @@ function nearestBusinessDay(isoDate: string): string {
   return d.toISOString().split('T')[0]
 }
 
-// Fetchuje kurs kroz Supabase Edge Function proxy
 async function fetchNbsRate(currency: string, isoDate: string): Promise<{ rsdRate: number; source: string }> {
   const url = `${NBS_PROXY}?currency=${currency.toLowerCase()}&date=${isoDate}`
 
@@ -62,10 +57,9 @@ async function fetchNbsRate(currency: string, isoDate: string): Promise<{ rsdRat
   }
 }
 
-// Fallback: exchangerate-api.com
 async function fetchFallbackRate(currency: string): Promise<{ rsdRate: number; source: string }> {
-  const apiKey = process.env.REACT_APP_EXCHANGE_API_KEY || ''
-  if (!apiKey) throw new Error('Nema REACT_APP_EXCHANGE_API_KEY')
+  const apiKey = (import.meta as any).env?.VITE_EXCHANGE_API_KEY || process.env.REACT_APP_EXCHANGE_API_KEY || ''
+  if (!apiKey) throw new Error('Nema Exchange API key')
 
   const response = await fetch(
     `https://v6.exchangerate-api.com/v6/${apiKey}/pair/RSD/${currency}`
@@ -75,12 +69,10 @@ async function fetchFallbackRate(currency: string): Promise<{ rsdRate: number; s
   const data = await response.json()
   if (data.result !== 'success') throw new Error('exchangerate-api: neuspešan odgovor')
 
-  // conversion_rate = koliko currency = 1 RSD → invertujemo da dobijemo RSD/currency
   const rsdRate = 1 / data.conversion_rate
   return { rsdRate, source: 'Fallback (exchangerate-api.com)' }
 }
 
-// ─── Glavna funkcija ───────────────────────────────────────────────────────────
 export async function getRate(
   currency: string,
   date?: string,
@@ -94,9 +86,7 @@ export async function getRate(
   const isoDate = nearestBusinessDay(toIsoDate(date || new Date().toISOString().split('T')[0]))
   const cacheKey = `${currency}_${isoDate}`
 
-  if (rateCache.has(cacheKey)) {
-    return rateCache.get(cacheKey)!
-  }
+  if (rateCache.has(cacheKey)) return rateCache.get(cacheKey)!
 
   let rsdRate: number
   let source: string
@@ -119,7 +109,6 @@ export async function getRate(
     }
   }
 
-  // Za EUR transakcije trebamo i USD/RSD kurs za konverziju
   let usdRate = rsdRate
   if (currency === 'EUR') {
     try {
@@ -143,7 +132,6 @@ export async function getRate(
   return exchangeRate
 }
 
-// ─── Konverzija u USD ──────────────────────────────────────────────────────────
 export function convertToUSD(amount: number, currency: string, rate: number): number {
   if (currency === 'USD') return amount
   if (currency === 'RSD') return amount / rate
@@ -152,14 +140,12 @@ export function convertToUSD(amount: number, currency: string, rate: number): nu
   return amount
 }
 
-// ─── Konverzija u EUR (za zatvaranje kredita) ──────────────────────────────────
 export function convertToEUR(amountUsd: number, eurRsdRate: number, usdRsdRate: number): number {
   if (!eurRsdRate || !usdRsdRate) return amountUsd / 1.1
   const amountRsd = amountUsd * usdRsdRate
   return amountRsd / eurRsdRate
 }
 
-// ─── Dohvati USD i EUR kurs za dati datum (za credit_payment) ─────────────────
 export async function getRatesForDate(date: string): Promise<{
   usdRsdRate: number
   eurRsdRate: number
