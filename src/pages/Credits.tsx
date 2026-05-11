@@ -505,6 +505,11 @@ function CreditRow({ credit, onRefresh }: { credit: Credit; onRefresh: () => voi
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function Credits() {
   const { versions } = useDataRefresh()
+
+  // Auto-refetch when another page invalidates credits data
+  useEffect(() => {
+    if (versions.credits > 0) fetchCredits()
+  }, [versions.credits]) // eslint-disable-line
   const [credits, setCredits] = useState<Credit[]>([])
   const [loading, setLoading] = useState(true)
   const [showNewDialog, setShowNewDialog] = useState(false)
