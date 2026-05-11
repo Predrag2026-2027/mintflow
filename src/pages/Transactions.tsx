@@ -92,9 +92,19 @@ export default function Transactions() {
 
   const deleteTransaction = async (id: string) => {
     if (!window.confirm('Delete this transaction?')) return
-    // Nullify FK references before delete to avoid 409 conflict
-    await supabase.from('credit_installments').update({ transaction_id: null }).eq('transaction_id', id)
+    // Reset credit installments that reference this transaction
+    await supabase.from('credit_installments')
+      .update({
+        transaction_id: null,
+        paid_amount: 0,
+        status: 'outstanding',
+        paid_date: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('transaction_id', id)
+    // Remove invoice links
     await supabase.from('invoice_transaction_links').delete().eq('transaction_id', id)
+    // Delete the transaction
     await supabase.from('transactions').delete().eq('id', id)
     fetchTransactions(); setShowMenu(null)
   }
