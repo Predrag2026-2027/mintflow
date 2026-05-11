@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../supabase'
+import { useDataRefresh } from '../contexts/DataRefreshContext'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Credit {
@@ -503,6 +504,7 @@ function CreditRow({ credit, onRefresh }: { credit: Credit; onRefresh: () => voi
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function Credits() {
+  const { versions } = useDataRefresh()
   const [credits, setCredits] = useState<Credit[]>([])
   const [loading, setLoading] = useState(true)
   const [showNewDialog, setShowNewDialog] = useState(false)

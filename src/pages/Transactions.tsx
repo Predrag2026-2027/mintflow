@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../supabase'
+import { useDataRefresh } from '../contexts/DataRefreshContext'
 import InvoiceDialog from '../components/InvoiceDialog'
 import TransactionDialog from '../components/TransactionDialog'
 import PassthroughDialog from '../components/PassthroughDialog'
@@ -106,6 +107,9 @@ export default function Transactions() {
     await supabase.from('invoice_transaction_links').delete().eq('transaction_id', id)
     // Delete the transaction
     await supabase.from('transactions').delete().eq('id', id)
+    // Signal other pages to refetch
+    invalidate('credits')
+    invalidate('transactions')
     fetchTransactions(); setShowMenu(null)
   }
 
