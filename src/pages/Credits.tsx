@@ -32,6 +32,7 @@ interface Installment {
   status: 'paid' | 'outstanding'
   transaction_id: string | null
   paid_date: string | null
+  paid_amount: number | null
   notes: string | null
 }
 

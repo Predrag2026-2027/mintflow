@@ -516,9 +516,15 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
         const exRateNum = parseFloat(exRate) || 1
         const creditName = credits.find(c => c.id === selectedCreditId)?.name || 'Credit'
         let remainingRSD = parseFloat(amount) || 0
-        console.log('[CREDIT] Starting payment:', { exRateNum, creditName, remainingRSD, selectedInstallmentIds, selectedCreditId })
 
-        for (const instId of selectedInstallmentIds) {
+        // Sort selected installments by due_date ascending (oldest first)
+        const sortedInstIds = [...selectedInstallmentIds].sort((a, b) => {
+          const ia = creditInstallments.find(i => i.id === a)
+          const ib = creditInstallments.find(i => i.id === b)
+          return (ia?.due_date || '').localeCompare(ib?.due_date || '')
+        })
+
+        for (const instId of sortedInstIds) {
           const inst = creditInstallments.find(i => i.id === instId)
           if (!inst) continue
 
@@ -535,7 +541,6 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
             remainingRSD  -= paidPrincipalRSD
             instPaidRSD   += paidPrincipalRSD
 
-            console.log('[CREDIT] Inserting principal tx:', { paidPrincipalRSD, paidPrincipalEUR })
             const { data: txP } = await supabase.from('transactions').insert({
               company_id: companyId || null,
               bank_id: bankId || null,
@@ -568,7 +573,6 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
             remainingRSD  -= paidInterestRSD
             instPaidRSD   += paidInterestRSD
 
-            console.log('[CREDIT] Inserting interest tx:', { paidInterestRSD, paidInterestEUR })
             await supabase.from('transactions').insert({
               company_id: companyId || null,
               bank_id: bankId || null,
@@ -596,11 +600,13 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
           // Determine installment status
           const totalInstRSD = principalRSD + interestRSD
           const instStatus = instPaidRSD >= totalInstRSD - 0.01 ? 'paid' : 'outstanding'
+          const paidEUR = instPaidRSD / exRateNum
 
           await supabase.from('credit_installments').update({
             status: instStatus,
             paid_date: instStatus === 'paid' ? txDate : null,
             transaction_id: firstTxId[0] || null,
+            paid_amount: Math.round(paidEUR * 100) / 100,
             updated_at: new Date().toISOString(),
           }).eq('id', instId)
         }
