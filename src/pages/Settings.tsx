@@ -600,7 +600,7 @@ function CompanyProfilesTab({ canEdit }: { canEdit: boolean }) {
                           {canEdit && (
                             <div style={{ display: 'flex', gap: '6px' }}>
                               {!bank.is_primary && <button style={{ ...s.iconBtn, fontSize: '11px', padding: '3px 8px', border: '0.5px solid rgba(255,255,255,0.10)', borderRadius: '6px' }} onClick={() => setPrimaryAccount(bank.id, bank.currency)}>Set primary</button>}
-                              <button style={s.iconBtn} onClick={() => deleteBankAccount(bank.id)}>🗑</button>
+                              <button style={s.iconBtn} onClick={() => deleteBankAccount(bank.id)}>Delete</button>
                             </div>
                           )}
                         </div>
@@ -723,7 +723,7 @@ function PLCategoriesTab({ canEdit }: { canEdit: boolean }) {
                 {canEdit && (
                   <div style={s.itemActions} onClick={e => e.stopPropagation()}>
                     {editingId === cat.id ? <button style={s.saveBtn} onClick={() => updateName('pl_categories', cat.id)}>✓</button> : <button style={s.iconBtn} onClick={() => { setEditingId(cat.id); setEditingName(cat.name) }}>✏️</button>}
-                    <button style={s.deleteBtn} onClick={() => deleteItem('pl_categories', cat.id, cat.name)}>🗑️</button>
+                    <button style={s.deleteBtn} onClick={() => deleteItem('pl_categories', cat.id, cat.name)}>Delete</button>
                   </div>
                 )}
               </div>
@@ -739,7 +739,7 @@ function PLCategoriesTab({ canEdit }: { canEdit: boolean }) {
                 {subcategories.map(sub => (
                   <div key={sub.id} style={s.itemRow}>
                     {editingId === sub.id ? <input style={s.inlineInput} value={editingName} onChange={e => setEditingName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') updateName('pl_subcategories', sub.id) }} autoFocus /> : <span style={s.itemName}>{sub.name}</span>}
-                    {canEdit && <div style={s.itemActions}>{editingId === sub.id ? <button style={s.saveBtn} onClick={() => updateName('pl_subcategories', sub.id)}>✓</button> : <button style={s.iconBtn} onClick={() => { setEditingId(sub.id); setEditingName(sub.name) }}>✏️</button>}<button style={s.deleteBtn} onClick={() => deleteItem('pl_subcategories', sub.id, sub.name)}>🗑️</button></div>}
+                    {canEdit && <div style={s.itemActions}>{editingId === sub.id ? <button style={s.saveBtn} onClick={() => updateName('pl_subcategories', sub.id)}>✓</button> : <button style={s.iconBtn} onClick={() => { setEditingId(sub.id); setEditingName(sub.name) }}>✏️</button>}<button style={s.deleteBtn} onClick={() => deleteItem('pl_subcategories', sub.id, sub.name)}>Delete</button></div>}
                   </div>
                 ))}
               </div>
@@ -844,7 +844,7 @@ function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
                 {canEdit && (
                   <div style={s.itemActions} onClick={e => e.stopPropagation()}>
                     {editingId === dept.id ? <button style={s.saveBtn} onClick={() => updateName('departments', dept.id)}>✓</button> : <button style={s.iconBtn} onClick={() => { setEditingId(dept.id); setEditingName(dept.name) }}>✏️</button>}
-                    <button style={s.deleteBtn} onClick={() => deleteItem('departments', dept.id, dept.name)}>🗑️</button>
+                    <button style={s.deleteBtn} onClick={() => deleteItem('departments', dept.id, dept.name)}>Delete</button>
                   </div>
                 )}
               </div>
@@ -860,7 +860,7 @@ function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
                 {subcategories.map(sub => (
                   <div key={sub.id} style={s.itemRow}>
                     {editingId === sub.id ? <input style={s.inlineInput} value={editingName} onChange={e => setEditingName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') updateName('dept_subcategories', sub.id) }} autoFocus /> : <span style={s.itemName}>{sub.name}</span>}
-                    {canEdit && <div style={s.itemActions}>{editingId === sub.id ? <button style={s.saveBtn} onClick={() => updateName('dept_subcategories', sub.id)}>✓</button> : <button style={s.iconBtn} onClick={() => { setEditingId(sub.id); setEditingName(sub.name) }}>✏️</button>}<button style={s.deleteBtn} onClick={() => deleteItem('dept_subcategories', sub.id, sub.name)}>🗑️</button></div>}
+                    {canEdit && <div style={s.itemActions}>{editingId === sub.id ? <button style={s.saveBtn} onClick={() => updateName('dept_subcategories', sub.id)}>✓</button> : <button style={s.iconBtn} onClick={() => { setEditingId(sub.id); setEditingName(sub.name) }}>✏️</button>}<button style={s.deleteBtn} onClick={() => deleteItem('dept_subcategories', sub.id, sub.name)}>Delete</button></div>}
                   </div>
                 ))}
               </div>
@@ -955,7 +955,7 @@ function DescriptionsTab({ canEdit }: { canEdit: boolean }) {
                 {descriptions.map(desc => (
                   <div key={desc.id} style={s.itemRow}>
                     {editingId === desc.id ? <input style={s.inlineInput} value={editingName} onChange={e => setEditingName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') updateName(desc.id) }} autoFocus /> : <span style={s.itemName}>{desc.name}</span>}
-                    {canEdit && <div style={s.itemActions}>{editingId === desc.id ? <button style={s.saveBtn} onClick={() => updateName(desc.id)}>✓</button> : <button style={s.iconBtn} onClick={() => { setEditingId(desc.id); setEditingName(desc.name) }}>✏️</button>}<button style={s.deleteBtn} onClick={() => deleteDesc(desc.id, desc.name)}>🗑️</button></div>}
+                    {canEdit && <div style={s.itemActions}>{editingId === desc.id ? <button style={s.saveBtn} onClick={() => updateName(desc.id)}>✓</button> : <button style={s.iconBtn} onClick={() => { setEditingId(desc.id); setEditingName(desc.name) }}>✏️</button>}<button style={s.deleteBtn} onClick={() => deleteDesc(desc.id, desc.name)}>Delete</button></div>}
                   </div>
                 ))}
               </div>
@@ -999,5 +999,5 @@ const s: Record<string, React.CSSProperties> = {
   formField: { display: 'flex', flexDirection: 'column' as const, gap: '4px' },
   formLabel: { fontSize: '10px', fontWeight: '500', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase' as const, letterSpacing: '0.07em' },
   formInput: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '7px 10px', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '8px', outline: 'none', color: '#DCE9F6', background: '#111F30' },
-  deleteBtn: { fontSize: '15px', lineHeight: 1, padding: '2px 5px', border: '1px solid rgba(255,91,90,0.4)', borderRadius: '6px', background: 'rgba(255,91,90,0.10)', color: '#FF5B5A', cursor: 'pointer' },
+  deleteBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '11px', fontWeight: '500', padding: '2px 8px', border: '1px solid rgba(255,91,90,0.4)', borderRadius: '5px', background: 'rgba(255,91,90,0.10)', color: '#FF5B5A', cursor: 'pointer', flexShrink: 0 },
 }
