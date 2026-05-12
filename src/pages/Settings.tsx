@@ -684,48 +684,26 @@ function PLCategoriesTab({ canEdit }: { canEdit: boolean }) {
   const deleteItem = async (table: string, id: string, name: string) => {
     if (!canEdit) return
 
-    // Proveri da li postoje transakcije koje koriste ovu kategoriju
     if (table === 'pl_categories') {
-      const { count } = await supabase
-        .from('transactions')
-        .select('id', { count: 'exact', head: true })
-        .eq('pl_category', name)
-      if (count && count > 0) {
-        window.alert(`Ne možete obrisati kategoriju "${name}" — koristi se u ${count} transakcija.`)
-        return
-      }
-      const { count: invCount } = await supabase
-        .from('invoices')
-        .select('id', { count: 'exact', head: true })
-        .eq('pl_category', name)
-      if (invCount && invCount > 0) {
-        window.alert(`Ne možete obrisati kategoriju "${name}" — koristi se u ${invCount} faktura.`)
-        return
-      }
+      // Proveri transakcije i fakture
+      const { count: txCount } = await supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('pl_category', name)
+      if (txCount && txCount > 0) { window.alert(`Nije moguće brisati "${name}" — koristi se u ${txCount} transakcija.`); return }
+      const { count: invCount } = await supabase.from('invoices').select('id', { count: 'exact', head: true }).eq('pl_category', name)
+      if (invCount && invCount > 0) { window.alert(`Nije moguće brisati "${name}" — koristi se u ${invCount} faktura.`); return }
+      if (!window.confirm(`Obrisati kategoriju "${name}" i sve njene potkategorije?`)) return
+      // Kaskadno brisanje potkategorija
+      await supabase.from('pl_subcategories').delete().eq('category_id', id)
+      await supabase.from('pl_categories').delete().eq('id', id)
+      fetchCategories(); setSelectedCat(null); setSubcategories([])
+    } else if (table === 'pl_subcategories') {
+      const { count: txCount } = await supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('pl_subcategory', name)
+      if (txCount && txCount > 0) { window.alert(`Nije moguće brisati "${name}" — koristi se u ${txCount} transakcija.`); return }
+      const { count: invCount } = await supabase.from('invoices').select('id', { count: 'exact', head: true }).eq('pl_subcategory', name)
+      if (invCount && invCount > 0) { window.alert(`Nije moguće brisati "${name}" — koristi se u ${invCount} faktura.`); return }
+      if (!window.confirm(`Obrisati potkategoriju "${name}"?`)) return
+      await supabase.from('pl_subcategories').delete().eq('id', id)
+      if (selectedCat) fetchSubcategories(selectedCat.id)
     }
-    if (table === 'pl_subcategories') {
-      const { count } = await supabase
-        .from('transactions')
-        .select('id', { count: 'exact', head: true })
-        .eq('pl_subcategory', name)
-      if (count && count > 0) {
-        window.alert(`Ne možete obrisati potkategoriju "${name}" — koristi se u ${count} transakcija.`)
-        return
-      }
-      const { count: invCount } = await supabase
-        .from('invoices')
-        .select('id', { count: 'exact', head: true })
-        .eq('pl_subcategory', name)
-      if (invCount && invCount > 0) {
-        window.alert(`Ne možete obrisati potkategoriju "${name}" — koristi se u ${invCount} faktura.`)
-        return
-      }
-    }
-
-    if (!window.confirm(`Obrisati "${name}"?`)) return
-    await supabase.from(table).delete().eq('id', id)
-    if (table === 'pl_categories') { fetchCategories(); setSelectedCat(null) }
-    else if (selectedCat) fetchSubcategories(selectedCat.id)
   }
 
   if (loading) return <div style={s.loading}>Loading...</div>
@@ -745,7 +723,7 @@ function PLCategoriesTab({ canEdit }: { canEdit: boolean }) {
                 {canEdit && (
                   <div style={s.itemActions} onClick={e => e.stopPropagation()}>
                     {editingId === cat.id ? <button style={s.saveBtn} onClick={() => updateName('pl_categories', cat.id)}>✓</button> : <button style={s.iconBtn} onClick={() => { setEditingId(cat.id); setEditingName(cat.name) }}>✏️</button>}
-                    <button style={s.iconBtn} onClick={() => deleteItem('pl_categories', cat.id, cat.name)}>🗑</button>
+                    <button style={s.deleteBtn} onClick={() => deleteItem('pl_categories', cat.id, cat.name)}>Briši</button>
                   </div>
                 )}
               </div>
@@ -761,7 +739,7 @@ function PLCategoriesTab({ canEdit }: { canEdit: boolean }) {
                 {subcategories.map(sub => (
                   <div key={sub.id} style={s.itemRow}>
                     {editingId === sub.id ? <input style={s.inlineInput} value={editingName} onChange={e => setEditingName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') updateName('pl_subcategories', sub.id) }} autoFocus /> : <span style={s.itemName}>{sub.name}</span>}
-                    {canEdit && <div style={s.itemActions}>{editingId === sub.id ? <button style={s.saveBtn} onClick={() => updateName('pl_subcategories', sub.id)}>✓</button> : <button style={s.iconBtn} onClick={() => { setEditingId(sub.id); setEditingName(sub.name) }}>✏️</button>}<button style={s.iconBtn} onClick={() => deleteItem('pl_subcategories', sub.id, sub.name)}>🗑</button></div>}
+                    {canEdit && <div style={s.itemActions}>{editingId === sub.id ? <button style={s.saveBtn} onClick={() => updateName('pl_subcategories', sub.id)}>✓</button> : <button style={s.iconBtn} onClick={() => { setEditingId(sub.id); setEditingName(sub.name) }}>✏️</button>}<button style={s.deleteBtn} onClick={() => deleteItem('pl_subcategories', sub.id, sub.name)}>Briši</button></div>}
                   </div>
                 ))}
               </div>
@@ -824,46 +802,31 @@ function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
     if (!canEdit) return
 
     if (table === 'departments') {
-      const { count } = await supabase
-        .from('transactions')
-        .select('id', { count: 'exact', head: true })
-        .eq('department', name)
-      if (count && count > 0) {
-        window.alert(`Ne možete obrisati odeljenje "${name}" — koristi se u ${count} transakcija.`)
-        return
+      const { count: txCount } = await supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('department', name)
+      if (txCount && txCount > 0) { window.alert(`Nije moguće brisati "${name}" — koristi se u ${txCount} transakcija.`); return }
+      const { count: invCount } = await supabase.from('invoices').select('id', { count: 'exact', head: true }).eq('department', name)
+      if (invCount && invCount > 0) { window.alert(`Nije moguće brisati "${name}" — koristi se u ${invCount} faktura.`); return }
+      if (!window.confirm(`Obrisati odeljenje "${name}" i sve njegove potkategorije?`)) return
+      // Kaskadno: brisanje expense_descriptions → dept_subcategories → departments
+      const { data: subs } = await supabase.from('dept_subcategories').select('id').eq('department_id', id)
+      if (subs && subs.length > 0) {
+        const subIds = subs.map((s: any) => s.id)
+        await supabase.from('expense_descriptions').delete().in('dept_subcategory_id', subIds)
+        await supabase.from('dept_subcategories').delete().eq('department_id', id)
       }
-      const { count: invCount } = await supabase
-        .from('invoices')
-        .select('id', { count: 'exact', head: true })
-        .eq('department', name)
-      if (invCount && invCount > 0) {
-        window.alert(`Ne možete obrisati odeljenje "${name}" — koristi se u ${invCount} faktura.`)
-        return
-      }
+      await supabase.from('departments').delete().eq('id', id)
+      fetchDepartments(); setSelectedDept(null); setSubcategories([])
+    } else if (table === 'dept_subcategories') {
+      const { count: txCount } = await supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('dept_subcategory', name)
+      if (txCount && txCount > 0) { window.alert(`Nije moguće brisati "${name}" — koristi se u ${txCount} transakcija.`); return }
+      const { count: invCount } = await supabase.from('invoices').select('id', { count: 'exact', head: true }).eq('dept_subcategory', name)
+      if (invCount && invCount > 0) { window.alert(`Nije moguće brisati "${name}" — koristi se u ${invCount} faktura.`); return }
+      if (!window.confirm(`Obrisati potkategoriju "${name}" i sve njene opise?`)) return
+      // Kaskadno: brisanje expense_descriptions → dept_subcategories
+      await supabase.from('expense_descriptions').delete().eq('dept_subcategory_id', id)
+      await supabase.from('dept_subcategories').delete().eq('id', id)
+      if (selectedDept) fetchSubcategories(selectedDept.id)
     }
-    if (table === 'dept_subcategories') {
-      const { count } = await supabase
-        .from('transactions')
-        .select('id', { count: 'exact', head: true })
-        .eq('dept_subcategory', name)
-      if (count && count > 0) {
-        window.alert(`Ne možete obrisati potkategoriju "${name}" — koristi se u ${count} transakcija.`)
-        return
-      }
-      const { count: invCount } = await supabase
-        .from('invoices')
-        .select('id', { count: 'exact', head: true })
-        .eq('dept_subcategory', name)
-      if (invCount && invCount > 0) {
-        window.alert(`Ne možete obrisati potkategoriju "${name}" — koristi se u ${invCount} faktura.`)
-        return
-      }
-    }
-
-    if (!window.confirm(`Obrisati "${name}"?`)) return
-    await supabase.from(table).delete().eq('id', id)
-    if (table === 'departments') { fetchDepartments(); setSelectedDept(null) }
-    else if (selectedDept) fetchSubcategories(selectedDept.id)
   }
 
   if (loading) return <div style={s.loading}>Loading...</div>
@@ -881,7 +844,7 @@ function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
                 {canEdit && (
                   <div style={s.itemActions} onClick={e => e.stopPropagation()}>
                     {editingId === dept.id ? <button style={s.saveBtn} onClick={() => updateName('departments', dept.id)}>✓</button> : <button style={s.iconBtn} onClick={() => { setEditingId(dept.id); setEditingName(dept.name) }}>✏️</button>}
-                    <button style={s.iconBtn} onClick={() => deleteItem('departments', dept.id, dept.name)}>🗑</button>
+                    <button style={s.deleteBtn} onClick={() => deleteItem('departments', dept.id, dept.name)}>Briši</button>
                   </div>
                 )}
               </div>
@@ -897,7 +860,7 @@ function DepartmentsTab({ canEdit }: { canEdit: boolean }) {
                 {subcategories.map(sub => (
                   <div key={sub.id} style={s.itemRow}>
                     {editingId === sub.id ? <input style={s.inlineInput} value={editingName} onChange={e => setEditingName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') updateName('dept_subcategories', sub.id) }} autoFocus /> : <span style={s.itemName}>{sub.name}</span>}
-                    {canEdit && <div style={s.itemActions}>{editingId === sub.id ? <button style={s.saveBtn} onClick={() => updateName('dept_subcategories', sub.id)}>✓</button> : <button style={s.iconBtn} onClick={() => { setEditingId(sub.id); setEditingName(sub.name) }}>✏️</button>}<button style={s.iconBtn} onClick={() => deleteItem('dept_subcategories', sub.id, sub.name)}>🗑</button></div>}
+                    {canEdit && <div style={s.itemActions}>{editingId === sub.id ? <button style={s.saveBtn} onClick={() => updateName('dept_subcategories', sub.id)}>✓</button> : <button style={s.iconBtn} onClick={() => { setEditingId(sub.id); setEditingName(sub.name) }}>✏️</button>}<button style={s.deleteBtn} onClick={() => deleteItem('dept_subcategories', sub.id, sub.name)}>Briši</button></div>}
                   </div>
                 ))}
               </div>
@@ -951,26 +914,11 @@ function DescriptionsTab({ canEdit }: { canEdit: boolean }) {
 
   const deleteDesc = async (id: string, name: string) => {
     if (!canEdit) return
-
-    // Proveri transakcije
-    const { count } = await supabase
-      .from('transactions')
-      .select('id', { count: 'exact', head: true })
-      .eq('expense_description', name)
-    if (count && count > 0) {
-      window.alert(`Ne možete obrisati opis "${name}" — koristi se u ${count} transakcija.`)
-      return
-    }
-    const { count: invCount } = await supabase
-      .from('invoices')
-      .select('id', { count: 'exact', head: true })
-      .eq('expense_description', name)
-    if (invCount && invCount > 0) {
-      window.alert(`Ne možete obrisati opis "${name}" — koristi se u ${invCount} faktura.`)
-      return
-    }
-
-    if (!window.confirm(`Obrisati "${name}"?`)) return
+    const { count: txCount } = await supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('expense_description', name)
+    if (txCount && txCount > 0) { window.alert(`Nije moguće brisati "${name}" — koristi se u ${txCount} transakcija.`); return }
+    const { count: invCount } = await supabase.from('invoices').select('id', { count: 'exact', head: true }).eq('expense_description', name)
+    if (invCount && invCount > 0) { window.alert(`Nije moguće brisati "${name}" — koristi se u ${invCount} faktura.`); return }
+    if (!window.confirm(`Obrisati opis "${name}"?`)) return
     await supabase.from('expense_descriptions').delete().eq('id', id)
     if (selectedSub) fetchDescriptions(selectedSub.id)
   }
@@ -1007,7 +955,7 @@ function DescriptionsTab({ canEdit }: { canEdit: boolean }) {
                 {descriptions.map(desc => (
                   <div key={desc.id} style={s.itemRow}>
                     {editingId === desc.id ? <input style={s.inlineInput} value={editingName} onChange={e => setEditingName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') updateName(desc.id) }} autoFocus /> : <span style={s.itemName}>{desc.name}</span>}
-                    {canEdit && <div style={s.itemActions}>{editingId === desc.id ? <button style={s.saveBtn} onClick={() => updateName(desc.id)}>✓</button> : <button style={s.iconBtn} onClick={() => { setEditingId(desc.id); setEditingName(desc.name) }}>✏️</button>}<button style={s.iconBtn} onClick={() => deleteDesc(desc.id, desc.name)}>🗑</button></div>}
+                    {canEdit && <div style={s.itemActions}>{editingId === desc.id ? <button style={s.saveBtn} onClick={() => updateName(desc.id)}>✓</button> : <button style={s.iconBtn} onClick={() => { setEditingId(desc.id); setEditingName(desc.name) }}>✏️</button>}<button style={s.deleteBtn} onClick={() => deleteDesc(desc.id, desc.name)}>Briši</button></div>}
                   </div>
                 ))}
               </div>
@@ -1051,4 +999,5 @@ const s: Record<string, React.CSSProperties> = {
   formField: { display: 'flex', flexDirection: 'column' as const, gap: '4px' },
   formLabel: { fontSize: '10px', fontWeight: '500', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase' as const, letterSpacing: '0.07em' },
   formInput: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '7px 10px', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '8px', outline: 'none', color: '#DCE9F6', background: '#111F30' },
+  deleteBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '11px', fontWeight: '500', padding: '3px 10px', border: '1px solid rgba(255,91,90,0.4)', borderRadius: '6px', background: 'rgba(255,91,90,0.10)', color: '#FF5B5A', cursor: 'pointer', whiteSpace: 'nowrap' as const },
 }
