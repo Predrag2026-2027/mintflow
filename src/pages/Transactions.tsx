@@ -9,6 +9,7 @@ import ReconcilePanel from '../components/ReconcilePanel'
 import BulkImport from '../components/BulkImport'
 import BankStatementDialog from '../components/BankStatementDialog'
 import PayrollDialog from '../components/PayrollDialog'
+import PayrollImportDialog from '../components/PayrollImportDialog'
 import { fmtUSD, fmtAmount } from '../utils/formatters'
 
 type Tab = 'invoices' | 'transactions' | 'passthrough'
@@ -26,6 +27,7 @@ export default function Transactions() {
   const [showBulkImport, setShowBulkImport] = useState(false)
   const [showBankStatement, setShowBankStatement] = useState(false)
   const [showPayrollDialog, setShowPayrollDialog] = useState(false)
+  const [showPayrollImport, setShowPayrollImport] = useState(false)
   const [editInvoice, setEditInvoice] = useState<any>(null)
   const [editTransaction, setEditTransaction] = useState<any>(null)
   const [editPassthrough, setEditPassthrough] = useState<any>(null)
@@ -190,6 +192,7 @@ export default function Transactions() {
             <button style={s.btnStatement} onClick={() => setShowBankStatement(true)}>🏦 Bank statement</button>
             <button style={s.btnBulk} onClick={() => setShowBulkImport(true)}>📥 Bulk import</button>
             <button style={s.btnPayroll} onClick={() => setShowPayrollDialog(true)}>💼 Payroll</button>
+            <button style={s.btnPayrollImport} onClick={() => setShowPayrollImport(true)}>📊 Payroll import</button>
           </div>
         </div>
 
@@ -347,6 +350,7 @@ export default function Transactions() {
                   <button style={s.btnStatement} onClick={() => setShowBankStatement(true)}>🏦 Bank statement</button>
                   <button style={s.btnBulk} onClick={() => setShowBulkImport(true)}>📥 Bulk import</button>
             <button style={s.btnPayroll} onClick={() => setShowPayrollDialog(true)}>💼 Payroll</button>
+            <button style={s.btnPayrollImport} onClick={() => setShowPayrollImport(true)}>📊 Payroll import</button>
                 </div>
               </div>
             ) : (
@@ -462,6 +466,9 @@ export default function Transactions() {
       {showPayrollDialog && (
         <PayrollDialog onClose={() => setShowPayrollDialog(false)} onPosted={() => { setShowPayrollDialog(false); fetchAll() }} />
       )}
+      {showPayrollImport && (
+        <PayrollImportDialog onClose={() => setShowPayrollImport(false)} onPosted={() => { setShowPayrollImport(false); fetchAll() }} />
+      )}
     </div>
   )
 }
@@ -478,6 +485,7 @@ const s: Record<string, React.CSSProperties> = {
   btnStatement: { background: 'transparent', color: '#9D97FF', border: '0.5px solid rgba(157,151,255,0.4)', borderRadius: '8px', padding: '9px 16px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer' },
   btnBulk: { background: 'transparent', color: '#4EA8FF', border: '0.5px solid rgba(78,168,255,0.4)', borderRadius: '8px', padding: '9px 16px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer' },
   btnPayroll: { background: 'rgba(0,212,126,0.10)', color: '#00D47E', border: '0.5px solid rgba(0,212,126,0.4)', borderRadius: '8px', padding: '9px 16px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer' },
+  btnPayrollImport: { background: 'rgba(245,166,35,0.10)', color: '#F5A623', border: '0.5px solid rgba(245,166,35,0.4)', borderRadius: '8px', padding: '9px 16px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer' },
   summaryRow: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '1.5rem' },
   summaryCard: { background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '10px', padding: '14px 16px' },
   summaryCardAlert: { border: '1px solid rgba(255,91,90,0.3)', background: 'rgba(255,91,90,0.07)' },
