@@ -7,6 +7,7 @@ export default function Partners() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState('all')
+  const [filterIndividual, setFilterIndividual] = useState('all')
   const [showDialog, setShowDialog] = useState(false)
   const [editPartner, setEditPartner] = useState<any>(null)
 
@@ -47,7 +48,10 @@ export default function Partners() {
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       (p.tax_id || '').toLowerCase().includes(search.toLowerCase()) ||
       (p.contact_email || '').toLowerCase().includes(search.toLowerCase())
-    return matchType && matchSearch
+    const matchIndividual = filterIndividual === 'all' ||
+      (filterIndividual === 'individual' && p.is_individual === true) ||
+      (filterIndividual === 'company' && p.is_individual !== true)
+    return matchType && matchSearch && matchIndividual
   })
 
   const typeColors: Record<string, { bg: string; color: string }> = {
@@ -94,6 +98,10 @@ export default function Partners() {
             <div style={s.summaryLabel}>Active</div>
             <div style={s.summaryVal}>{partners.filter(p => p.is_active !== false).length}</div>
           </div>
+          <div style={s.summaryCard}>
+            <div style={s.summaryLabel}>Individuals</div>
+            <div style={{ ...s.summaryVal, color: '#9D97FF' }}>{partners.filter(p => p.is_individual === true).length}</div>
+          </div>
         </div>
 
         <div style={s.filterBar}>
@@ -105,6 +113,11 @@ export default function Partners() {
             <option value="customer">Customers</option>
             <option value="both">Both</option>
             <option value="company">Company</option>
+          </select>
+          <select value={filterIndividual} onChange={e => setFilterIndividual(e.target.value)} style={s.filterSelect}>
+            <option value="all">All entities</option>
+            <option value="individual">👤 Individuals only</option>
+            <option value="company">🏢 Companies only</option>
           </select>
           <div style={s.totalBadge}>{filtered.length} partners</div>
         </div>
@@ -143,9 +156,12 @@ export default function Partners() {
                       {p.address && <div style={{ fontSize: '11px', color: '#7A9BB8', marginTop: '1px' }}>{p.address}</div>}
                     </td>
                     <td style={s.td}>
-                      <span style={{ ...s.badge, background: typeColors[p.type || 'vendor']?.bg || 'rgba(255,255,255,0.06)', color: typeColors[p.type || 'vendor']?.color || '#666' }}>
-                        {typeLabels[p.type || 'vendor'] || p.type}
-                      </span>
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' as const }}>
+                        <span style={{ ...s.badge, background: typeColors[p.type || 'vendor']?.bg || 'rgba(255,255,255,0.06)', color: typeColors[p.type || 'vendor']?.color || '#666' }}>
+                          {typeLabels[p.type || 'vendor'] || p.type}
+                        </span>
+                        {p.is_individual && <span style={{ ...s.badge, background: 'rgba(157,151,255,0.12)', color: '#9D97FF' }}>👤 Individual</span>}
+                      </div>
                     </td>
                     <td style={s.td}><span style={s.monoCell}>{p.tax_id || '—'}</span></td>
                     <td style={s.td}><span style={s.smallCell}>{p.city || '—'}</span></td>
@@ -188,7 +204,7 @@ const s: Record<string, React.CSSProperties> = {
   pageTitle: { fontFamily: "'DM Serif Display', Georgia, serif", fontSize: '24px', fontWeight: '400', color: '#DCE9F6', marginBottom: '4px' },
   pageSub: { fontSize: '13px', color: '#7A9BB8' },
   newBtn: { background: '#00D47E', color: '#060E1A', border: 'none', borderRadius: '8px', padding: '9px 18px', fontFamily: 'system-ui,sans-serif', fontSize: '13px', fontWeight: '500', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,212,126,0.3)' },
-  summaryRow: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '1.5rem' },
+  summaryRow: { display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '12px', marginBottom: '1.5rem' },
   summaryCard: { background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.075)', borderRadius: '10px', padding: '14px 16px', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' },
   summaryLabel: { fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.30)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '6px' },
   summaryVal: { fontSize: '26px', fontWeight: '600', color: '#DCE9F6' },

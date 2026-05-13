@@ -162,6 +162,7 @@ export default function PartnerDialog({ partner, initialName = '', initialAccoun
   const [contactPhone, setContactPhone] = useState(partner?.contact_phone || '')
   const [note, setNote] = useState(partner?.note || '')
   const [isActive, setIsActive] = useState(partner?.is_active !== false)
+  const [isIndividual, setIsIndividual] = useState(partner?.is_individual === true)
 
   // NBS lookup
   const [nbsPib, setNbsPib] = useState('')
@@ -603,6 +604,16 @@ export default function PartnerDialog({ partner, initialName = '', initialAccoun
                   <label style={ds.toggle}>
                     <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
                     <span style={{ ...ds.toggleSlider, background: isActive ? '#1D9E75' : '#ddd' }} />
+                  </label>
+                </div>
+                <div style={{ ...ds.toggleRow, marginTop: '8px' }}>
+                  <div>
+                    <span style={{ fontSize: '13px', color: '#DCE9F6' }}>👤 Individual (fizičko lice)</span>
+                    <div style={{ fontSize: '11px', color: '#7A9BB8', marginTop: '2px' }}>Označava zaposlene i fizička lica — vidljivi u Payroll Import</div>
+                  </div>
+                  <label style={ds.toggle}>
+                    <input type="checkbox" checked={isIndividual} onChange={e => setIsIndividual(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
+                    <span style={{ ...ds.toggleSlider, background: isIndividual ? '#9D97FF' : '#ddd' }} />
                   </label>
                 </div>
               </div>
