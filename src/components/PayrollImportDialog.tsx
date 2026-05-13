@@ -135,15 +135,15 @@ function parsePayrollXlsx(workbook: XLSX.WorkBook, taxMode: TaxMode): { header: 
         if (a.match(empNameRegex) && j > i + 2) break
         if (a === 'CONSTELLATION D.O.O.' && j > i + 5) break
 
-        // нето за исплату
-        if (a === '8' && c2.includes('\u043d\u0435\u0442\u043e \u0437\u0430 \u0438\u0441\u043f\u043b\u0430\u0442\u0443')) {
+        // нето за исплату — col0 can be 7 or 8, col2 may have leading apostrophe
+        if (c2.replace(/^'/, '').includes('\u043d\u0435\u0442\u043e \u0437\u0430 \u0438\u0441\u043f\u043b\u0430\u0442\u0443')) {
           const v = r[15] != null ? getNum(r[15]) : colN(r)
           net_salary_raw = v
           inDeductions = false
         }
 
         // обуставе
-        if (a === '7' && c2.includes('\u043e\u0431\u0443\u0441\u0442\u0430\u0432\u0435')) inDeductions = true
+        if ((a === '7' || a === '8') && c2.replace(/^'/, '').includes('\u043e\u0431\u0443\u0441\u0442\u0430\u0432\u0435')) inDeductions = true
 
         // deduction lines
         if (inDeductions && a !== '7' && a !== '8' && c2 && !c2.includes('\u0431\u0430\u043d\u043a\u0430')) {
@@ -257,7 +257,7 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
     const load = async () => {
       const [{ data: comp }, { data: part }, { data: dept }, { data: ds }] = await Promise.all([
         supabase.from('companies').select('*').order('name'),
-        supabase.from('partners').select('id,name').order('name'),
+        supabase.from('partners').select('id,name,is_individual').order('name'),
         supabase.from('departments').select('id,name,sort_order').order('sort_order'),
         supabase.from('dept_subcategories').select('id,name,department_id').order('sort_order'),
       ])
@@ -281,12 +281,21 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
     try {
       const { header: h, employees: emps } = parsePayrollXlsx(wb, mode)
       if (emps.length === 0) { setParseError('No employees found.'); return }
-      const { data: part } = await supabase.from('partners').select('id,name').order('name')
+      const { data: part } = await supabase.from('partners').select('id,name,is_individual').order('name')
       const partList = part || []
       setPartners(partList)
       const matched = emps.map(emp => {
-        const parts = emp.employee_name.toLowerCase().split(' ')
-        const found = partList.find((p: any) => parts.some((pt: string) => pt.length > 3 && p.name.toLowerCase().includes(pt)))
+        const nameParts = emp.employee_name.toLowerCase().split(/\s+/).filter((p: string) => p.length > 2)
+        // Try exact match first (any word order)
+        let found = partList.find((p: any) => {
+          const pLower = p.name.toLowerCase()
+          return nameParts.every((part: string) => pLower.includes(part))
+        })
+        // Fallback: match by longest word (usually surname)
+        if (!found) {
+          const longest = nameParts.reduce((a: string, b: string) => a.length >= b.length ? a : b, '')
+          if (longest.length > 4) found = partList.find((p: any) => p.name.toLowerCase().includes(longest))
+        }
         return { ...emp, partner_id: found?.id || '', employee_name: found ? found.name : emp.employee_name }
       })
       setHeader(h); setEmployees(matched); setTaxFilingRef(h.tax_filing_ref)
@@ -661,7 +670,7 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
                                   placeholder="Search partner..." />
                                 {!emp.partner_id && emp.employee_name.length > 2 && (
                                   <div style={s.dropdown}>
-                                    {partners.filter(p => p.name.toLowerCase().includes(emp.employee_name.toLowerCase().slice(0, 5))).slice(0, 6).map(p => (
+                                    {partners.filter((p: any) => p.is_individual && p.name.toLowerCase().includes(emp.employee_name.toLowerCase().slice(0, 5))).slice(0, 8).map(p => (
                                       <div key={p.id} style={s.dropdownItem}
                                         onMouseDown={e2 => { e2.preventDefault(); updateEmployee(emp.id, { partner_id: p.id, employee_name: p.name } as any) }}>
                                         {p.name}
