@@ -336,6 +336,7 @@ export default function PartnerDialog({ partner, initialName = '', initialAccoun
       address: address || null, city: city || null, country: country || null,
       contact_name: contactName || null, contact_email: contactEmail || null,
       contact_phone: contactPhone || null, note: note || null, is_active: isActive,
+      is_individual: isIndividual,
     }
     if (partner?.id) {
       const { error } = await supabase.from('partners').update(payload).eq('id', partner.id)
