@@ -11,6 +11,8 @@ interface Deduction {
   id: string
   name: string
   amount: string
+  partner_id: string
+  partner_name: string
 }
 
 interface RetainedDeduction {
@@ -74,7 +76,7 @@ function makeEmployee(): EmployeeLine {
 let deductionCounter = 0
 function makeDeduction(): Deduction {
   deductionCounter++
-  return { id: `d_${deductionCounter}`, name: '', amount: '' }
+  return { id: `d_${deductionCounter}`, name: '', amount: '', partner_id: '', partner_name: '' }
 }
 
 let retainedCounter = 0
@@ -107,6 +109,10 @@ export default function PayrollDialog({ onClose, onPosted }: Props) {
   const [exchangeRate, setExchangeRate] = useState('')
   const [fetchingRate, setFetchingRate] = useState(false)
   const [note, setNote] = useState('')
+  // Partner for tax authority (Poreska uprava) — used on tax/contrib invoice
+  const [taxPartnerId, setTaxPartnerId] = useState('')
+  const [taxPartnerSearch, setTaxPartnerSearch] = useState('')
+  const [taxPartnerDropdown, setTaxPartnerDropdown] = useState(false)
 
   // Employee lines
   const [employees, setEmployees] = useState<EmployeeLine[]>([makeEmployee()])
@@ -262,10 +268,9 @@ export default function PayrollDialog({ onClose, onPosted }: Props) {
       for (const emp of validEmps) {
         const netAmt = parseFloat(emp.net_salary) || 0
         if (netAmt <= 0) continue
-        await supabase.from('invoices').insert({
+        const { error: netErr } = await supabase.from('invoices').insert({
           company_id: companyId,
           partner_id: emp.partner_id || null,
-          invoice_number: `${taxFilingRef || 'PAY'}-NET-${emp.employee_name.replace(/\s+/g, '-')}`,
           invoice_date: paymentDate,
           due_date: dueDate || null,
           type: 'expense',
@@ -285,8 +290,9 @@ export default function PayrollDialog({ onClose, onPosted }: Props) {
           amount_usd: toUsd(netAmt),
           pl_impact: true,
           status: 'unpaid',
-          note: `Payroll ${periodMonth} — Net salary${note ? ' — ' + note : ''}`,
+          note: `Payroll ${periodMonth} — Net salary — ${emp.employee_name}${note ? ' | ' + note : ''}`,
         })
+        if (netErr) console.error('Net invoice error:', netErr.message)
       }
 
       // 4. Invoices for third-party deductions (per employee per deduction)
@@ -294,10 +300,9 @@ export default function PayrollDialog({ onClose, onPosted }: Props) {
         for (const ded of emp.deductions_third_party) {
           const dedAmt = parseFloat(ded.amount) || 0
           if (dedAmt <= 0 || !ded.name) continue
-          await supabase.from('invoices').insert({
+          const { error: dedErr } = await supabase.from('invoices').insert({
             company_id: companyId,
-            partner_id: null,
-            invoice_number: `${taxFilingRef || 'PAY'}-DED-${emp.employee_name.replace(/\s+/g, '-')}-${ded.name.replace(/\s+/g, '-')}`,
+            partner_id: ded.partner_id || null,
             invoice_date: paymentDate,
             due_date: dueDate || null,
             type: 'expense',
@@ -317,8 +322,9 @@ export default function PayrollDialog({ onClose, onPosted }: Props) {
             amount_usd: toUsd(dedAmt),
             pl_impact: true,
             status: 'unpaid',
-            note: `Payroll ${periodMonth} — Deduction: ${ded.name} — ${emp.employee_name}${note ? ' — ' + note : ''}`,
+            note: `Payroll ${periodMonth} — Deduction: ${ded.name} — ${emp.employee_name}${note ? ' | ' + note : ''}`,
           })
+          if (dedErr) console.error('Deduction invoice error:', dedErr.message)
         }
       }
 
@@ -383,10 +389,9 @@ export default function PayrollDialog({ onClose, onPosted }: Props) {
       // 6. Single tax/contributions invoice for the whole filing
       const totalObl = totalTax + totalContribEmp + totalContribEmpr
       if (totalObl > 0) {
-        await supabase.from('invoices').insert({
+        const { error: taxErr } = await supabase.from('invoices').insert({
           company_id: companyId,
-          partner_id: null,
-          invoice_number: `${taxFilingRef || 'PAY'}-TAX`,
+          partner_id: taxPartnerId || null,
           invoice_date: paymentDate,
           due_date: dueDate || null,
           type: 'expense',
@@ -405,8 +410,9 @@ export default function PayrollDialog({ onClose, onPosted }: Props) {
           amount_usd: toUsd(totalObl),
           pl_impact: true,
           status: 'unpaid',
-          note: `Payroll ${periodMonth} — Tax ${totalTax.toFixed(0)} + Contrib.Employee ${totalContribEmp.toFixed(0)} + Contrib.Employer ${totalContribEmpr.toFixed(0)}${note ? ' — ' + note : ''}`,
+          note: `Payroll ${periodMonth} — Tax ${totalTax.toFixed(0)} + Contrib.Employee ${totalContribEmp.toFixed(0)} + Contrib.Employer ${totalContribEmpr.toFixed(0)}${note ? ' | ' + note : ''}`,
         })
+        if (taxErr) console.error('Tax invoice error:', taxErr.message)
       }
 
       setPosted(true)
@@ -517,6 +523,46 @@ export default function PayrollDialog({ onClose, onPosted }: Props) {
                   <div style={s.field}>
                     <label style={s.lbl}>Note</label>
                     <input style={s.input} value={note} onChange={e => setNote(e.target.value)} placeholder="Optional note..." />
+                  </div>
+                </div>
+              </div>
+
+              <div style={s.section}>
+                <div style={s.sectionTitle}>Partners for invoices</div>
+                <div style={s.grid2}>
+                  <div style={s.field}>
+                    <label style={s.lbl}>Tax authority partner (for tax &amp; contributions invoice)</label>
+                    <div style={{ position: 'relative' as const }}>
+                      <input style={{ ...s.input, border: taxPartnerId ? '1.5px solid #00D47E' : undefined }}
+                        value={taxPartnerSearch}
+                        onChange={e => { setTaxPartnerSearch(e.target.value); setTaxPartnerId(''); setTaxPartnerDropdown(true) }}
+                        onFocus={() => setTaxPartnerDropdown(true)}
+                        onBlur={() => setTimeout(() => setTaxPartnerDropdown(false), 150)}
+                        placeholder="e.g. Poreska uprava..." />
+                      {taxPartnerId && <span style={{ position: 'absolute' as const, right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#00D47E', fontSize: '12px' }}>✓</span>}
+                      {taxPartnerDropdown && taxPartnerSearch && (
+                        <div style={s.empDropdown}>
+                          {partners.filter(p => p.name.toLowerCase().includes(taxPartnerSearch.toLowerCase())).slice(0, 8).map(p => (
+                            <div key={p.id} style={s.empDropdownItem}
+                              onMouseDown={() => { setTaxPartnerId(p.id); setTaxPartnerSearch(p.name); setTaxPartnerDropdown(false) }}>
+                              {p.name}
+                            </div>
+                          ))}
+                          {partners.filter(p => p.name.toLowerCase().includes(taxPartnerSearch.toLowerCase())).length === 0 && (
+                            <div style={{ ...s.empDropdownItem, color: '#7A9BB8' }}>No match — will post without partner</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#7A9BB8', marginTop: '3px' }}>Used on the combined tax+contributions invoice (Poreska uprava objedinjena naplata)</div>
+                  </div>
+                  <div style={s.field}>
+                    <label style={s.lbl}>Note on partner selection</label>
+                    <div style={{ fontSize: '12px', color: '#7A9BB8', lineHeight: '1.6', paddingTop: '4px' }}>
+                      Net salary invoices → each employee (partner) individually.<br/>
+                      Third-party deductions → set per deduction line (Step 2).<br/>
+                      Tax &amp; contributions → single invoice to tax authority above.
+                    </div>
                   </div>
                 </div>
               </div>
@@ -704,13 +750,29 @@ export default function PayrollDialog({ onClose, onPosted }: Props) {
                         {emp.deductions_third_party.length === 0
                           ? <div style={s.emptyHint}>No third-party deductions</div>
                           : emp.deductions_third_party.map(ded => (
-                            <div key={ded.id} style={s.deductionRow}>
-                              <input style={{ ...s.input, flex: 2 }} value={ded.name}
+                            <div key={ded.id} style={{ ...s.deductionRow, flexWrap: 'wrap' as const }}>
+                              <input style={{ ...s.input, flex: 2, minWidth: '160px' }} value={ded.name}
                                 onChange={e => updateDeductionThird(emp.id, ded.id, 'name', e.target.value)}
                                 placeholder="Deduction name (e.g. Union fee)" />
-                              <input type="number" style={{ ...s.input, width: '130px' }} value={ded.amount}
+                              <input type="number" style={{ ...s.input, width: '120px' }} value={ded.amount}
                                 onChange={e => updateDeductionThird(emp.id, ded.id, 'amount', e.target.value)}
                                 placeholder={`Amount (${currency})`} />
+                              <div style={{ position: 'relative' as const, flex: 1, minWidth: '140px' }}>
+                                <input style={{ ...s.input, width: '100%', border: ded.partner_id ? '1.5px solid #00D47E' : undefined }}
+                                  value={ded.partner_name}
+                                  onChange={e => updateDeductionThird(emp.id, ded.id, 'partner_name', e.target.value)}
+                                  placeholder="Partner (payee)" />
+                                {ded.partner_name && !ded.partner_id && (
+                                  <div style={{ ...s.empDropdown, zIndex: 400 }}>
+                                    {partners.filter(p => p.name.toLowerCase().includes(ded.partner_name.toLowerCase())).slice(0, 6).map(p => (
+                                      <div key={p.id} style={s.empDropdownItem}
+                                        onMouseDown={e => { e.preventDefault(); updateDeductionThird(emp.id, ded.id, 'partner_id', p.id); updateDeductionThird(emp.id, ded.id, 'partner_name', p.name) }}>
+                                        {p.name}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                               <button style={s.removeSmallBtn} onClick={() => removeDeductionThird(emp.id, ded.id)}>×</button>
                             </div>
                           ))
