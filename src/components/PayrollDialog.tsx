@@ -93,14 +93,11 @@ export default function PayrollDialog({ onClose, onPosted }: Props) {
 
   // Header fields
   const [companies, setCompanies] = useState<any[]>([])
-  const [allBanks, setAllBanks] = useState<any[]>([])
-  const [banks, setBanks] = useState<any[]>([])
   const [partners, setPartners] = useState<any[]>([])
   const [departments, setDepartments] = useState<any[]>([])
   const [deptSubcategories, setDeptSubcategories] = useState<any[]>([])
 
   const [companyId, setCompanyId] = useState('')
-  const [bankId, setBankId] = useState('')
   const [periodMonth, setPeriodMonth] = useState(new Date().toISOString().slice(0, 7))
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0])
   const [dueDate, setDueDate] = useState('')
@@ -119,26 +116,19 @@ export default function PayrollDialog({ onClose, onPosted }: Props) {
 
   useEffect(() => {
     const load = async () => {
-      const [{ data: comp }, { data: bnk }, { data: part }, { data: dept }, { data: deptSub }] = await Promise.all([
+      const [{ data: comp }, { data: part }, { data: dept }, { data: deptSub }] = await Promise.all([
         supabase.from('companies').select('*').order('name'),
-        supabase.from('banks').select('*').order('name'),
         supabase.from('partners').select('*').order('name'),
         supabase.from('departments').select('id,name,sort_order').order('sort_order'),
         supabase.from('dept_subcategories').select('id,name,department_id,sort_order').order('sort_order'),
       ])
       if (comp) setCompanies(comp)
-      if (bnk) setAllBanks(bnk)
       if (part) setPartners(part)
       if (dept) setDepartments(dept)
       if (deptSub) setDeptSubcategories(deptSub)
     }
     load()
   }, [])
-
-  useEffect(() => {
-    if (companyId) setBanks(allBanks.filter(b => b.company_id === companyId))
-    else setBanks([])
-  }, [companyId, allBanks])
 
   // Auto-calculate due date = last working day of period month
   useEffect(() => {
@@ -211,13 +201,21 @@ export default function PayrollDialog({ onClose, onPosted }: Props) {
   const totalContribEmp = employees.reduce((s, e) => s + (parseFloat(e.contrib_employee) || 0), 0)
   const totalContribEmpr = employees.reduce((s, e) => s + (parseFloat(e.contrib_employer) || 0), 0)
   const totalObligations = totalTax + totalContribEmp + totalContribEmpr
-  const totalGross = employees.reduce((s, e) => s + (parseFloat(e.gross_salary) || 0), 0)
+  const totalGross = employees.reduce((s, e) =>
+    s +
+    (parseFloat(e.net_salary) || 0) +
+    (parseFloat(e.tax_on_salary) || 0) +
+    (parseFloat(e.contrib_employee) || 0) +
+    (parseFloat(e.contrib_employer) || 0) +
+    e.deductions_third_party.reduce((ss: number, d: any) => ss + (parseFloat(d.amount) || 0), 0) +
+    e.deductions_retained.reduce((ss: number, d: any) => ss + (parseFloat(d.amount) || 0), 0)
+  , 0)
 
   const usdRate = parseFloat(exchangeRate) || 1
   const toUsd = (amt: number) => convertToUSD(amt, currency, usdRate)
 
   const handlePost = async () => {
-    if (!companyId || !bankId) { setError('Please select company and bank.'); return }
+    if (!companyId) { setError('Please select a company.'); return }
     const validEmps = employees.filter(e => e.employee_name && (parseFloat(e.net_salary) > 0 || parseFloat(e.gross_salary) > 0))
     if (validEmps.length === 0) { setError('Add at least one employee with salary data.'); return }
     setPosting(true); setError('')
@@ -226,7 +224,6 @@ export default function PayrollDialog({ onClose, onPosted }: Props) {
       // 1. Create payroll_record header
       const { data: record, error: recErr } = await supabase.from('payroll_records').insert({
         company_id: companyId,
-        bank_id: bankId,
         period_month: periodMonth,
         payment_date: paymentDate,
         due_date: dueDate || null,
@@ -339,8 +336,7 @@ export default function PayrollDialog({ onClose, onPosted }: Props) {
         // Negative expense (storno) — posted as direct transaction with negative amount
         await supabase.from('transactions').insert({
           company_id: companyId,
-          bank_id: bankId,
-          partner_id: null,
+            partner_id: null,
           transaction_date: paymentDate,
           type: 'direct',
           tx_subtype: 'expense',
@@ -364,8 +360,7 @@ export default function PayrollDialog({ onClose, onPosted }: Props) {
       if (fitpassTotal > 0) {
         await supabase.from('transactions').insert({
           company_id: companyId,
-          bank_id: bankId,
-          partner_id: null,
+            partner_id: null,
           transaction_date: paymentDate,
           type: 'direct',
           tx_subtype: 'expense',
@@ -480,19 +475,12 @@ export default function PayrollDialog({ onClose, onPosted }: Props) {
             <>
               <div style={s.section}>
                 <div style={s.sectionTitle}>Company & bank account</div>
-                <div style={s.grid2}>
+                <div style={{ maxWidth: '360px' }}>
                   <div style={s.field}>
                     <label style={s.lbl}>Company <span style={s.req}>*</span></label>
                     <select style={s.select} value={companyId} onChange={e => setCompanyId(e.target.value)}>
                       <option value="">Select company...</option>
                       {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                  </div>
-                  <div style={s.field}>
-                    <label style={s.lbl}>Bank account <span style={s.req}>*</span></label>
-                    <select style={s.select} value={bankId} onChange={e => setBankId(e.target.value)} disabled={!companyId}>
-                      <option value="">Select bank...</option>
-                      {banks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                     </select>
                   </div>
                 </div>
@@ -708,9 +696,18 @@ export default function PayrollDialog({ onClose, onPosted }: Props) {
                             </select>
                           </div>
                           <div style={s.field}>
-                            <label style={s.lbl}>Gross salary ({currency})</label>
-                            <input type="number" style={s.input} value={emp.gross_salary}
-                              onChange={e => updateEmployee(emp.id, { gross_salary: e.target.value })} placeholder="0.00" />
+                            <label style={s.lbl}>Gross salary ({currency}) — auto</label>
+                            <div style={{ ...s.input, background: 'rgba(0,212,126,0.06)', border: '1px solid rgba(0,212,126,0.25)', color: '#00D47E', fontWeight: '600', cursor: 'default' }}>
+                              {(
+                                (parseFloat(emp.net_salary) || 0) +
+                                (parseFloat(emp.tax_on_salary) || 0) +
+                                (parseFloat(emp.contrib_employee) || 0) +
+                                (parseFloat(emp.contrib_employer) || 0) +
+                                emp.deductions_third_party.reduce((s: number, d: any) => s + (parseFloat(d.amount) || 0), 0) +
+                                emp.deductions_retained.reduce((s: number, d: any) => s + (parseFloat(d.amount) || 0), 0)
+                              ).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                            <div style={{ fontSize: '10px', color: '#7A9BB8', marginTop: '3px' }}>Net + Tax + EE + ER + All deductions</div>
                           </div>
                         </div>
 
