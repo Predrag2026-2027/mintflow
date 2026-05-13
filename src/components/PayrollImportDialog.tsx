@@ -655,9 +655,9 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <span style={{ fontSize: '12px', fontWeight: '600', color: '#00D47E' }}>{emp.gross_salary.toLocaleString('en-US', { maximumFractionDigits: 0 })} {currency}</span>
-                          <button style={{ ...s.acceptBtn, background: emp.accepted ? 'rgba(0,212,126,0.15)' : 'rgba(255,91,90,0.12)', color: emp.accepted ? '#00D47E' : '#FF5B5A', borderColor: emp.accepted ? 'rgba(0,212,126,0.4)' : 'rgba(255,91,90,0.4)' }}
+                          <button style={{ ...s.acceptBtn, background: emp.accepted ? 'rgba(255,91,90,0.12)' : 'rgba(0,212,126,0.15)', color: emp.accepted ? '#FF5B5A' : '#00D47E', borderColor: emp.accepted ? 'rgba(255,91,90,0.4)' : 'rgba(0,212,126,0.4)' }}
                             onClick={e2 => { e2.stopPropagation(); updateEmployee(emp.id, { accepted: !emp.accepted } as any) }}>
-                            {emp.accepted ? '✓ Accept' : '✕ Reject'}
+                            {emp.accepted ? '✕ Reject' : '✓ Accept'}
                           </button>
                           <span style={{ fontSize: '11px', color: '#7A9BB8' }}>{emp.expanded ? '▲' : '▼'}</span>
                         </div>
