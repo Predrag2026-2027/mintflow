@@ -76,7 +76,7 @@ function parsePayrollXlsx(workbook: XLSX.WorkBook): { header: PayrollHeader; emp
   const employees: ParsedEmployee[] = []
 
   // Find all employee blocks — identified by pattern "NNN – Ime Prezime" in column A
-  const empNameRegex = /^\d{3}\s*[–-]\s*(.+)$/
+  const empNameRegex = /^\d{3}\s*[–\-]\s*(.+)$/
 
   let i = 0
   while (i < data.length) {
@@ -125,7 +125,6 @@ function parsePayrollXlsx(workbook: XLSX.WorkBook): { header: PayrollHeader; emp
 
       // Now scan forward within this employee block
       let net_salary = 0
-      let tax_on_salary = 0
       let contrib_employee = 0
       let contrib_employer = 0
       const deductions: ParsedDeduction[] = []
@@ -263,7 +262,6 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
   const [employees, setEmployees] = useState<ParsedEmployee[]>([])
   const [parseError, setParseError] = useState('')
   const [fileName, setFileName] = useState('')
-  const [posting, setPosting] = useState(false)
   const [progress, setProgress] = useState(0)
   const [taxPartnerId, setTaxPartnerId] = useState('')
   const [taxPartnerSearch, setTaxPartnerSearch] = useState('Poreska uprava')
