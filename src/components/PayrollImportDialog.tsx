@@ -76,7 +76,7 @@ function parsePayrollXlsx(workbook: XLSX.WorkBook): { header: PayrollHeader; emp
   const employees: ParsedEmployee[] = []
 
   // Find all employee blocks — identified by pattern "NNN – Ime Prezime" in column A
-  const empNameRegex = /^\d{3}\s*[–\-]\s*(.+)$/
+  const empNameRegex = /^\d{3}\s*[–-]\s*(.+)$/
 
   let i = 0
   while (i < data.length) {
