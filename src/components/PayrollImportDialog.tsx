@@ -60,7 +60,7 @@ function parsePayrollXlsx(workbook: XLSX.WorkBook): { header: PayrollHeader; emp
 
   const getNum = (v: any): number => {
     if (v == null) return 0
-    const n = parseFloat(String(v).replace(/[^\d.,\-]/g, '').replace(',', '.'))
+    const n = parseFloat(String(v).replace(/[^\d.,-]/g, '').replace(',', '.'))
     return isNaN(n) ? 0 : Math.abs(n)
   }
 
