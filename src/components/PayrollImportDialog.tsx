@@ -213,10 +213,6 @@ function parsePayrollXlsx(workbook: XLSX.WorkBook, taxMode: TaxMode): { header: 
   return { header, employees }
 }
 
-// Format: 171,112.92 (en-US, matching app style)
-function fmtRSD(v: number): string {
-  return (v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
 
 function fmtN(v: number): string {
   return (v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
