@@ -213,6 +213,15 @@ function parsePayrollXlsx(workbook: XLSX.WorkBook, taxMode: TaxMode): { header: 
   return { header, employees }
 }
 
+// Format: 171,112.92 (en-US, matching app style)
+function fmtRSD(v: number): string {
+  return (v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function fmtN(v: number): string {
+  return (v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 function parseSerDate(d: string): string {
   if (!d) return new Date().toISOString().split('T')[0]
   const m = d.replace(/\.$/, '').match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/)
@@ -712,8 +721,12 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
                             ] as { label: string; key: keyof ParsedEmployee; color: string }[]).map(item => (
                               <div key={String(item.key)} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '8px', padding: '10px 10px 8px' }}>
                                 <div style={{ fontSize: '10px', color: '#7A9BB8', marginBottom: '6px', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>{item.label}</div>
-                                <input type="number" style={{ ...s.input, padding: '5px 8px', fontSize: '12px', fontWeight: '600', color: item.color, border: `1px solid ${item.color}40` }}
-                                  value={String(emp[item.key])}
+                                <input
+                                  type="text"
+                                  style={{ ...s.input, padding: '5px 8px', fontSize: '13px', fontWeight: '600', color: item.color, border: `1px solid ${item.color}30` }}
+                                  value={fmtN(parseFloat(String(emp[item.key])) || 0)}
+                                  onFocus={e2 => { (e2.target as any).type = 'number'; e2.target.value = String(emp[item.key]) }}
+                                  onBlur={e2 => { (e2.target as any).type = 'text'; e2.target.value = fmtN(parseFloat(e2.target.value) || 0) }}
                                   onChange={e2 => updateEmployee(emp.id, { [item.key]: e2.target.value } as any)} />
                               </div>
                             ))}
@@ -729,8 +742,13 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
                                   </span>
                                   <input style={{ ...s.input, flex: 2, minWidth: '140px', fontSize: '12px', padding: '5px 8px' }}
                                     value={ded.name} onChange={e2 => updateDeduction(emp.id, ded.id, { name: e2.target.value })} />
-                                  <input type="number" style={{ ...s.input, width: '110px', fontSize: '12px', padding: '5px 8px', color: '#00D47E' }}
-                                    value={ded.amount} onChange={e2 => updateDeduction(emp.id, ded.id, { amount: parseFloat(e2.target.value) || 0 })} />
+                                  <input
+                                    type="text"
+                                    style={{ ...s.input, width: '120px', fontSize: '13px', fontWeight: '600', color: '#00D47E', border: '1px solid rgba(0,212,126,0.25)' }}
+                                    value={fmtN(ded.amount)}
+                                    onFocus={e2 => { (e2.target as any).type = 'number'; e2.target.value = String(ded.amount) }}
+                                    onBlur={e2 => { (e2.target as any).type = 'text'; e2.target.value = fmtN(parseFloat(e2.target.value) || 0) }}
+                                    onChange={e2 => updateDeduction(emp.id, ded.id, { amount: parseFloat(e2.target.value) || 0 })} />
                                   {ded.type === 'third_party' && (
                                     <div style={{ position: 'relative', minWidth: '150px' }}>
                                       <input style={{ ...s.input, fontSize: '11px', padding: '5px 8px', border: ded.partner_id ? '1.5px solid #00D47E' : undefined }}
