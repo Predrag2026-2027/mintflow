@@ -403,7 +403,7 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
             tax_on_salary: emp.tax_on_salary, contrib_employee: emp.contrib_employee, contrib_employer: emp.contrib_employer,
             deductions_third_party: emp.deductions.filter(d => d.type === 'third_party').map(d => ({ name: d.name, amount: d.amount, partner_id: d.partner_id })),
             deductions_retained: emp.deductions.filter(d => d.type !== 'third_party').map(d => ({ type: d.type, amount: d.amount })),
-            rev_alloc_type: emp.rev_alloc_type, opex_type: emp.opex_type, cf_type: emp.cf_type,
+            rev_alloc_type: emp.rev_alloc_type, rev_alloc_af_pct: emp.rev_alloc_af_pct, opex_type: emp.opex_type, cf_type: emp.cf_type,
           })
         }
         if (emp.net_salary > 0) {
@@ -458,16 +458,67 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
         done++; setProgress(Math.round((done / accepted.length) * 85))
       }
       if (totalTaxObl > 0) {
-        await supabase.from('invoices').insert({
+        // Calculate weighted SG/AF split across all accepted employees
+        const calcSplit = (getAmt: (e: ParsedEmployee) => number) => {
+          let sg = 0, af = 0
+          for (const e of accepted) {
+            const amt = getAmt(e)
+            if (e.rev_alloc_type === 'sg100') { sg += amt }
+            else if (e.rev_alloc_type === 'af100') { af += amt }
+            else if (e.rev_alloc_type === 'shared') { sg += amt / 2; af += amt / 2 }
+            else if (e.rev_alloc_type === 'pct') {
+              const afPct = (e.rev_alloc_af_pct || 50) / 100
+              af += amt * afPct; sg += amt * (1 - afPct)
+            } else { sg += amt }
+          }
+          return { sg: Math.round(sg * 100) / 100, af: Math.round(af * 100) / 100 }
+        }
+        const taxSplit = calcSplit(e => e.tax_on_salary)
+        const eeSplit = calcSplit(e => e.contrib_employee)
+        const erSplit = calcSplit(e => e.contrib_employer)
+        const totalTaxOnly = accepted.reduce((s, e) => s + e.tax_on_salary, 0)
+        const totalEEOnly = accepted.reduce((s, e) => s + e.contrib_employee, 0)
+        const totalEROnly = accepted.reduce((s, e) => s + e.contrib_employer, 0)
+        const rounding = parseFloat(taxRounding) || 0
+
+        // Invoice 1: Tax on salary
+        if (totalTaxOnly > 0) await supabase.from('invoices').insert({
           company_id: companyId, partner_id: taxPartnerId || null,
           invoice_date: invDate, due_date: dueDate || null,
           type: 'expense', pl_category: 'Employee and Labour', pl_subcategory: 'Tax on salary',
-          expense_description: `Tax & contributions — ${taxFilingRef || invDate.slice(0, 7)} (${taxMode === 'incentive' ? 'Tax Incentives' : 'Standard'})`,
-          rev_alloc_type: 'sg100', opex_type: 'opex',
-          cf_type: 'recurring', cf_frequency: 'monthly', cf_next_month_est: totalTaxObl,
-          currency, amount: totalTaxObl, exchange_rate: usdRate, amount_usd: toUsd(totalTaxObl),
+          expense_description: `Tax on salary — ${taxFilingRef || invDate.slice(0, 7)} (${taxMode === 'incentive' ? 'Tax Incentives' : 'Standard'})`,
+          rev_alloc_type: 'byval', rev_alloc_sg: taxSplit.sg, rev_alloc_aimfox: taxSplit.af,
+          opex_type: 'opex', cf_type: 'recurring', cf_frequency: 'monthly', cf_next_month_est: totalTaxOnly,
+          currency, amount: totalTaxOnly, exchange_rate: usdRate, amount_usd: toUsd(totalTaxOnly),
           pl_impact: true, status: 'unpaid',
-          note: `Payroll ${invDate.slice(0, 7)} — EE: ${totalEE.toFixed(0)} + ER: ${totalER.toFixed(0)} + rounding: ${taxRounding}`,
+          note: `Payroll ${invDate.slice(0, 7)} — Tax on salary`,
+        })
+
+        // Invoice 2: Contributions on behalf of employee
+        if (totalEEOnly > 0) await supabase.from('invoices').insert({
+          company_id: companyId, partner_id: taxPartnerId || null,
+          invoice_date: invDate, due_date: dueDate || null,
+          type: 'expense', pl_category: 'Employee and Labour', pl_subcategory: 'Contributions on behalf of the employee',
+          expense_description: `Contributions EE — ${taxFilingRef || invDate.slice(0, 7)} (${taxMode === 'incentive' ? 'Tax Incentives' : 'Standard'})`,
+          rev_alloc_type: 'byval', rev_alloc_sg: eeSplit.sg, rev_alloc_aimfox: eeSplit.af,
+          opex_type: 'opex', cf_type: 'recurring', cf_frequency: 'monthly', cf_next_month_est: totalEEOnly,
+          currency, amount: totalEEOnly, exchange_rate: usdRate, amount_usd: toUsd(totalEEOnly),
+          pl_impact: true, status: 'unpaid',
+          note: `Payroll ${invDate.slice(0, 7)} — Contributions on behalf of employee`,
+        })
+
+        // Invoice 3: Contributions on behalf of employer + rounding
+        const erTotal = totalEROnly + rounding
+        if (erTotal > 0) await supabase.from('invoices').insert({
+          company_id: companyId, partner_id: taxPartnerId || null,
+          invoice_date: invDate, due_date: dueDate || null,
+          type: 'expense', pl_category: 'Employee and Labour', pl_subcategory: 'Contributions on behalf of the employer',
+          expense_description: `Contributions ER — ${taxFilingRef || invDate.slice(0, 7)} (${taxMode === 'incentive' ? 'Tax Incentives' : 'Standard'})`,
+          rev_alloc_type: 'byval', rev_alloc_sg: Math.round((erSplit.sg + rounding / 2) * 100) / 100, rev_alloc_aimfox: Math.round((erSplit.af + rounding / 2) * 100) / 100,
+          opex_type: 'opex', cf_type: 'recurring', cf_frequency: 'monthly', cf_next_month_est: erTotal,
+          currency, amount: erTotal, exchange_rate: usdRate, amount_usd: toUsd(erTotal),
+          pl_impact: true, status: 'unpaid',
+          note: `Payroll ${invDate.slice(0, 7)} — Contributions on behalf of employer${rounding !== 0 ? ' (incl. rounding ' + rounding + ')' : ''}`,
         })
       }
       setProgress(100)
