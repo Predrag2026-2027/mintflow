@@ -458,7 +458,6 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
         done++; setProgress(Math.round((done / accepted.length) * 85))
       }
       if (totalTaxObl > 0) {
-        // Calculate weighted SG/AF split across all accepted employees
         const calcSplit = (getAmt: (e: ParsedEmployee) => number) => {
           let sg = 0, af = 0
           for (const e of accepted) {
@@ -473,52 +472,64 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
           }
           return { sg: Math.round(sg * 100) / 100, af: Math.round(af * 100) / 100 }
         }
-        const taxSplit = calcSplit(e => e.tax_on_salary)
-        const eeSplit = calcSplit(e => e.contrib_employee)
-        const erSplit = calcSplit(e => e.contrib_employer)
+        const rounding = parseFloat(taxRounding) || 0
         const totalTaxOnly = accepted.reduce((s, e) => s + e.tax_on_salary, 0)
         const totalEEOnly = accepted.reduce((s, e) => s + e.contrib_employee, 0)
         const totalEROnly = accepted.reduce((s, e) => s + e.contrib_employer, 0)
-        const rounding = parseFloat(taxRounding) || 0
+        const taxSplit = calcSplit(e => e.tax_on_salary)
+        const eeSplit = calcSplit(e => e.contrib_employee)
+        const erSplit = calcSplit(e => e.contrib_employer)
 
-        // Invoice 1: Tax on salary
+        // PARENT invoice — cash flow only, no P&L impact, used for bank matching
+        const { data: parentInv } = await supabase.from('invoices').insert({
+          company_id: companyId, partner_id: taxPartnerId || null,
+          invoice_date: invDate, due_date: dueDate || null,
+          type: 'expense', pl_category: 'Employee and Labour', pl_subcategory: 'Tax on salary',
+          expense_description: `Objedinjena naplata — ${taxFilingRef || invDate.slice(0, 7)} (${taxMode === 'incentive' ? 'Tax Incentives' : 'Standard'})`,
+          rev_alloc_type: 'sg100', opex_type: 'opex',
+          cf_type: 'recurring', cf_frequency: 'monthly', cf_next_month_est: totalTaxObl,
+          currency, amount: totalTaxObl, exchange_rate: usdRate, amount_usd: toUsd(totalTaxObl),
+          pl_impact: false, status: 'unpaid',
+          note: `Payroll ${invDate.slice(0, 7)} — Poreska uprava objedinjena naplata${rounding !== 0 ? ' | rounding: ' + rounding : ''}`,
+        }).select('id').single()
+        const parentId = parentInv?.id
+
+        // CHILD invoices — P&L impact, hidden from Ledger, linked to parent
         if (totalTaxOnly > 0) await supabase.from('invoices').insert({
           company_id: companyId, partner_id: taxPartnerId || null,
           invoice_date: invDate, due_date: dueDate || null,
           type: 'expense', pl_category: 'Employee and Labour', pl_subcategory: 'Tax on salary',
-          expense_description: `Tax on salary — ${taxFilingRef || invDate.slice(0, 7)} (${taxMode === 'incentive' ? 'Tax Incentives' : 'Standard'})`,
+          expense_description: `Tax on salary — ${taxFilingRef || invDate.slice(0, 7)}`,
           rev_alloc_type: 'byval', rev_alloc_sg: taxSplit.sg, rev_alloc_aimfox: taxSplit.af,
           opex_type: 'opex', cf_type: 'recurring', cf_frequency: 'monthly', cf_next_month_est: totalTaxOnly,
           currency, amount: totalTaxOnly, exchange_rate: usdRate, amount_usd: toUsd(totalTaxOnly),
-          pl_impact: true, status: 'unpaid',
+          pl_impact: true, status: 'unpaid', parent_invoice_id: parentId || null,
           note: `Payroll ${invDate.slice(0, 7)} — Tax on salary`,
         })
-
-        // Invoice 2: Contributions on behalf of employee
         if (totalEEOnly > 0) await supabase.from('invoices').insert({
           company_id: companyId, partner_id: taxPartnerId || null,
           invoice_date: invDate, due_date: dueDate || null,
           type: 'expense', pl_category: 'Employee and Labour', pl_subcategory: 'Contributions on behalf of the employee',
-          expense_description: `Contributions EE — ${taxFilingRef || invDate.slice(0, 7)} (${taxMode === 'incentive' ? 'Tax Incentives' : 'Standard'})`,
+          expense_description: `Contributions EE — ${taxFilingRef || invDate.slice(0, 7)}`,
           rev_alloc_type: 'byval', rev_alloc_sg: eeSplit.sg, rev_alloc_aimfox: eeSplit.af,
           opex_type: 'opex', cf_type: 'recurring', cf_frequency: 'monthly', cf_next_month_est: totalEEOnly,
           currency, amount: totalEEOnly, exchange_rate: usdRate, amount_usd: toUsd(totalEEOnly),
-          pl_impact: true, status: 'unpaid',
+          pl_impact: true, status: 'unpaid', parent_invoice_id: parentId || null,
           note: `Payroll ${invDate.slice(0, 7)} — Contributions on behalf of employee`,
         })
-
-        // Invoice 3: Contributions on behalf of employer + rounding
         const erTotal = totalEROnly + rounding
         if (erTotal > 0) await supabase.from('invoices').insert({
           company_id: companyId, partner_id: taxPartnerId || null,
           invoice_date: invDate, due_date: dueDate || null,
           type: 'expense', pl_category: 'Employee and Labour', pl_subcategory: 'Contributions on behalf of the employer',
-          expense_description: `Contributions ER — ${taxFilingRef || invDate.slice(0, 7)} (${taxMode === 'incentive' ? 'Tax Incentives' : 'Standard'})`,
-          rev_alloc_type: 'byval', rev_alloc_sg: Math.round((erSplit.sg + rounding / 2) * 100) / 100, rev_alloc_aimfox: Math.round((erSplit.af + rounding / 2) * 100) / 100,
+          expense_description: `Contributions ER — ${taxFilingRef || invDate.slice(0, 7)}`,
+          rev_alloc_type: 'byval',
+          rev_alloc_sg: Math.round((erSplit.sg + rounding / 2) * 100) / 100,
+          rev_alloc_aimfox: Math.round((erSplit.af + rounding / 2) * 100) / 100,
           opex_type: 'opex', cf_type: 'recurring', cf_frequency: 'monthly', cf_next_month_est: erTotal,
           currency, amount: erTotal, exchange_rate: usdRate, amount_usd: toUsd(erTotal),
-          pl_impact: true, status: 'unpaid',
-          note: `Payroll ${invDate.slice(0, 7)} — Contributions on behalf of employer${rounding !== 0 ? ' (incl. rounding ' + rounding + ')' : ''}`,
+          pl_impact: true, status: 'unpaid', parent_invoice_id: parentId || null,
+          note: `Payroll ${invDate.slice(0, 7)} — Contributions on behalf of employer${rounding !== 0 ? ' | rounding: ' + rounding : ''}`,
         })
       }
       setProgress(100)
