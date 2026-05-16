@@ -380,6 +380,8 @@ export default function BulkImport({ onClose, onImported }: Props) {
   const [openInvoices, setOpenInvoices] = useState<any[]>([])
   const [fileName, setFileName] = useState('')
   const [parseError, setParseError] = useState('')
+  const [importHistory, setImportHistory] = useState<any[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const [reviewPartnerSearch, setReviewPartnerSearch] = useState<Record<string, string>>({})
   const [savingAccount, setSavingAccount] = useState<Record<string, boolean>>({})
@@ -432,6 +434,22 @@ export default function BulkImport({ onClose, onImported }: Props) {
   useEffect(() => {
     if (company) setBanks(allBanks.filter(b => b.company_id === company))
   }, [company, allBanks])
+
+  useEffect(() => {
+    if (company && bank) {
+      setLoadingHistory(true)
+      supabase.from('import_logs')
+        .select('*')
+        .eq('company_id', company)
+        .eq('bank_id', bank)
+        .eq('import_type', 'bank_statement')
+        .order('created_at', { ascending: false })
+        .limit(10)
+        .then(({ data }) => { setImportHistory(data || []); setLoadingHistory(false) })
+    } else {
+      setImportHistory([])
+    }
+  }, [company, bank])
 
   useEffect(() => {
     if (!company) return
@@ -892,6 +910,22 @@ export default function BulkImport({ onClose, onImported }: Props) {
       }
       done++; setProgress(Math.round((done / accepted.length) * 100))
     }
+    // Log this import
+    if (rows.length > 0) {
+      const dates = accepted.map(r => r.parsed.date).filter(Boolean).sort()
+      const dateFrom = dates[0] ? dates[0].split('.').reverse().join('-') : null
+      const dateTo = dates[dates.length - 1] ? dates[dates.length - 1].split('.').reverse().join('-') : null
+      await supabase.from('import_logs').insert({
+        company_id: company,
+        bank_id: bank,
+        import_type: 'bank_statement',
+        file_name: fileName,
+        date_from: dateFrom,
+        date_to: dateTo,
+        row_count: accepted.length,
+        note: `${accepted.length} rows posted`,
+      })
+    }
     setStep('done')
   }
 
@@ -914,11 +948,11 @@ export default function BulkImport({ onClose, onImported }: Props) {
   if (step === 'done') return (
     <div style={s.overlay}>
       <div style={{ ...s.dialog, alignItems: 'center', justifyContent: 'center', gap: '16px', minHeight: '260px' }}>
-        <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#E1F5EE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(0,212,126,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="2"><path d="M5 13l4 4L19 7" /></svg>
         </div>
-        <div style={{ fontFamily: 'Georgia,serif', fontSize: '22px', color: '#111' }}>Import complete!</div>
-        <div style={{ fontSize: '13px', color: '#888', textAlign: 'center' as const }}>{accepted} entr{accepted !== 1 ? 'ies' : 'y'} posted.<br />{rejected} skipped.</div>
+        <div style={{ fontFamily: 'Georgia,serif', fontSize: '22px', color: '#DCE9F6' }}>Import complete!</div>
+        <div style={{ fontSize: '13px', color: '#7A9BB8', textAlign: 'center' as const }}>{accepted} entr{accepted !== 1 ? 'ies' : 'y'} posted.<br />{rejected} skipped.</div>
         <button style={s.btnPrimary} onClick={() => { onImported(); onClose() }}>View transactions</button>
       </div>
     </div>
@@ -966,6 +1000,36 @@ export default function BulkImport({ onClose, onImported }: Props) {
                   </div>
                 </div>
               </div>
+              {company && bank && (
+                <div style={s.section}>
+                  <div style={s.sectionTitle}>Previous imports — this account</div>
+                  {loadingHistory ? (
+                    <div style={{ fontSize: '12px', color: '#7A9BB8', padding: '8px 0' }}>Loading...</div>
+                  ) : importHistory.length === 0 ? (
+                    <div style={{ fontSize: '12px', color: '#7A9BB8', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      No previous imports for this account.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '6px' }}>
+                      {importHistory.map(log => (
+                        <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '13px', fontWeight: '500', color: '#DCE9F6' }}>{log.file_name || 'Unknown file'}</div>
+                            <div style={{ fontSize: '11px', color: '#7A9BB8', marginTop: '2px' }}>
+                              {log.date_from && log.date_to ? `${log.date_from} → ${log.date_to}` : log.date_from || '—'}
+                              {log.row_count ? ` · ${log.row_count} rows` : ''}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#7A9BB8', whiteSpace: 'nowrap' as const }}>
+                            {new Date(log.created_at).toLocaleDateString('en-GB')}
+                          </div>
+                          <div style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(0,212,126,0.10)', color: '#00D47E' }}>✓ Imported</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <div style={s.section}>
                 <div style={s.sectionTitle}>Upload file</div>
                 <div style={s.dropZone} onDrop={handleDrop} onDragOver={e => e.preventDefault()} onClick={() => fileRef.current?.click()}>
@@ -1007,10 +1071,10 @@ export default function BulkImport({ onClose, onImported }: Props) {
                       <div key={r.parsed.id} style={s.previewRow}>
                         <div style={{ flex: 1 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: '500', color: '#111' }}>{r.override_partner_name || r.parsed.partner_name || '—'}</div>
+                            <div style={{ fontSize: '13px', fontWeight: '500', color: '#DCE9F6' }}>{r.override_partner_name || r.parsed.partner_name || '—'}</div>
                             {r.override_partner_id && <span style={{ fontSize: '10px', color: '#085041', background: '#E1F5EE', padding: '1px 6px', borderRadius: '20px' }}>✓ matched</span>}
                           </div>
-                          <div style={{ fontSize: '11px', color: '#888' }}>{r.parsed.date} · {r.parsed.description?.slice(0, 60)}</div>
+                          <div style={{ fontSize: '11px', color: '#7A9BB8' }}>{r.parsed.date} · {r.parsed.description?.slice(0, 60)}</div>
                         </div>
                         <div style={{ textAlign: 'right' as const }}>
                           {(r.parsed.debit || 0) > 0 && <div style={{ fontSize: '13px', fontWeight: '500', color: '#A32D2D' }}>-{r.parsed.debit?.toLocaleString()} {r.parsed.currency}</div>}
@@ -1036,10 +1100,10 @@ export default function BulkImport({ onClose, onImported }: Props) {
           {step === 'review' && (
             <>
               <div style={s.reviewSummary}>
-                <div style={s.reviewStat}><span style={{ fontSize: '20px', fontWeight: '600', color: '#1D9E75' }}>{accepted}</span><span style={{ fontSize: '11px', color: '#888' }}>Accepted</span></div>
-                <div style={s.reviewStat}><span style={{ fontSize: '20px', fontWeight: '600', color: '#A32D2D' }}>{rejected}</span><span style={{ fontSize: '11px', color: '#888' }}>Rejected</span></div>
-                <div style={s.reviewStat}><span style={{ fontSize: '20px', fontWeight: '600', color: '#633806' }}>{pending}</span><span style={{ fontSize: '11px', color: '#888' }}>Pending</span></div>
-                <div style={s.reviewStat}><span style={{ fontSize: '20px', fontWeight: '600', color: '#085041' }}>{rows.filter(r => r.override_partner_id).length}</span><span style={{ fontSize: '11px', color: '#888' }}>Matched</span></div>
+                <div style={s.reviewStat}><span style={{ fontSize: '20px', fontWeight: '600', color: '#1D9E75' }}>{accepted}</span><span style={{ fontSize: '11px', color: '#7A9BB8' }}>Accepted</span></div>
+                <div style={s.reviewStat}><span style={{ fontSize: '20px', fontWeight: '600', color: '#A32D2D' }}>{rejected}</span><span style={{ fontSize: '11px', color: '#7A9BB8' }}>Rejected</span></div>
+                <div style={s.reviewStat}><span style={{ fontSize: '20px', fontWeight: '600', color: '#633806' }}>{pending}</span><span style={{ fontSize: '11px', color: '#7A9BB8' }}>Pending</span></div>
+                <div style={s.reviewStat}><span style={{ fontSize: '20px', fontWeight: '600', color: '#085041' }}>{rows.filter(r => r.override_partner_id).length}</span><span style={{ fontSize: '11px', color: '#7A9BB8' }}>Matched</span></div>
                 <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px' }}>
                   <button style={s.btnSmallGreen} onClick={acceptAll}>✓ Accept all</button>
                   <button style={s.btnSmallRed} onClick={rejectAll}>✕ Reject all</button>
@@ -1073,13 +1137,13 @@ export default function BulkImport({ onClose, onImported }: Props) {
                         <div style={{ flexShrink: 0, width: '14px', fontSize: '11px', color: '#bbb' }}>{isExpanded ? '▼' : '▶'}</div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px', flexWrap: 'wrap' as const }}>
-                            <span style={{ fontSize: '13px', fontWeight: '500', color: '#111' }}>{row.override_partner_name || p.partner_name || '—'}</span>
+                            <span style={{ fontSize: '13px', fontWeight: '500', color: '#DCE9F6' }}>{row.override_partner_name || p.partner_name || '—'}</span>
                             {row.override_partner_id && <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: '#E1F5EE', color: '#085041' }}>✓ baza</span>}
                             {conf && row.proposal && <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: conf.bg, color: conf.color }}>{row.proposal.confidence}</span>}
                             <span style={{ fontSize: '10px', fontWeight: '500', padding: '1px 7px', borderRadius: '20px', background: typeBadge.bg, color: typeBadge.color }}>{typeBadge.label}</span>
                             <span style={{ fontSize: '10px', color: '#aaa' }}>{FORMAT_LABELS[p.source_format]}</span>
                           </div>
-                          <div style={{ fontSize: '11px', color: '#888' }}>{p.date} · {p.description?.slice(0, 65)}{(p.description?.length || 0) > 65 ? '...' : ''}</div>
+                          <div style={{ fontSize: '11px', color: '#7A9BB8' }}>{p.date} · {p.description?.slice(0, 65)}{(p.description?.length || 0) > 65 ? '...' : ''}</div>
                           {row.override_tx_type === 'direct' && row.override_pl_category_name && (
                             <div style={{ fontSize: '11px', color: '#1D9E75', marginTop: '2px' }}>📊 {row.override_pl_category_name}{row.override_department_name ? ` · ${row.override_department_name}` : ''}</div>
                           )}
@@ -1556,52 +1620,52 @@ export default function BulkImport({ onClose, onImported }: Props) {
 
 const s: Record<string, React.CSSProperties> = {
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-  dialog: { background: '#fff', borderRadius: '16px', width: '920px', maxWidth: '96vw', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-  header: { background: '#0a1628', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  dialog: { background: '#0D1B2C', borderRadius: '16px', width: '920px', maxWidth: '96vw', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  header: { background: '#060E1A', padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
   headerTitle: { color: '#fff', fontSize: '15px', fontWeight: '500', marginBottom: '3px' },
   headerSub: { color: 'rgba(255,255,255,0.45)', fontSize: '12px' },
   closeBtn: { background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '22px', cursor: 'pointer', padding: '0 4px', lineHeight: 1 },
-  body: { padding: '1.5rem', overflowY: 'auto', flex: 1 },
-  footer: { padding: '1rem 1.5rem', borderTop: '0.5px solid #e5e5e5', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f5f5f3' },
+  body: { padding: '1.5rem', overflowY: 'auto', flex: 1, background: '#0D1B2C' },
+  footer: { padding: '1rem 1.5rem', borderTop: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#060E1A' },
   section: { marginBottom: '1.5rem' },
-  sectionTitle: { fontSize: '11px', fontWeight: '500', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: '10px', paddingBottom: '6px', borderBottom: '0.5px solid #e5e5e5' },
+  sectionTitle: { fontSize: '10px', fontWeight: '600', color: '#7A9BB8', textTransform: 'uppercase' as const, letterSpacing: '0.1em', marginBottom: '10px', paddingBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.06)' },
   row2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' },
   field: { display: 'flex', flexDirection: 'column' as const, gap: '4px' },
   lbl: { fontSize: '11px', fontWeight: '500', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.07em' },
   req: { color: '#E24B4A' },
-  select: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 10px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#fff', color: '#111', outline: 'none' },
-  dropZone: { border: '2px dashed #e5e5e5', borderRadius: '12px', padding: '2.5rem', textAlign: 'center' as const, cursor: 'pointer', background: '#fafaf9' },
-  infoBox: { background: '#E1F5EE', border: '0.5px solid #5DCAA5', borderRadius: '8px', padding: '10px 14px', fontSize: '13px', color: '#085041', marginBottom: '12px' },
+  select: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 10px', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '8px', background: '#111F30', color: '#DCE9F6', outline: 'none' },
+  dropZone: { border: '2px dashed rgba(255,255,255,0.12)', borderRadius: '12px', padding: '2.5rem', textAlign: 'center' as const, cursor: 'pointer', background: 'rgba(255,255,255,0.02)' },
+  infoBox: { background: 'rgba(0,212,126,0.08)', border: '1px solid rgba(0,212,126,0.25)', borderRadius: '8px', padding: '10px 14px', fontSize: '13px', color: '#00D47E', marginBottom: '12px' },
   errorMsg: { fontSize: '12px', color: '#E24B4A', marginTop: '8px' },
-  previewList: { border: '0.5px solid #e5e5e5', borderRadius: '10px', overflow: 'hidden' },
-  previewRow: { display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', borderBottom: '0.5px solid #f5f5f3', background: '#fff' },
+  previewList: { border: '1px solid rgba(255,255,255,0.07)', borderRadius: '10px', overflow: 'hidden' },
+  previewRow: { display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.05)', background: '#111F30' },
   analyzingBox: { background: '#E1F5EE', border: '0.5px solid #5DCAA5', borderRadius: '10px', padding: '16px', textAlign: 'center' as const },
   progressBar: { width: '100%', height: '6px', background: '#e5e5e5', borderRadius: '3px', overflow: 'hidden' },
   progressFill: { height: '100%', background: '#1D9E75', borderRadius: '3px' },
-  reviewSummary: { display: 'flex', alignItems: 'center', gap: '24px', padding: '12px 16px', background: '#f5f5f3', borderRadius: '10px', marginBottom: '12px' },
+  reviewSummary: { display: 'flex', alignItems: 'center', gap: '24px', padding: '12px 16px', background: '#111F30', borderRadius: '10px', marginBottom: '12px', border: '1px solid rgba(255,255,255,0.07)' },
   reviewStat: { display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: '2px' },
   reviewList: { display: 'flex', flexDirection: 'column' as const, gap: '6px' },
-  reviewRow: { border: '0.5px solid #e5e5e5', borderRadius: '10px', background: '#fff', overflow: 'visible' },
-  reviewRowAccepted: { border: '1.5px solid #1D9E75', background: '#f0fdf8' },
+  reviewRow: { border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', background: '#0D1B2C', overflow: 'visible' },
+  reviewRowAccepted: { border: '1.5px solid #00D47E', background: 'rgba(0,212,126,0.06)' },
   reviewRowRejected: { opacity: 0.45 },
-  reviewRowPassthrough: { border: '0.5px solid #E6B432', background: '#FFFDF0' },
-  reviewRowMain: { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', cursor: 'pointer' },
-  editPanel: { padding: '14px 16px', borderTop: '0.5px solid #e5e5e5', background: '#f9f9f7' },
-  aiNotes: { fontSize: '11px', color: '#085041', background: '#E1F5EE', border: '0.5px solid #5DCAA5', borderRadius: '6px', padding: '6px 10px', marginBottom: '12px' },
-  editSectionTitle: { fontSize: '10px', fontWeight: '500', color: '#aaa', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginTop: '14px', marginBottom: '8px', paddingBottom: '4px', borderBottom: '0.5px solid #e5e5e5' },
+  reviewRowPassthrough: { border: '1px solid rgba(245,166,35,0.4)', background: 'rgba(245,166,35,0.05)' },
+  reviewRowMain: { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', cursor: 'pointer', background: '#111F30', borderRadius: '10px 10px 0 0' },
+  editPanel: { padding: '14px 16px', borderTop: '1px solid rgba(255,255,255,0.07)', background: '#0D1B2C' },
+  aiNotes: { fontSize: '11px', color: '#00D47E', background: 'rgba(0,212,126,0.08)', border: '1px solid rgba(0,212,126,0.2)', borderRadius: '6px', padding: '6px 10px', marginBottom: '12px' },
+  editSectionTitle: { fontSize: '10px', fontWeight: '600', color: '#7A9BB8', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginTop: '14px', marginBottom: '8px', paddingBottom: '4px', borderBottom: '1px solid rgba(255,255,255,0.06)' },
   editGrid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' },
   editField: { display: 'flex', flexDirection: 'column' as const, gap: '4px' },
-  editLbl: { fontSize: '10px', fontWeight: '500', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.07em' },
-  editInput: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '7px 10px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#fff', color: '#111', outline: 'none' },
-  editSelect: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '7px 10px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#fff', color: '#111', outline: 'none' },
+  editLbl: { fontSize: '10px', fontWeight: '500', color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase' as const, letterSpacing: '0.07em' },
+  editInput: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '7px 10px', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '8px', background: '#111F30', color: '#DCE9F6', outline: 'none' },
+  editSelect: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '7px 10px', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '8px', background: '#111F30', color: '#DCE9F6', outline: 'none' },
   allocGrid: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '8px', marginTop: '6px' },
-  allocBtn: { border: '0.5px solid #e5e5e5', borderRadius: '8px', padding: '8px 6px', background: '#f5f5f3', cursor: 'pointer', textAlign: 'center' as const },
-  allocBtnActive: { border: '2px solid #1D9E75', background: '#E1F5EE' },
-  actionBtn: { width: '28px', height: '28px', borderRadius: '6px', border: '0.5px solid #e5e5e5', background: '#f5f5f3', cursor: 'pointer', fontSize: '12px', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  actionBtnAccepted: { background: '#E1F5EE', border: '1.5px solid #1D9E75', color: '#085041' },
-  actionBtnRejected: { background: '#FCEBEB', border: '1.5px solid #E24B4A', color: '#A32D2D' },
+  allocBtn: { border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', padding: '8px 6px', background: 'rgba(255,255,255,0.03)', cursor: 'pointer', textAlign: 'center' as const },
+  allocBtnActive: { border: '2px solid #00D47E', background: 'rgba(0,212,126,0.10)' },
+  actionBtn: { width: '28px', height: '28px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)', cursor: 'pointer', fontSize: '12px', color: '#7A9BB8', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  actionBtnAccepted: { background: 'rgba(0,212,126,0.15)', border: '1.5px solid #00D47E', color: '#00D47E' },
+  actionBtnRejected: { background: 'rgba(255,91,90,0.12)', border: '1.5px solid #FF5B5A', color: '#FF5B5A' },
   btnSmallGreen: { fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '5px 12px', border: '0.5px solid #1D9E75', borderRadius: '6px', background: 'transparent', color: '#1D9E75', cursor: 'pointer' },
   btnSmallRed: { fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '5px 12px', border: '0.5px solid #E24B4A', borderRadius: '6px', background: 'transparent', color: '#A32D2D', cursor: 'pointer' },
-  btnGhost: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 16px', borderRadius: '8px', border: '0.5px solid #e5e5e5', background: 'transparent', color: '#666', cursor: 'pointer' },
-  btnPrimary: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 18px', borderRadius: '8px', border: 'none', background: '#1D9E75', color: '#fff', cursor: 'pointer', fontWeight: '500' },
+  btnGhost: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.12)', background: 'transparent', color: '#7A9BB8', cursor: 'pointer' },
+  btnPrimary: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '8px 18px', borderRadius: '8px', border: 'none', background: '#00D47E', color: '#060E1A', cursor: 'pointer', fontWeight: '600' },
 }

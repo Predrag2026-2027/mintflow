@@ -256,6 +256,8 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
   const [taxPartnerSearch, setTaxPartnerSearch] = useState('')
   const [taxDropdown, setTaxDropdown] = useState(false)
   const [rawWorkbook, setRawWorkbook] = useState<XLSX.WorkBook | null>(null)
+  const [importHistory, setImportHistory] = useState<any[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
@@ -532,6 +534,16 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
           note: `Payroll ${invDate.slice(0, 7)} — Contributions on behalf of employer${rounding !== 0 ? ' | rounding: ' + rounding : ''}`,
         })
       }
+      // Log this import
+      await supabase.from('import_logs').insert({
+        company_id: companyId,
+        import_type: 'payroll',
+        file_name: fileName,
+        period_month: invDate.slice(0, 7),
+        filing_ref: taxFilingRef || null,
+        row_count: accepted.length,
+        note: `${accepted.length} employees · ${taxMode === 'incentive' ? 'Tax Incentives' : 'Standard'}`,
+      })
       setProgress(100)
       setTimeout(() => { onPosted(); onClose() }, 800)
     } catch (err: any) { alert(`Error: ${err.message}`); setStep('review') }
@@ -582,6 +594,28 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
                   </div>
                 ))}
               </div>
+              {importHistory.length > 0 && (
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={s.sectionTitle}>Previous payroll imports</div>
+                  <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '6px' }}>
+                    {importHistory.map(log => (
+                      <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '13px', fontWeight: '500', color: '#DCE9F6' }}>
+                            {log.period_month || log.file_name || 'Unknown'}
+                            {log.filing_ref && <span style={{ fontSize: '11px', color: '#7A9BB8', marginLeft: '8px' }}>· {log.filing_ref}</span>}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#7A9BB8', marginTop: '2px' }}>{log.note}</div>
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#7A9BB8', whiteSpace: 'nowrap' as const }}>
+                          {new Date(log.created_at).toLocaleDateString('en-GB')}
+                        </div>
+                        <div style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(0,212,126,0.10)', color: '#00D47E' }}>✓ Posted</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div style={s.sectionTitle}>Upload Excel file</div>
               <div style={s.dropZone} onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }} onDragOver={e => e.preventDefault()} onClick={() => fileRef.current?.click()}>
                 <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]) }} />
