@@ -382,6 +382,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
   const [parseError, setParseError] = useState('')
   const [importHistory, setImportHistory] = useState<any[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
+  const [historyExpanded, setHistoryExpanded] = useState(false)
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const [reviewPartnerSearch, setReviewPartnerSearch] = useState<Record<string, string>>({})
   const [savingAccount, setSavingAccount] = useState<Record<string, boolean>>({})
@@ -449,6 +450,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
         .limit(50)
       if (error) console.error('import_logs error:', error)
       setImportHistory(data || [])
+      if (data && data.length > 0) setHistoryExpanded(true)
       setLoadingHistory(false)
     }
     fetchHistory()
@@ -1003,36 +1005,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
                   </div>
                 </div>
               </div>
-              {company && bank && (
-                <div style={s.section}>
-                  <div style={s.sectionTitle}>Previous imports — this account</div>
-                  {loadingHistory ? (
-                    <div style={{ fontSize: '12px', color: '#7A9BB8', padding: '8px 0' }}>Loading...</div>
-                  ) : importHistory.length === 0 ? (
-                    <div style={{ fontSize: '12px', color: '#7A9BB8', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                      No previous imports for this account.
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '6px' }}>
-                      {importHistory.map(log => (
-                        <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: '13px', fontWeight: '500', color: '#DCE9F6' }}>{log.file_name || 'Unknown file'}</div>
-                            <div style={{ fontSize: '11px', color: '#7A9BB8', marginTop: '2px' }}>
-                              {log.date_from && log.date_to ? `${log.date_from} → ${log.date_to}` : log.date_from || '—'}
-                              {log.row_count ? ` · ${log.row_count} rows` : ''}
-                            </div>
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#7A9BB8', whiteSpace: 'nowrap' as const }}>
-                            {new Date(log.created_at).toLocaleDateString('en-GB')}
-                          </div>
-                          <div style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(0,212,126,0.10)', color: '#00D47E' }}>✓ Imported</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
               <div style={s.section}>
                 <div style={s.sectionTitle}>Upload file</div>
                 <div style={s.dropZone} onDrop={handleDrop} onDragOver={e => e.preventDefault()} onClick={() => fileRef.current?.click()}>
@@ -1087,6 +1059,43 @@ export default function BulkImport({ onClose, onImported }: Props) {
                     ))}
                     {rows.length > 5 && <div style={{ padding: '8px 14px', fontSize: '12px', color: '#aaa', textAlign: 'center' as const }}>+{rows.length - 5} more rows...</div>}
                   </div>
+                </div>
+              )}
+              {company && bank && (
+                <div style={{ ...s.section, marginTop: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', paddingBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: '10px' }}
+                    onClick={() => setHistoryExpanded(prev => !prev)}>
+                    <div style={{ fontSize: '10px', fontWeight: '600', color: '#7A9BB8', textTransform: 'uppercase' as const, letterSpacing: '0.1em' }}>
+                      🕐 Previous imports — this account
+                      {importHistory.length > 0 && <span style={{ marginLeft: '8px', background: 'rgba(0,212,126,0.15)', color: '#00D47E', padding: '1px 7px', borderRadius: '20px', fontSize: '10px' }}>{importHistory.length}</span>}
+                    </div>
+                    <span style={{ fontSize: '10px', color: '#7A9BB8' }}>{historyExpanded ? '▲ Hide' : '▼ Show'}</span>
+                  </div>
+                  {historyExpanded && (
+                    importHistory.length === 0 ? (
+                      <div style={{ fontSize: '12px', color: '#7A9BB8', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                        No previous imports for this account.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '6px', maxHeight: '220px', overflowY: 'auto' as const }}>
+                        {importHistory.map(log => (
+                          <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: '13px', fontWeight: '500', color: '#DCE9F6' }}>{log.file_name || 'Unknown file'}</div>
+                              <div style={{ fontSize: '11px', color: '#7A9BB8', marginTop: '2px' }}>
+                                {log.date_from && log.date_to ? `${log.date_from} → ${log.date_to}` : log.date_from || '—'}
+                                {log.row_count ? ` · ${log.row_count} rows` : ''}
+                              </div>
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#7A9BB8', whiteSpace: 'nowrap' as const }}>
+                              {new Date(log.created_at).toLocaleDateString('en-GB')}
+                            </div>
+                            <div style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(0,212,126,0.10)', color: '#00D47E' }}>✓ Imported</div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  )}
                 </div>
               )}
               {analyzing && (
