@@ -256,6 +256,8 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
   const [taxPartnerSearch, setTaxPartnerSearch] = useState('')
   const [taxDropdown, setTaxDropdown] = useState(false)
   const [rawWorkbook, setRawWorkbook] = useState<XLSX.WorkBook | null>(null)
+  const [importHistory, setImportHistory] = useState<any[]>([])
+  const [historyExpanded, setHistoryExpanded] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
@@ -269,7 +271,20 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
       if (comp) {
         setCompanies(comp)
         const c = comp.find((x: any) => x.name.toLowerCase().includes('constellation'))
-        if (c) setCompanyId(c.id)
+        if (c) {
+          setCompanyId(c.id)
+          // Load payroll import history
+          supabase.from('import_logs')
+            .select('*')
+            .eq('company_id', c.id)
+            .eq('import_type', 'payroll')
+            .order('created_at', { ascending: false })
+            .limit(50)
+            .then(({ data }) => {
+              setImportHistory(data || [])
+              if (data && data.length > 0) setHistoryExpanded(true)
+            })
+        }
       }
       if (part) {
         setPartners(part)
@@ -592,28 +607,6 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
                   </div>
                 ))}
               </div>
-              {importHistory.length > 0 && (
-                <div style={{ marginBottom: '20px' }}>
-                  <div style={s.sectionTitle}>Previous payroll imports</div>
-                  <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '6px' }}>
-                    {importHistory.map(log => (
-                      <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: '13px', fontWeight: '500', color: '#DCE9F6' }}>
-                            {log.period_month || log.file_name || 'Unknown'}
-                            {log.filing_ref && <span style={{ fontSize: '11px', color: '#7A9BB8', marginLeft: '8px' }}>· {log.filing_ref}</span>}
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#7A9BB8', marginTop: '2px' }}>{log.note}</div>
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#7A9BB8', whiteSpace: 'nowrap' as const }}>
-                          {new Date(log.created_at).toLocaleDateString('en-GB')}
-                        </div>
-                        <div style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(0,212,126,0.10)', color: '#00D47E' }}>✓ Posted</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
               <div style={s.sectionTitle}>Upload Excel file</div>
               <div style={s.dropZone} onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }} onDragOver={e => e.preventDefault()} onClick={() => fileRef.current?.click()}>
                 <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]) }} />
@@ -622,6 +615,41 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
                 <div style={{ fontSize: '12px', color: '#7A9BB8' }}>Obracun zarada — MMP format (.xlsx)</div>
               </div>
               {parseError && <div style={s.errorBox}>⚠️ {parseError}</div>}
+              <div style={{ marginTop: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', paddingBottom: '6px', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: '10px' }}
+                  onClick={() => setHistoryExpanded(prev => !prev)}>
+                  <div style={{ fontSize: '10px', fontWeight: '600', color: '#7A9BB8', textTransform: 'uppercase' as const, letterSpacing: '0.1em' }}>
+                    🕐 Previous payroll imports
+                    {importHistory.length > 0 && <span style={{ marginLeft: '8px', background: 'rgba(0,212,126,0.15)', color: '#00D47E', padding: '1px 7px', borderRadius: '20px', fontSize: '10px' }}>{importHistory.length}</span>}
+                  </div>
+                  <span style={{ fontSize: '10px', color: '#7A9BB8' }}>{historyExpanded ? '▲ Hide' : '▼ Show'}</span>
+                </div>
+                {historyExpanded && (
+                  importHistory.length === 0 ? (
+                    <div style={{ fontSize: '12px', color: '#7A9BB8', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      No previous payroll imports.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '6px', maxHeight: '240px', overflowY: 'auto' as const }}>
+                      {importHistory.map(log => (
+                        <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '13px', fontWeight: '500', color: '#DCE9F6' }}>
+                              {log.period_month || log.file_name || 'Unknown'}
+                              {log.filing_ref && <span style={{ fontSize: '11px', color: '#7A9BB8', marginLeft: '8px' }}>· {log.filing_ref}</span>}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#7A9BB8', marginTop: '2px' }}>{log.note}</div>
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#7A9BB8', whiteSpace: 'nowrap' as const }}>
+                            {new Date(log.created_at).toLocaleDateString('en-GB')}
+                          </div>
+                          <div style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(0,212,126,0.10)', color: '#00D47E' }}>✓ Posted</div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                )}
+              </div>
             </div>
           )}
 
