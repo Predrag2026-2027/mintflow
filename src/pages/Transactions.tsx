@@ -253,7 +253,6 @@ export default function Transactions() {
             </select>
             <input type="date" style={{ ...s.filterSelect, color: filterDateFrom ? '#DCE9F6' : '#7A9BB8' }}
               value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} title="From date" />
-            <span style={{ color: '#7A9BB8', fontSize: '12px' }}>—</span>
             <input type="date" style={{ ...s.filterSelect, color: filterDateTo ? '#DCE9F6' : '#7A9BB8' }}
               value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} title="To date" />
             {/* Tab-specific filters */}
