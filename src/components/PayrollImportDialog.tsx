@@ -451,7 +451,7 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
             department: 'General Business Expenses',
             dept_subcategory: isFit ? 'Labour related expenses' : 'General expenses',
             expense_description: isFit ? 'FitPass expenses' : 'Penalty, fines and other forced fees',
-            rev_alloc_type: 'sg100', opex_type: 'opex',
+            rev_alloc_type: 'shared', opex_type: 'opex',
             note: `Payroll ${invDate.slice(0, 7)} — Storno: ${ded.name} — ${emp.employee_name}`, status: 'posted',
           })
         }
