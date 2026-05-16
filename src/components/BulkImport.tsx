@@ -381,7 +381,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
   const [fileName, setFileName] = useState('')
   const [parseError, setParseError] = useState('')
   const [importHistory, setImportHistory] = useState<any[]>([])
-  const [loadingHistory, setLoadingHistory] = useState(false)
   const [historyExpanded, setHistoryExpanded] = useState(false)
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const [reviewPartnerSearch, setReviewPartnerSearch] = useState<Record<string, string>>({})
@@ -439,7 +438,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
   useEffect(() => {
     if (!company || !bank) { setImportHistory([]); return }
     const fetchHistory = async () => {
-      setLoadingHistory(true)
       const { data, error } = await supabase
         .from('import_logs')
         .select('*')
@@ -451,7 +449,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
       if (error) console.error('import_logs error:', error)
       setImportHistory(data || [])
       if (data && data.length > 0) setHistoryExpanded(true)
-      setLoadingHistory(false)
     }
     fetchHistory()
   }, [company, bank])
