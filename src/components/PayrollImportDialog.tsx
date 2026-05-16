@@ -256,7 +256,6 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
   const [taxPartnerSearch, setTaxPartnerSearch] = useState('')
   const [taxDropdown, setTaxDropdown] = useState(false)
   const [rawWorkbook, setRawWorkbook] = useState<XLSX.WorkBook | null>(null)
-  const [importHistory, setImportHistory] = useState<any[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
