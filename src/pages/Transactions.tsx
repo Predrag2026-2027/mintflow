@@ -305,30 +305,8 @@ export default function Transactions() {
               {activeTab === 'passthrough' && `${filteredPassthroughs.length} entries`}
             </div>
           </div>
-}
-          {activeTab === 'transactions' && (
-            <select value={filterType} onChange={e => setFilterType(e.target.value)} style={s.filterSelect}>
-              <option value="all">All types</option>
-              <option value="invoice_payment">Invoice payment</option>
-              <option value="direct">Direct</option>
-            </select>
-          )}
-          {activeTab === 'passthrough' && (
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={s.filterSelect}>
-              <option value="all">All statuses</option>
-              <option value="unpaired">Unpaired</option>
-              <option value="paired">Paired</option>
-              <option value="balanced">Balanced</option>
-            </select>
-          )}
-          <div style={s.totalBadge}>
-            {activeTab === 'invoices' && <>{filteredInvoices.length} invoices · <strong>{fmtUSD(filteredInvoices.reduce((s, i) => s + (i.amount_usd || 0), 0))} USD</strong></>}
-            {activeTab === 'transactions' && <>{filteredTransactions.length} entries · <strong>{fmtUSD(filteredTransactions.reduce((s, t) => s + (t.amount_usd || 0), 0))} USD</strong></>}
-            {activeTab === 'passthrough' && <>{filteredPassthroughs.length} entries</>}
-          </div>
         </div>
-
-        <div style={s.tableWrap}>
+                <div style={s.tableWrap}>
           {loading ? (
             <div style={s.emptyState}><div style={{ fontSize: '14px', color: '#7A9BB8' }}>Loading...</div></div>
           ) : activeTab === 'invoices' && (
