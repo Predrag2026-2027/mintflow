@@ -35,6 +35,9 @@ export default function Transactions() {
 
   const [filterEntity, setFilterEntity] = useState('all')
   const [filterType, setFilterType] = useState('all')
+  const [filterPlCategory, setFilterPlCategory] = useState('all')
+  const [filterDateFrom, setFilterDateFrom] = useState('')
+  const [filterDateTo, setFilterDateTo] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [search, setSearch] = useState('')
 
@@ -175,7 +178,7 @@ export default function Transactions() {
   const directWithPL = transactions.filter(t => t.type === 'direct' && t.pl_impact && t.status !== 'reconciled').length
 
   const handleTabChange = (tab: Tab) => {
-    setActiveTab(tab); setSearch(''); setFilterType('all'); setFilterStatus('all'); setShowMenu(null)
+    setActiveTab(tab); setSearch(''); setFilterType('all'); setFilterStatus('all'); setFilterPlCategory('all'); setShowMenu(null)
   }
 
   return (
@@ -246,6 +249,18 @@ export default function Transactions() {
             <option value="constellation">Constellation LLC</option>
             <option value="social">Social Growth</option>
           </select>
+          <input type="date" style={{ ...s.filterSelect, color: filterDateFrom ? '#DCE9F6' : '#7A9BB8' }}
+            value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)}
+            title="From date" />
+          <input type="date" style={{ ...s.filterSelect, color: filterDateTo ? '#DCE9F6' : '#7A9BB8' }}
+            value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
+            title="To date" />
+          {(filterDateFrom || filterDateTo || filterPlCategory !== 'all') && (
+            <button style={{ ...s.filterSelect, cursor: 'pointer', color: '#FF5B5A', border: '1px solid rgba(255,91,90,0.3)', background: 'rgba(255,91,90,0.08)' }}
+              onClick={() => { setFilterDateFrom(''); setFilterDateTo(''); setFilterPlCategory('all') }}>
+              ✕ Clear
+            </button>
+          )}
           {activeTab === 'invoices' && (<>
             <select value={filterType} onChange={e => setFilterType(e.target.value)} style={s.filterSelect}>
               <option value="all">All types</option>
@@ -259,6 +274,12 @@ export default function Transactions() {
               <option value="paid">Paid</option>
               <option value="overpaid">Overpaid</option>
               <option value="reconciled">Reconciled</option>
+            </select>
+            <select value={filterPlCategory} onChange={e => setFilterPlCategory(e.target.value)} style={s.filterSelect}>
+              <option value="all">All P&L categories</option>
+              {[...new Set(invoices.map(i => i.pl_category).filter(Boolean))].sort().map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
             </select>
           </>)}
           {activeTab === 'transactions' && (
