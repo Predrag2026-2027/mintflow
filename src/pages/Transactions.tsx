@@ -150,17 +150,25 @@ export default function Transactions() {
   const filteredInvoices = invoices.filter(inv => {
     const company = inv.company_name || ''
     const partner = inv.partner_name || ''
+    const invDate = (inv.invoice_date || '').slice(0, 10)
     return (filterEntity === 'all' || company.toLowerCase().includes(filterEntity)) &&
       (filterType === 'all' || inv.type === filterType) &&
       (filterStatus === 'all' || inv.calculated_status === filterStatus) &&
+      (filterPlCategory === 'all' || (inv.pl_category || '') === filterPlCategory) &&
+      (!filterDateFrom || invDate >= filterDateFrom) &&
+      (!filterDateTo || invDate <= filterDateTo) &&
       (!search || partner.toLowerCase().includes(search.toLowerCase()) || (inv.invoice_number || '').toLowerCase().includes(search.toLowerCase()))
   })
 
   const filteredTransactions = transactions.filter(t => {
     const company = t.companies?.name || ''
     const partner = t.partners?.name || ''
+    const txDate = (t.transaction_date || '').slice(0, 10)
     return (filterEntity === 'all' || company.toLowerCase().includes(filterEntity)) &&
       (filterType === 'all' || t.type === filterType) &&
+      (filterPlCategory === 'all' || (t.pl_category || '') === filterPlCategory) &&
+      (!filterDateFrom || txDate >= filterDateFrom) &&
+      (!filterDateTo || txDate <= filterDateTo) &&
       (!search || partner.toLowerCase().includes(search.toLowerCase()) || (t.note || '').toLowerCase().includes(search.toLowerCase()))
   })
 
