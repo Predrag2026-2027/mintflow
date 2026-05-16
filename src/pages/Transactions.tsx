@@ -519,6 +519,6 @@ const s: Record<string, React.CSSProperties> = {
   usdCell: { fontSize: '13px', fontWeight: '500', color: '#00D47E', whiteSpace: 'nowrap' as const },
   badge: { fontSize: '10px', fontWeight: '500', padding: '2px 8px', borderRadius: '20px', textTransform: 'capitalize' as const, whiteSpace: 'nowrap' as const },
   editBtn: { background: 'none', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', color: '#7A9BB8', fontSize: '14px' },
-  contextMenu: { position: 'fixed' as const, background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '8px', zIndex: 9999, minWidth: '140px', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' },
+  contextMenu: { position: 'absolute' as const, right: 0, top: '100%', marginTop: '4px', background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '8px', zIndex: 9999, minWidth: '140px', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' },
   contextItem: { padding: '8px 14px', fontSize: '13px', color: '#DCE9F6', cursor: 'pointer', borderBottom: '0.5px solid rgba(255,255,255,0.05)' },
 }
