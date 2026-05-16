@@ -240,48 +240,72 @@ export default function Transactions() {
         </div>
 
         <div style={s.filterBar}>
-          <input type="text"
-            placeholder={activeTab === 'invoices' ? 'Search partner or invoice number...' : 'Search partner, note or category...'}
-            value={search} onChange={e => setSearch(e.target.value)} style={s.searchInput} />
-          <select value={filterEntity} onChange={e => setFilterEntity(e.target.value)} style={s.filterSelect}>
-            <option value="all">All entities</option>
-            <option value="sfbc">SFBC</option>
-            <option value="constellation">Constellation LLC</option>
-            <option value="social">Social Growth</option>
-          </select>
-          <input type="date" style={{ ...s.filterSelect, color: filterDateFrom ? '#DCE9F6' : '#7A9BB8' }}
-            value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)}
-            title="From date" />
-          <input type="date" style={{ ...s.filterSelect, color: filterDateTo ? '#DCE9F6' : '#7A9BB8' }}
-            value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
-            title="To date" />
-          {(filterDateFrom || filterDateTo || filterPlCategory !== 'all') && (
-            <button style={{ ...s.filterSelect, cursor: 'pointer', color: '#FF5B5A', border: '1px solid rgba(255,91,90,0.3)', background: 'rgba(255,91,90,0.08)' }}
-              onClick={() => { setFilterDateFrom(''); setFilterDateTo(''); setFilterPlCategory('all') }}>
-              ✕ Clear
-            </button>
-          )}
-          {activeTab === 'invoices' && (<>
-            <select value={filterType} onChange={e => setFilterType(e.target.value)} style={s.filterSelect}>
-              <option value="all">All types</option>
-              <option value="expense">Expense</option>
-              <option value="revenue">Revenue</option>
+          {/* Row 1: Search + Entity + Dates + Clear */}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' as const, width: '100%' }}>
+            <input type="text"
+              placeholder={activeTab === 'invoices' ? 'Search partner or invoice number...' : 'Search partner, note or category...'}
+              value={search} onChange={e => setSearch(e.target.value)} style={{ ...s.searchInput, flex: 1, minWidth: '180px' }} />
+            <select value={filterEntity} onChange={e => setFilterEntity(e.target.value)} style={s.filterSelect}>
+              <option value="all">All entities</option>
+              <option value="sfbc">SFBC</option>
+              <option value="constellation">Constellation LLC</option>
+              <option value="social">Social Growth</option>
             </select>
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={s.filterSelect}>
-              <option value="all">All statuses</option>
-              <option value="unpaid">Unpaid</option>
-              <option value="partial">Partial</option>
-              <option value="paid">Paid</option>
-              <option value="overpaid">Overpaid</option>
-              <option value="reconciled">Reconciled</option>
-            </select>
-            <select value={filterPlCategory} onChange={e => setFilterPlCategory(e.target.value)} style={s.filterSelect}>
-              <option value="all">All P&L categories</option>
-              {[...new Set(invoices.map(i => i.pl_category).filter(Boolean))].sort().map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-          </>)}
+            <input type="date" style={{ ...s.filterSelect, color: filterDateFrom ? '#DCE9F6' : '#7A9BB8' }}
+              value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} title="From date" />
+            <span style={{ color: '#7A9BB8', fontSize: '12px' }}>—</span>
+            <input type="date" style={{ ...s.filterSelect, color: filterDateTo ? '#DCE9F6' : '#7A9BB8' }}
+              value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} title="To date" />
+            {/* Tab-specific filters */}
+            {activeTab === 'invoices' && (
+              <select value={filterType} onChange={e => setFilterType(e.target.value)} style={s.filterSelect}>
+                <option value="all">All types</option>
+                <option value="expense">Expense</option>
+                <option value="revenue">Revenue</option>
+              </select>
+            )}
+            {activeTab === 'invoices' && (
+              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={s.filterSelect}>
+                <option value="all">All statuses</option>
+                <option value="unpaid">Unpaid</option>
+                <option value="partial">Partial</option>
+                <option value="paid">Paid</option>
+                <option value="overpaid">Overpaid</option>
+                <option value="reconciled">Reconciled</option>
+              </select>
+            )}
+            {activeTab === 'transactions' && (
+              <select value={filterType} onChange={e => setFilterType(e.target.value)} style={s.filterSelect}>
+                <option value="all">All types</option>
+                <option value="direct">Direct only</option>
+                <option value="invoice_payment">Invoice payments</option>
+                <option value="credit_payment">Credit payments</option>
+              </select>
+            )}
+            {(activeTab === 'invoices' || activeTab === 'transactions') && (
+              <select value={filterPlCategory} onChange={e => setFilterPlCategory(e.target.value)} style={s.filterSelect}>
+                <option value="all">All P&L categories</option>
+                {[...new Set(
+                  (activeTab === 'invoices' ? invoices : transactions)
+                    .map((x: any) => x.pl_category).filter(Boolean)
+                )].sort().map((cat: any) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            )}
+            {(filterDateFrom || filterDateTo || filterPlCategory !== 'all' || search || filterType !== 'all' || filterStatus !== 'all') && (
+              <button style={{ ...s.filterSelect, cursor: 'pointer', color: '#FF5B5A', border: '1px solid rgba(255,91,90,0.3)', background: 'rgba(255,91,90,0.08)', whiteSpace: 'nowrap' as const }}
+                onClick={() => { setFilterDateFrom(''); setFilterDateTo(''); setFilterPlCategory('all'); setSearch(''); setFilterType('all'); setFilterStatus('all') }}>
+                ✕ Clear all
+              </button>
+            )}
+            <div style={{ ...s.totalBadge, marginLeft: 'auto', whiteSpace: 'nowrap' as const }}>
+              {activeTab === 'invoices' && `${filteredInvoices.length} invoices · ${fmtUSD(filteredInvoices.reduce((s, i) => s + (i.remaining_usd || 0), 0))}`}
+              {activeTab === 'transactions' && `${filteredTransactions.length} entries · ${fmtUSD(filteredTransactions.reduce((s, t) => s + (t.amount_usd || 0), 0))}`}
+              {activeTab === 'passthrough' && `${filteredPassthroughs.length} entries`}
+            </div>
+          </div>
+}
           {activeTab === 'transactions' && (
             <select value={filterType} onChange={e => setFilterType(e.target.value)} style={s.filterSelect}>
               <option value="all">All types</option>
