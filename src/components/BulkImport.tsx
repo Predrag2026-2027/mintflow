@@ -436,19 +436,22 @@ export default function BulkImport({ onClose, onImported }: Props) {
   }, [company, allBanks])
 
   useEffect(() => {
-    if (company && bank) {
+    if (!company || !bank) { setImportHistory([]); return }
+    const fetchHistory = async () => {
       setLoadingHistory(true)
-      supabase.from('import_logs')
+      const { data, error } = await supabase
+        .from('import_logs')
         .select('*')
         .eq('company_id', company)
         .eq('bank_id', bank)
         .eq('import_type', 'bank_statement')
         .order('created_at', { ascending: false })
         .limit(10)
-        .then(({ data }) => { setImportHistory(data || []); setLoadingHistory(false) })
-    } else {
-      setImportHistory([])
+      if (error) console.error('import_logs error:', error)
+      setImportHistory(data || [])
+      setLoadingHistory(false)
     }
+    fetchHistory()
   }, [company, bank])
 
   useEffect(() => {
