@@ -1363,6 +1363,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                   )}
 
                   {directSubtype === 'revenue' && (
+                    <>
                     <div style={s.section}>
                       <div style={s.sectionTitle}>Revenue details</div>
                       <div style={s.field}>
@@ -1375,6 +1376,57 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                         {fieldErr('revStream') && <span style={s.errorMsg}>{fieldErr('revStream')}</span>}
                       </div>
                     </div>
+                    <div style={s.section}>
+                      <div style={s.sectionTitle}>Revenue stream allocation</div>
+                      <div style={s.allocGrid}>
+                        {[
+                          { id: 'sg100', label: '100% Social Growth', sub: 'Full allocation' },
+                          { id: 'af100', label: '100% Aimfox', sub: 'Full allocation' },
+                          { id: 'shared', label: 'Shared 50/50', sub: 'Both streams' },
+                          { id: 'byval', label: 'By value', sub: 'Custom split' },
+                        ].map(a => (
+                          <div key={a.id} style={{ ...s.allocBtn, ...(revAlloc === a.id ? s.allocBtnActive : {}) }}
+                            onClick={() => { setRevAlloc(a.id); setAimfoxVal(''); setSgVal('') }}>
+                            <div style={s.allocBtnLabel}>{a.label}</div>
+                            <div style={s.allocBtnSub}>{a.sub}</div>
+                          </div>
+                        ))}
+                      </div>
+                      {revAlloc === 'byval' && (
+                        <div style={{ marginTop: '14px', background: '#f5f5f3', borderRadius: '10px', padding: '14px', border: '0.5px solid #e5e5e5' }}>
+                          <div style={{ fontSize: '11px', color: '#888', fontWeight: '500', marginBottom: '10px', textTransform: 'uppercase' as const, letterSpacing: '0.07em' }}>
+                            Split by value — total: {amount ? `${parseFloat(amount).toLocaleString()} ${currency}` : '—'}
+                          </div>
+                          <div style={s.row2}>
+                            <div style={s.field}>
+                              <label style={s.lbl}>Aimfox ({currency || '—'})</label>
+                              <input type="number" style={{ ...s.input, ...(fieldErr('split') ? s.inputError : {}) }}
+                                value={aimfoxVal} onChange={e => handleAimfoxChange(e.target.value)} placeholder="0.00" min="0" max={amount} />
+                              {aimfoxVal && parseFloat(amount) > 0 && <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '2px' }}>{splitPct.af}% of total</div>}
+                            </div>
+                            <div style={s.field}>
+                              <label style={s.lbl}>Social Growth ({currency || '—'})</label>
+                              <input type="number" style={{ ...s.input, ...(fieldErr('split') ? s.inputError : {}) }}
+                                value={sgVal} onChange={e => handleSgChange(e.target.value)} placeholder="0.00" min="0" max={amount} />
+                              {sgVal && parseFloat(amount) > 0 && <div style={{ fontSize: '10px', color: '#1D9E75', marginTop: '2px' }}>{splitPct.sg}% of total</div>}
+                            </div>
+                          </div>
+                          {aimfoxVal && sgVal && (
+                            <div style={{ marginTop: '8px', background: '#fff', borderRadius: '8px', padding: '10px 12px', border: '0.5px solid #e5e5e5' }}>
+                              <div style={{ height: '6px', borderRadius: '3px', background: '#e5e5e5', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${splitPct.af}%`, background: '#0C447C', display: 'inline-block' }} />
+                                <div style={{ height: '100%', width: `${splitPct.sg}%`, background: '#1D9E75', display: 'inline-block' }} />
+                              </div>
+                              {!splitOk
+                                ? <div style={{ fontSize: '11px', color: '#A32D2D', marginTop: '6px' }}>⚠ Sum ≠ total</div>
+                                : <div style={{ fontSize: '11px', color: '#1D9E75', marginTop: '6px' }}>✓ Split valid</div>
+                              }
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    </>
                   )}
 
                   <div style={s.section}>
