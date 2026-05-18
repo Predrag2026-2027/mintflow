@@ -1401,13 +1401,14 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                   <input
                                     style={{ ...s.editInput, marginBottom: '6px' }}
                                     value={invoiceSearch[p.id] || ''}
-                                    onChange={e => setInvoiceSearch(prev => ({ ...prev, [p.id]: e.target.value }))}
+                                    onChange={e => { e.stopPropagation(); setInvoiceSearch(prev => ({ ...prev, [p.id]: e.target.value })) }}
+                                    onClick={e => e.stopPropagation()}
                                     placeholder="Search partner or invoice #..."
                                   />
                                   <div style={{ maxHeight: '200px', overflowY: 'auto' as const, display: 'flex', flexDirection: 'column' as const, gap: '4px' }}>
                                     <div
                                       style={{ padding: '6px 10px', borderRadius: '6px', border: !row.override_linked_invoice_id ? '1.5px solid #00D47E' : '1px solid rgba(255,255,255,0.08)', background: !row.override_linked_invoice_id ? 'rgba(0,212,126,0.08)' : 'rgba(255,255,255,0.03)', cursor: 'pointer', fontSize: '12px', color: '#7A9BB8' }}
-                                      onClick={() => updateRow(p.id, { override_linked_invoice_id: '' })}>
+                                      onClick={e => { e.stopPropagation(); updateRow(p.id, { override_linked_invoice_id: '' }) }}>
                                       — No invoice (standalone) —
                                     </div>
                                     {openInvoices
@@ -1424,7 +1425,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                         return (
                                           <div key={inv.id}
                                             style={{ padding: '8px 10px', borderRadius: '6px', border: selected ? '1.5px solid #00D47E' : '1px solid rgba(255,255,255,0.08)', background: selected ? 'rgba(0,212,126,0.08)' : 'rgba(255,255,255,0.03)', cursor: 'pointer' }}
-                                            onClick={() => updateRow(p.id, { override_linked_invoice_id: inv.id })}>
+                                            onClick={e => { e.stopPropagation(); updateRow(p.id, { override_linked_invoice_id: inv.id }) }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
                                               <div style={{ minWidth: 0, flex: 1 }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' as const }}>

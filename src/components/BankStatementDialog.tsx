@@ -651,13 +651,14 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                                   <input
                                     style={{ ...s.input, marginBottom: '8px', width: '100%', boxSizing: 'border-box' as const }}
                                     value={invoiceSearch[row.id] || ''}
-                                    onChange={e => setInvoiceSearch(prev => ({ ...prev, [row.id]: e.target.value }))}
+                                    onChange={e => { e.stopPropagation(); setInvoiceSearch(prev => ({ ...prev, [row.id]: e.target.value })) }}
+                                    onClick={e => e.stopPropagation()}
                                     placeholder="Search partner or invoice #..."
                                   />
                                   <div style={{ maxHeight: '220px', overflowY: 'auto' as const, display: 'flex', flexDirection: 'column' as const, gap: '4px' }}>
                                     <div
                                       style={{ padding: '7px 10px', borderRadius: '7px', border: !row.linked_invoice_id ? '1.5px solid #1D9E75' : '0.5px solid #e5e5e5', background: !row.linked_invoice_id ? '#E1F5EE' : '#fafaf9', cursor: 'pointer', fontSize: '12px', color: '#888' }}
-                                      onClick={() => updateRow(row.id, { linked_invoice_id: '' })}>
+                                      onClick={e => { e.stopPropagation(); updateRow(row.id, { linked_invoice_id: '' }) }}>
                                       — No invoice (standalone) —
                                     </div>
                                     {openInvoices
@@ -674,7 +675,7 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                                         return (
                                           <div key={inv.id}
                                             style={{ padding: '8px 10px', borderRadius: '7px', border: selected ? '1.5px solid #1D9E75' : '0.5px solid #e5e5e5', background: selected ? '#E1F5EE' : '#fff', cursor: 'pointer' }}
-                                            onClick={() => updateRow(row.id, { linked_invoice_id: inv.id })}>
+                                            onClick={e => { e.stopPropagation(); updateRow(row.id, { linked_invoice_id: inv.id }) }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
                                               <div style={{ minWidth: 0, flex: 1 }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' as const }}>
