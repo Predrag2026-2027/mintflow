@@ -379,6 +379,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
   const [partners, setPartners] = useState<any[]>([])
   const [openInvoices, setOpenInvoices] = useState<any[]>([])
   const [invoiceSearch, setInvoiceSearch] = useState<Record<string, string>>({})
+  const [invoicePickerOpen, setInvoicePickerOpen] = useState<Record<string, boolean>>({})
   const [fileName, setFileName] = useState('')
   const [parseError, setParseError] = useState('')
   const [importHistory, setImportHistory] = useState<any[]>([])
@@ -1398,17 +1399,35 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                 </div>
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>Link to open invoice</label>
+                                  {/* Selected invoice pill */}
+                                  {row.override_linked_invoice_id && !invoicePickerOpen[p.id] && (() => {
+                                    const sel = openInvoices.find(i => i.id === row.override_linked_invoice_id)
+                                    return sel ? (
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 10px', borderRadius: '6px', border: '1.5px solid #00D47E', background: 'rgba(0,212,126,0.08)', marginBottom: '4px' }}>
+                                        <span style={{ fontSize: '12px', fontWeight: '600', color: '#00D47E', flex: 1 }}>✓ {sel.partner_name}</span>
+                                        <span style={{ fontSize: '11px', color: '#7A9BB8' }}>{(sel.amount || 0).toLocaleString()} {sel.currency}</span>
+                                        <button style={{ background: 'none', border: 'none', color: '#7A9BB8', fontSize: '14px', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
+                                          onClick={e => { e.stopPropagation(); setInvoicePickerOpen(prev => ({ ...prev, [p.id]: true })) }}>✎</button>
+                                        <button style={{ background: 'none', border: 'none', color: '#FF5B5A', fontSize: '14px', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
+                                          onClick={e => { e.stopPropagation(); updateRow(p.id, { override_linked_invoice_id: '', status: 'pending' as RowStatus }); setInvoicePickerOpen(prev => ({ ...prev, [p.id]: false })) }}>×</button>
+                                      </div>
+                                    ) : null
+                                  })()}
+                                  {/* Search + list: show when no selection OR picker explicitly open */}
+                                  {(!row.override_linked_invoice_id || invoicePickerOpen[p.id]) && (
+                                    <>
                                   <input
                                     style={{ ...s.editInput, marginBottom: '6px' }}
                                     value={invoiceSearch[p.id] || ''}
                                     onChange={e => { e.stopPropagation(); setInvoiceSearch(prev => ({ ...prev, [p.id]: e.target.value })) }}
                                     onClick={e => e.stopPropagation()}
                                     placeholder="Search partner or invoice #..."
+                                    autoFocus={invoicePickerOpen[p.id]}
                                   />
                                   <div style={{ maxHeight: '200px', overflowY: 'auto' as const, display: 'flex', flexDirection: 'column' as const, gap: '4px' }}>
                                     <div
-                                      style={{ padding: '6px 10px', borderRadius: '6px', border: !row.override_linked_invoice_id ? '1.5px solid #00D47E' : '1px solid rgba(255,255,255,0.08)', background: !row.override_linked_invoice_id ? 'rgba(0,212,126,0.08)' : 'rgba(255,255,255,0.03)', cursor: 'pointer', fontSize: '12px', color: '#7A9BB8' }}
-                                      onClick={e => { e.stopPropagation(); updateRow(p.id, { override_linked_invoice_id: '', status: 'pending' as RowStatus }); setInvoiceSearch(prev => ({ ...prev, [p.id]: '' })) }}>
+                                      style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)', cursor: 'pointer', fontSize: '12px', color: '#7A9BB8' }}
+                                      onClick={e => { e.stopPropagation(); updateRow(p.id, { override_linked_invoice_id: '', status: 'pending' as RowStatus }); setInvoiceSearch(prev => ({ ...prev, [p.id]: '' })); setInvoicePickerOpen(prev => ({ ...prev, [p.id]: false })) }}>
                                       — No invoice (standalone) —
                                     </div>
                                     {openInvoices
@@ -1425,7 +1444,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                         return (
                                           <div key={inv.id}
                                             style={{ padding: '8px 10px', borderRadius: '6px', border: selected ? '1.5px solid #00D47E' : '1px solid rgba(255,255,255,0.08)', background: selected ? 'rgba(0,212,126,0.08)' : 'rgba(255,255,255,0.03)', cursor: 'pointer' }}
-                                            onClick={e => { e.stopPropagation(); updateRow(p.id, { override_linked_invoice_id: inv.id, status: 'accepted' as RowStatus }); setInvoiceSearch(prev => ({ ...prev, [p.id]: '' })) }}>
+                                            onClick={e => { e.stopPropagation(); updateRow(p.id, { override_linked_invoice_id: inv.id, status: 'accepted' as RowStatus }); setInvoiceSearch(prev => ({ ...prev, [p.id]: '' })); setInvoicePickerOpen(prev => ({ ...prev, [p.id]: false })) }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
                                               <div style={{ minWidth: 0, flex: 1 }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' as const }}>
@@ -1448,6 +1467,8 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                         )
                                     })}
                                   </div>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                               {linkedInvoice && (
