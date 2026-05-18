@@ -1175,7 +1175,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
                       </div>
 
                       {isExpanded && (
-                        <div style={s.editPanel}>
+                        <div style={s.editPanel} onClick={e => e.stopPropagation()}>
                           {row.proposal && <div style={s.aiNotes}>🤖 AI: {row.proposal.notes}</div>}
 
                           <div style={s.editGrid2}>
