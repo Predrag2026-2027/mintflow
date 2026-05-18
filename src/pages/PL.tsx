@@ -366,9 +366,9 @@ export default function PL() {
                               : Object.entries(items).map(([name, item]) => (
                                 <tr key={name} style={s.dataRow}>
                                   <td style={{ ...s.td, paddingLeft: '2rem' }}>{name}</td>
-                                  <td style={{ ...s.td, textAlign: 'right' as const, color: '#7A9BB8' }}>{fmtUSD(item.sg)}</td>
-                                  <td style={{ ...s.td, textAlign: 'right' as const, color: '#7A9BB8' }}>{fmtUSD(item.af)}</td>
-                                  <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: item.total > 0 ? '#A32D2D' : '#888' }}>{fmtUSD(item.total)}</td>
+                                  <td style={{ ...s.td, textAlign: 'right' as const, color: '#7A9BB8' }}>{item.sg < 0 ? fmtUSDSigned(item.sg) : fmtUSD(item.sg)}</td>
+                                  <td style={{ ...s.td, textAlign: 'right' as const, color: '#7A9BB8' }}>{item.af < 0 ? fmtUSDSigned(item.af) : fmtUSD(item.af)}</td>
+                                  <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: item.total < 0 ? '#00D47E' : item.total > 0 ? '#A32D2D' : '#888' }}>{item.total < 0 ? fmtUSDSigned(item.total) : fmtUSD(item.total)}</td>
                                 </tr>
                               ))
                             }
@@ -399,9 +399,9 @@ export default function PL() {
                           {Object.entries(data.subcategories).sort(([, a], [, b]) => b.total - a.total).map(([sub, item]) => (
                             <tr key={sub} style={s.dataRow}>
                               <td style={{ ...s.td, paddingLeft: '2rem' }}>{sub}</td>
-                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#7A9BB8' }}>{fmtUSD(item.sg)}</td>
-                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#7A9BB8' }}>{fmtUSD(item.af)}</td>
-                              <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: '#FF5B5A' }}>{fmtUSD(item.total)}</td>
+                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#7A9BB8' }}>{item.sg < 0 ? fmtUSDSigned(item.sg) : fmtUSD(item.sg)}</td>
+                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#7A9BB8' }}>{item.af < 0 ? fmtUSDSigned(item.af) : fmtUSD(item.af)}</td>
+                              <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: item.total < 0 ? '#00D47E' : '#FF5B5A' }}>{item.total < 0 ? fmtUSDSigned(item.total) : fmtUSD(item.total)}</td>
                             </tr>
                           ))}
                           <tr style={s.subTotalRow}>
@@ -425,13 +425,13 @@ export default function PL() {
                           {Object.entries(data.items).sort(([, a], [, b]) => b.total - a.total).map(([name, item]) => (
                             <tr key={name} style={s.dataRow}>
                               <td style={{ ...s.td, paddingLeft: '2rem' }}>{name}</td>
-                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#4EA8FF', fontWeight: item.opex > 0 ? '500' : '400' }}>
-                                {item.opex > 0 ? fmtUSD(item.opex) : <span style={{ color: 'rgba(255,255,255,0.20)' }}>—</span>}
+                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#4EA8FF', fontWeight: item.opex !== 0 ? '500' : '400' }}>
+                                {item.opex !== 0 ? (item.opex < 0 ? fmtUSDSigned(item.opex) : fmtUSD(item.opex)) : <span style={{ color: 'rgba(255,255,255,0.20)' }}>—</span>}
                               </td>
-                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#BA7517', fontWeight: item.performance > 0 ? '500' : '400' }}>
-                                {item.performance > 0 ? fmtUSD(item.performance) : <span style={{ color: 'rgba(255,255,255,0.20)' }}>—</span>}
+                              <td style={{ ...s.td, textAlign: 'right' as const, color: '#BA7517', fontWeight: item.performance !== 0 ? '500' : '400' }}>
+                                {item.performance !== 0 ? (item.performance < 0 ? fmtUSDSigned(item.performance) : fmtUSD(item.performance)) : <span style={{ color: 'rgba(255,255,255,0.20)' }}>—</span>}
                               </td>
-                              <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: '#A32D2D' }}>{fmtUSD(item.total)}</td>
+                              <td style={{ ...s.td, textAlign: 'right' as const, fontWeight: '500', color: item.total < 0 ? '#00D47E' : '#A32D2D' }}>{item.total < 0 ? fmtUSDSigned(item.total) : fmtUSD(item.total)}</td>
                             </tr>
                           ))}
                           <tr style={s.subTotalRow}>
