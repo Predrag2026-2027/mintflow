@@ -385,6 +385,28 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
 
   const handlePost = async () => {
     if (!companyId) { alert('Please select a company.'); return }
+
+    // Guard: provjeri da li već postoji import za ovaj period
+    const periodMonth = invDate.slice(0, 7)
+    const { data: existingImport } = await supabase
+      .from('import_logs')
+      .select('id, created_at, note')
+      .eq('company_id', companyId)
+      .eq('import_type', 'payroll')
+      .eq('period_month', periodMonth)
+      .limit(1)
+    
+    if (existingImport && existingImport.length > 0) {
+      const existing = existingImport[0]
+      const confirm = window.confirm(
+        `⚠️ Payroll za period ${periodMonth} je već importovan!\n\n` +
+        `Datum: ${new Date(existing.created_at).toLocaleDateString('sr-RS')}\n` +
+        `Info: ${existing.note || '—'}\n\n` +
+        `Da li sigurno želiš da nastaviš? Ovo će kreirati duplikat.`
+      )
+      if (!confirm) return
+    }
+
     setStep('posting'); setProgress(0)
     const localPartners = [...partners]
     try {
@@ -489,7 +511,8 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
         }
         const rounding = parseFloat(taxRounding) || 0
         const totalTaxOnly = accepted.reduce((s, e) => s + e.tax_on_salary, 0)
-        const totalEEOnly = accepted.reduce((s, e) => s + e.contrib_employee, 0)
+        // contrib_employee includes tax_on_salary — subtract it to avoid double-counting
+        const totalEEOnly = Math.round(accepted.reduce((s, e) => s + (e.contrib_employee - e.tax_on_salary), 0) * 100) / 100
         const totalEROnly = accepted.reduce((s, e) => s + e.contrib_employer, 0)
         const taxSplit = calcSplit(e => e.tax_on_salary)
         const eeSplit = calcSplit(e => e.contrib_employee)
