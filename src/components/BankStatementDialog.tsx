@@ -105,6 +105,7 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
   const [rowInstallments, setRowInstallments] = useState<Record<string, any[]>>({})
   const [posted, setPosted] = useState(false)
   const [error, setError] = useState('')
+  const [invoiceSearch, setInvoiceSearch] = useState<Record<string, string>>({})
 
   useEffect(() => {
     const load = async () => {
@@ -646,16 +647,64 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                                   No open invoices for this company. Select a company first.
                                 </div>
                               ) : (
-                                <select style={{ ...s.select, width: '100%' }} value={row.linked_invoice_id} onChange={e => updateRow(row.id, { linked_invoice_id: e.target.value })}>
-                                  <option value="">— No invoice linked —</option>
-                                  {openInvoices.map(inv => (
-                                    <option key={inv.id} value={inv.id}>{inv.partner_name || '—'}{inv.invoice_number ? ` · ${inv.invoice_number}` : ''} · ${(inv.remaining_usd || 0).toFixed(0)} remaining</option>
-                                  ))}
-                                </select>
+                                <>
+                                  <input
+                                    style={{ ...s.input, marginBottom: '8px', width: '100%', boxSizing: 'border-box' as const }}
+                                    value={invoiceSearch[row.id] || ''}
+                                    onChange={e => setInvoiceSearch(prev => ({ ...prev, [row.id]: e.target.value }))}
+                                    placeholder="Search partner or invoice #..."
+                                  />
+                                  <div style={{ maxHeight: '220px', overflowY: 'auto' as const, display: 'flex', flexDirection: 'column' as const, gap: '4px' }}>
+                                    <div
+                                      style={{ padding: '7px 10px', borderRadius: '7px', border: !row.linked_invoice_id ? '1.5px solid #1D9E75' : '0.5px solid #e5e5e5', background: !row.linked_invoice_id ? '#E1F5EE' : '#fafaf9', cursor: 'pointer', fontSize: '12px', color: '#888' }}
+                                      onClick={() => updateRow(row.id, { linked_invoice_id: '' })}>
+                                      — No invoice (standalone) —
+                                    </div>
+                                    {openInvoices
+                                      .filter(inv => {
+                                        const q = (invoiceSearch[row.id] || '').toLowerCase()
+                                        if (!q) return true
+                                        return (inv.partner_name || '').toLowerCase().includes(q) || (inv.invoice_number || '').toLowerCase().includes(q)
+                                      })
+                                      .map(inv => {
+                                        const selected = row.linked_invoice_id === inv.id
+                                        const remOrig = inv.currency !== 'USD' && (inv.exchange_rate || 0) > 0
+                                          ? ((inv.remaining_usd || 0) * inv.exchange_rate).toFixed(0)
+                                          : null
+                                        return (
+                                          <div key={inv.id}
+                                            style={{ padding: '8px 10px', borderRadius: '7px', border: selected ? '1.5px solid #1D9E75' : '0.5px solid #e5e5e5', background: selected ? '#E1F5EE' : '#fff', cursor: 'pointer' }}
+                                            onClick={() => updateRow(row.id, { linked_invoice_id: inv.id })}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                                              <div style={{ minWidth: 0, flex: 1 }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' as const }}>
+                                                  <span style={{ fontSize: '12px', fontWeight: '600', color: '#111' }}>{inv.partner_name || '—'}</span>
+                                                  {inv.invoice_number && <span style={{ fontSize: '10px', color: '#666', background: '#f0f0ee', padding: '1px 6px', borderRadius: '4px', fontFamily: 'monospace' }}>{inv.invoice_number}</span>}
+                                                </div>
+                                                <div style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>
+                                                  {inv.invoice_date}{inv.due_date ? ` · Due: ${inv.due_date}` : ''}
+                                                </div>
+                                                {inv.expense_description && <div style={{ fontSize: '10px', color: '#888', fontStyle: 'italic', marginTop: '1px' }}>{inv.expense_description}</div>}
+                                              </div>
+                                              <div style={{ textAlign: 'right' as const, flexShrink: 0 }}>
+                                                <div style={{ fontSize: '12px', fontWeight: '600', color: '#111' }}>{(inv.amount || 0).toLocaleString()} {inv.currency}</div>
+                                                <div style={{ fontSize: '10px', color: (inv.remaining_usd || 0) > 0 ? '#A32D2D' : '#1D9E75', marginTop: '1px' }}>
+                                                  Rem: {remOrig ? `${remOrig} ${inv.currency}` : `$${(inv.remaining_usd || 0).toFixed(2)}`}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )
+                                    })}
+                                  </div>
+                                </>
                               )}
                               {linkedInvoice && (
                                 <div style={{ marginTop: '8px', background: '#E6F1FB', border: '0.5px solid #7FB8EE', borderRadius: '8px', padding: '8px 12px', fontSize: '12px', color: '#0C447C' }}>
-                                  💳 Closes: <strong>{linkedInvoice.partner_name}</strong> · Remaining: <strong>${(linkedInvoice.remaining_usd || 0).toFixed(2)}</strong>
+                                  💳 Closes: <strong>{linkedInvoice.partner_name}</strong>
+                                  {linkedInvoice.invoice_number && ` · ${linkedInvoice.invoice_number}`}
+                                  {' · '}<strong>{(linkedInvoice.amount || 0).toLocaleString()} {linkedInvoice.currency}</strong>
+                                  {' · '}Rem: <strong>{linkedInvoice.currency !== 'USD' && (linkedInvoice.exchange_rate || 0) > 0 ? `${((linkedInvoice.remaining_usd || 0) * linkedInvoice.exchange_rate).toFixed(0)} ${linkedInvoice.currency}` : `$${(linkedInvoice.remaining_usd || 0).toFixed(2)}`}</strong>
                                 </div>
                               )}
                             </div>

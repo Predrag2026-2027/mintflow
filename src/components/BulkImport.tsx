@@ -378,6 +378,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
   const [allBanks, setAllBanks] = useState<any[]>([])
   const [partners, setPartners] = useState<any[]>([])
   const [openInvoices, setOpenInvoices] = useState<any[]>([])
+  const [invoiceSearch, setInvoiceSearch] = useState<Record<string, string>>({})
   const [fileName, setFileName] = useState('')
   const [parseError, setParseError] = useState('')
   const [importHistory, setImportHistory] = useState<any[]>([])
@@ -1397,12 +1398,55 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                 </div>
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>Link to open invoice</label>
-                                  <select style={s.editSelect} value={row.override_linked_invoice_id} onChange={e => updateRow(p.id, { override_linked_invoice_id: e.target.value })}>
-                                    <option value="">— No invoice (standalone) —</option>
-                                    {openInvoices.map(inv => (
-                                      <option key={inv.id} value={inv.id}>{inv.partner_name || '—'}{inv.invoice_number ? ` · ${inv.invoice_number}` : ''} · ${(inv.remaining_usd || 0).toFixed(0)} rem.</option>
-                                    ))}
-                                  </select>
+                                  <input
+                                    style={{ ...s.editInput, marginBottom: '6px' }}
+                                    value={invoiceSearch[p.id] || ''}
+                                    onChange={e => setInvoiceSearch(prev => ({ ...prev, [p.id]: e.target.value }))}
+                                    placeholder="Search partner or invoice #..."
+                                  />
+                                  <div style={{ maxHeight: '200px', overflowY: 'auto' as const, display: 'flex', flexDirection: 'column' as const, gap: '4px' }}>
+                                    <div
+                                      style={{ padding: '6px 10px', borderRadius: '6px', border: !row.override_linked_invoice_id ? '1.5px solid #00D47E' : '1px solid rgba(255,255,255,0.08)', background: !row.override_linked_invoice_id ? 'rgba(0,212,126,0.08)' : 'rgba(255,255,255,0.03)', cursor: 'pointer', fontSize: '12px', color: '#7A9BB8' }}
+                                      onClick={() => updateRow(p.id, { override_linked_invoice_id: '' })}>
+                                      — No invoice (standalone) —
+                                    </div>
+                                    {openInvoices
+                                      .filter(inv => {
+                                        const q = (invoiceSearch[p.id] || '').toLowerCase()
+                                        if (!q) return true
+                                        return (inv.partner_name || '').toLowerCase().includes(q) || (inv.invoice_number || '').toLowerCase().includes(q)
+                                      })
+                                      .map(inv => {
+                                        const selected = row.override_linked_invoice_id === inv.id
+                                        const remOrig = inv.currency !== 'USD' && (inv.exchange_rate || 0) > 0
+                                          ? ((inv.remaining_usd || 0) * inv.exchange_rate).toFixed(0)
+                                          : null
+                                        return (
+                                          <div key={inv.id}
+                                            style={{ padding: '8px 10px', borderRadius: '6px', border: selected ? '1.5px solid #00D47E' : '1px solid rgba(255,255,255,0.08)', background: selected ? 'rgba(0,212,126,0.08)' : 'rgba(255,255,255,0.03)', cursor: 'pointer' }}
+                                            onClick={() => updateRow(p.id, { override_linked_invoice_id: inv.id })}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                                              <div style={{ minWidth: 0, flex: 1 }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' as const }}>
+                                                  <span style={{ fontSize: '12px', fontWeight: '600', color: '#DCE9F6' }}>{inv.partner_name || '—'}</span>
+                                                  {inv.invoice_number && <span style={{ fontSize: '10px', color: '#7A9BB8', background: 'rgba(255,255,255,0.06)', padding: '1px 6px', borderRadius: '4px', fontFamily: 'monospace' }}>{inv.invoice_number}</span>}
+                                                </div>
+                                                <div style={{ fontSize: '10px', color: '#7A9BB8', marginTop: '2px' }}>
+                                                  {inv.invoice_date}{inv.due_date ? ` · Due: ${inv.due_date}` : ''}
+                                                </div>
+                                                {inv.expense_description && <div style={{ fontSize: '10px', color: '#7A9BB8', fontStyle: 'italic', marginTop: '1px' }}>{inv.expense_description}</div>}
+                                              </div>
+                                              <div style={{ textAlign: 'right' as const, flexShrink: 0 }}>
+                                                <div style={{ fontSize: '12px', fontWeight: '600', color: '#DCE9F6' }}>{(inv.amount || 0).toLocaleString()} {inv.currency}</div>
+                                                <div style={{ fontSize: '10px', color: (inv.remaining_usd || 0) > 0 ? '#FF5B5A' : '#00D47E', marginTop: '1px' }}>
+                                                  Rem: {remOrig ? `${remOrig} ${inv.currency}` : `$${(inv.remaining_usd || 0).toFixed(2)}`}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )
+                                    })}
+                                  </div>
                                 </div>
                               </div>
                               {linkedInvoice && (

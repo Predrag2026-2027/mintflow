@@ -1153,21 +1153,32 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                     <div style={s.invoiceList}>
                       {filteredOpenInvoices.map(inv => {
                         const linked = isInvoiceLinked(inv.id)
+                        const origAmt = (inv.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        const remOrig = inv.currency !== 'USD' && inv.exchange_rate > 0
+                          ? ((inv.remaining_usd || 0) * inv.exchange_rate).toFixed(0)
+                          : null
                         return (
                           <div key={inv.id} style={{ ...s.invoiceRow, ...(linked ? s.invoiceRowLinked : {}) }}>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-                                <span style={{ fontSize: '13px', fontWeight: '500', color: '#111' }}>{inv.partner_name || '—'}</span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px', flexWrap: 'wrap' as const }}>
+                                <span style={{ fontSize: '13px', fontWeight: '600', color: '#111' }}>{inv.partner_name || '—'}</span>
                                 {inv.invoice_number && <span style={s.invNumBadge}>{inv.invoice_number}</span>}
                                 <span style={{ ...s.statusBadge, ...getStatusStyle(inv.calculated_status) }}>{inv.calculated_status}</span>
                               </div>
-                              <div style={{ fontSize: '11px', color: '#888' }}>
+                              <div style={{ fontSize: '11px', color: '#888', marginBottom: '2px' }}>
                                 {inv.invoice_date}{inv.due_date && ` · Due: ${inv.due_date}`}
-                                <span style={{ color: (inv.remaining_usd || 0) > 0 ? '#A32D2D' : '#1D9E75' }}> · Remaining: ${(inv.remaining_usd || 0).toFixed(2)}</span>
                               </div>
+                              {inv.expense_description && (
+                                <div style={{ fontSize: '11px', color: '#666', fontStyle: 'italic' }}>{inv.expense_description}</div>
+                              )}
                             </div>
-                            <div style={{ fontSize: '13px', fontWeight: '500', color: '#111', whiteSpace: 'nowrap' as const, marginRight: '10px' }}>
-                              {(inv.amount || 0).toLocaleString()} {inv.currency}
+                            <div style={{ textAlign: 'right' as const, marginRight: '10px', flexShrink: 0 }}>
+                              <div style={{ fontSize: '13px', fontWeight: '600', color: '#111' }}>
+                                {origAmt} {inv.currency}
+                              </div>
+                              <div style={{ fontSize: '11px', color: (inv.remaining_usd || 0) > 0 ? '#A32D2D' : '#1D9E75', marginTop: '1px' }}>
+                                Rem: {remOrig ? `${remOrig} ${inv.currency}` : `$${(inv.remaining_usd || 0).toFixed(2)}`}
+                              </div>
                             </div>
                             {!linked
                               ? <button style={s.addBtn} onClick={() => addInvoiceLink(inv)}>+ Add</button>
