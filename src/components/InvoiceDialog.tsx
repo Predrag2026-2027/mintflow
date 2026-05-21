@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import InlineCategoryAdd from './InlineCategoryAdd'
 import { getRate, convertToUSD } from '../services/currencyService'
-import PartnerDialog from './PartnerDialog'
 
 interface Props {
   onClose: () => void
@@ -38,8 +37,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
   const [partnerSearch, setPartnerSearch] = useState('')
   const [newPartnerName, setNewPartnerName] = useState('')
   const [showNewPartner, setShowNewPartner] = useState(false)
-  const [partnerDialogOpen, setPartnerDialogOpen] = useState(false)
-  const [partnerDialogInitialName, setPartnerDialogInitialName] = useState('')
   const [invoiceNumber, setInvoiceNumber] = useState('')
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0])
   const [dueDate, setDueDate] = useState('')
@@ -757,8 +754,8 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                 <div style={s.row2}>
                   <div style={s.field}>
                     <label style={s.lbl}>Partner <span style={s.req}>*</span></label>
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
-                      <div style={{ flex: 1, position: 'relative' as const }}>
+                    {!showNewPartner ? (
+                      <>
                         <input style={{ ...s.input, ...(fieldErr('partnerId') ? s.inputError : {}) }} value={partnerSearch}
                           onChange={e => { setPartnerSearch(e.target.value); setPartnerId(''); touch('partnerId') }}
                           onBlur={() => touch('partnerId')} placeholder="Search partner..." />
@@ -770,15 +767,17 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                                 {p.account_number && <div style={{ fontSize: '11px', color: '#aaa' }}>{p.account_number}</div>}
                               </div>
                             ))}
+                            <div style={{ ...s.dropdownItem, color: '#1D9E75' }} onClick={() => { setShowNewPartner(true); setPartnerSearch('') }}>+ Add new partner</div>
                           </div>
                         )}
                         {fieldErr('partnerId') && <span style={s.errorMsg}>{fieldErr('partnerId')}</span>}
-                      </div>
-                      <button
-                        style={{ fontFamily: 'system-ui,sans-serif', fontSize: '20px', width: '36px', height: '36px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#f5f5f3', color: '#1D9E75', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                        onClick={() => { setPartnerDialogInitialName(partnerSearch); setPartnerDialogOpen(true) }}
-                        title="Dodaj novog partnera (NBS lookup)">+</button>
-                    </div>
+                      </>
+                    ) : (
+                      <>
+                        <input style={s.input} value={newPartnerName} onChange={e => setNewPartnerName(e.target.value)} placeholder="Enter partner name..." />
+                        <button style={s.linkBtn} onClick={() => setShowNewPartner(false)}>← Back to search</button>
+                      </>
+                    )}
                   </div>
                   <div style={s.field}>
                     <label style={s.lbl}>Invoice type <span style={s.req}>*</span></label>
@@ -1101,21 +1100,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
           </div>
         </div>
       </div>
-    </div>
-
-      {partnerDialogOpen && (
-        <PartnerDialog
-          initialName={partnerDialogInitialName}
-          initialAccountNumber=""
-          onClose={() => setPartnerDialogOpen(false)}
-          onSaved={(newPartner) => {
-            setPartners(prev => [...prev, newPartner])
-            setPartnerId(newPartner.id)
-            setPartnerSearch(newPartner.name)
-            setPartnerDialogOpen(false)
-          }}
-        />
-      )}
     </div>
   )
 }

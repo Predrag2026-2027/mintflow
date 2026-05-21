@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import InlineCategoryAdd from './InlineCategoryAdd'
 import { getRate, convertToUSD, getRatesForDate } from '../services/currencyService'
-import PartnerDialog from './PartnerDialog'
 import CreditInstallmentSelector from './CreditInstallmentSelector'
 import { useCreditPayment } from './useCreditPayment'
 
@@ -60,8 +59,6 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   const [partnerSearch, setPartnerSearch] = useState('')
   const [newPartnerName, setNewPartnerName] = useState('')
   const [showNewPartner, setShowNewPartner] = useState(false)
-  const [partnerDialogOpen, setPartnerDialogOpen] = useState(false)
-  const [partnerDialogInitialName, setPartnerDialogInitialName] = useState('')
   const [showBankFields, setShowBankFields] = useState(false)
   const [accNum, setAccNum] = useState('')
   const [model, setModel] = useState('')
@@ -971,8 +968,6 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                   </div>
                   <div style={s.field}>
                     <label style={s.lbl}>Partner</label>
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
-                    <div style={{ flex: 1, position: 'relative' as const }}>
                     {!showNewPartner ? (
                       <>
                         <input style={s.input} value={partnerSearch}
@@ -982,6 +977,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                             {filteredPartners.slice(0, 6).map(p => (
                               <div key={p.id} style={s.dropdownItem} onClick={() => { setPartnerId(p.id); setPartnerSearch(p.name) }}>{p.name}</div>
                             ))}
+                            <div style={{ ...s.dropdownItem, color: '#1D9E75' }} onClick={() => { setShowNewPartner(true); setPartnerSearch('') }}>+ Add new partner</div>
                           </div>
                         )}
                       </>
@@ -991,12 +987,6 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                         <button style={s.linkBtn} onClick={() => setShowNewPartner(false)}>← Back to search</button>
                       </>
                     )}
-                    </div>
-                    <button
-                      style={{ fontFamily: 'system-ui,sans-serif', fontSize: '20px', width: '36px', height: '36px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#f5f5f3', color: '#1D9E75', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                      onClick={() => { setPartnerDialogInitialName(partnerSearch); setPartnerDialogOpen(true) }}
-                      title="Dodaj novog partnera (NBS lookup)">+</button>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -1555,23 +1545,9 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
             {step === 4 && <button style={{ ...s.btnPrimary, opacity: saving ? 0.7 : 1 }} onClick={handlePost} disabled={saving}>{saving ? 'Saving...' : transaction ? 'Update transaction' : 'Post transaction'}</button>}
           </div>
         </div>
-
-      {partnerDialogOpen && (
-        <PartnerDialog
-          initialName={partnerDialogInitialName}
-          initialAccountNumber=""
-          onClose={() => setPartnerDialogOpen(false)}
-          onSaved={(newPartner) => {
-            setPartners(prev => [...prev, newPartner])
-            setPartnerId(newPartner.id)
-            setPartnerSearch(newPartner.name)
-            setPartnerDialogOpen(false)
-          }}
-        />
-      )}
+      </div>
     </div>
   )
-}
 }
 
 const s: Record<string, React.CSSProperties> = {
