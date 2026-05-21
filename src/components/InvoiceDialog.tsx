@@ -36,8 +36,8 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
   const [companyId, setCompanyId] = useState('')
   const [partnerId, setPartnerId] = useState('')
   const [partnerSearch, setPartnerSearch] = useState('')
-  const [newPartnerName, setNewPartnerName] = useState('')
-  const [showNewPartner, setShowNewPartner] = useState(false)
+  const [newPartnerName, setNewPartnerName] = useState('') // eslint-disable-line
+  const [showNewPartner, setShowNewPartner] = useState(false) // eslint-disable-line
   const [partnerDialogOpen, setPartnerDialogOpen] = useState(false)
   const [partnerDialogInitialName, setPartnerDialogInitialName] = useState('')
   const [invoiceNumber, setInvoiceNumber] = useState('')
@@ -757,10 +757,8 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                 <div style={s.row2}>
                   <div style={s.field}>
                     <label style={s.lbl}>Partner <span style={s.req}>*</span></label>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                    <div style={{ flex: 1 }}>
-                    {!showNewPartner ? (
-                      <>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1, position: 'relative' as const }}>
                         <input style={{ ...s.input, ...(fieldErr('partnerId') ? s.inputError : {}) }} value={partnerSearch}
                           onChange={e => { setPartnerSearch(e.target.value); setPartnerId(''); touch('partnerId') }}
                           onBlur={() => touch('partnerId')} placeholder="Search partner..." />
@@ -775,18 +773,11 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                           </div>
                         )}
                         {fieldErr('partnerId') && <span style={s.errorMsg}>{fieldErr('partnerId')}</span>}
-                      </>
-                    ) : (
-                      <>
-                        <input style={s.input} value={newPartnerName} onChange={e => setNewPartnerName(e.target.value)} placeholder="Enter partner name..." />
-                        <button style={s.linkBtn} onClick={() => setShowNewPartner(false)}>← Back to search</button>
-                      </>
-                    )}
-                    </div>
-                    <button
-                      style={{ fontFamily: 'system-ui,sans-serif', fontSize: '20px', width: '36px', height: '36px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#f5f5f3', color: '#1D9E75', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                      onClick={() => { setPartnerDialogInitialName(partnerSearch); setPartnerDialogOpen(true) }}
-                      title="Dodaj novog partnera">+</button>
+                      </div>
+                      <button
+                        style={{ fontFamily: 'system-ui,sans-serif', fontSize: '20px', width: '36px', height: '36px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: '#f5f5f3', color: '#1D9E75', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                        onClick={() => { setPartnerDialogInitialName(partnerSearch); setPartnerDialogOpen(true) }}
+                        title="Dodaj novog partnera (NBS lookup)">+</button>
                     </div>
                   </div>
                   <div style={s.field}>
@@ -1110,7 +1101,6 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
           </div>
         </div>
       </div>
-    </div>
 
       {partnerDialogOpen && (
         <PartnerDialog
@@ -1125,7 +1115,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
           }}
         />
       )}
-  </div>
+    </div>
   )
 }
 
