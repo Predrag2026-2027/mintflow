@@ -1555,8 +1555,6 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
             {step === 4 && <button style={{ ...s.btnPrimary, opacity: saving ? 0.7 : 1 }} onClick={handlePost} disabled={saving}>{saving ? 'Saving...' : transaction ? 'Update transaction' : 'Post transaction'}</button>}
           </div>
         </div>
-      </div>
-    </div>
 
       {partnerDialogOpen && (
         <PartnerDialog
@@ -1571,8 +1569,9 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
           }}
         />
       )}
-  </div>
+    </div>
   )
+}
 }
 
 const s: Record<string, React.CSSProperties> = {
