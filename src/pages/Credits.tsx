@@ -192,16 +192,18 @@ function NewCreditDialog({ onClose, onSaved }: { onClose: () => void; onSaved: (
 }
 
 // ─── Edit Interest Dialog ─────────────────────────────────────────────────────
-function EditInterestDialog({ installment, onClose, onSaved }: { installment: Installment; onClose: () => void; onSaved: () => void }) {
-  const [val, setVal] = useState(installment.interest_amount.toFixed(2))
+function EditInstallmentDialog({ installment, onClose, onSaved }: { installment: Installment; onClose: () => void; onSaved: () => void }) {
+  const [principal, setPrincipal] = useState(installment.principal_amount.toFixed(2))
+  const [interest, setInterest] = useState(installment.interest_amount.toFixed(2))
   const [saving, setSaving] = useState(false)
 
+  const newTotal = (parseFloat(principal) || 0) + (parseFloat(interest) || 0)
+
   const handleSave = async () => {
-    const newInterest = parseFloat(val) || 0
-    const newTotal = installment.principal_amount + newInterest
     setSaving(true)
     await supabase.from('credit_installments').update({
-      interest_amount: newInterest,
+      principal_amount: parseFloat(principal) || 0,
+      interest_amount: parseFloat(interest) || 0,
       total_amount: newTotal,
       updated_at: new Date().toISOString(),
     }).eq('id', installment.id)
@@ -213,40 +215,43 @@ function EditInterestDialog({ installment, onClose, onSaved }: { installment: In
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200 }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div style={{ background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '14px', width: '380px', padding: '24px', boxShadow: '0 20px 50px rgba(0,0,0,0.6)' }}>
-        <div style={{ fontSize: '10px', fontWeight: '600', color: '#F5A623', letterSpacing: '0.1em', textTransform: 'uppercase' as const, marginBottom: '4px' }}>Edit Interest</div>
+      <div style={{ background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '14px', width: '400px', padding: '24px', boxShadow: '0 20px 50px rgba(0,0,0,0.6)' }}>
+        <div style={{ fontSize: '10px', fontWeight: '600', color: '#4EA8FF', letterSpacing: '0.1em', textTransform: 'uppercase' as const, marginBottom: '4px' }}>Edit Installment</div>
         <div style={{ fontFamily: "'DM Serif Display',Georgia,serif", fontSize: '18px', color: '#E8F1FB', marginBottom: '6px' }}>Installment #{installment.installment_no}</div>
         <div style={{ fontSize: '12px', color: '#7A9BB8', marginBottom: '20px' }}>Due: {installment.due_date}</div>
 
-        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px', fontSize: '12px', color: '#7A9BB8' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span>Principal (fixed)</span>
-            <span style={{ fontFamily: "'DM Mono',monospace", color: '#4EA8FF' }}>{fmtEUR(installment.principal_amount)}</span>
+        <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '14px', marginBottom: '20px' }}>
+          <div>
+            <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.30)', letterSpacing: '0.1em', textTransform: 'uppercase' as const, marginBottom: '6px' }}>Principal (EUR)</div>
+            <input
+              autoFocus
+              type="number" step="0.01"
+              value={principal}
+              onChange={e => setPrincipal(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Escape') onClose() }}
+              style={{ width: '100%', boxSizing: 'border-box' as const, fontFamily: "'DM Mono',monospace", fontSize: '18px', padding: '10px 12px', border: '1.5px solid #4EA8FF', borderRadius: '8px', background: '#0A1525', color: '#4EA8FF', outline: 'none' }}
+            />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Current interest</span>
-            <span style={{ fontFamily: "'DM Mono',monospace", color: '#F5A623' }}>{fmtEUR(installment.interest_amount)}</span>
+          <div>
+            <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.30)', letterSpacing: '0.1em', textTransform: 'uppercase' as const, marginBottom: '6px' }}>Interest (EUR)</div>
+            <input
+              type="number" step="0.01"
+              value={interest}
+              onChange={e => setInterest(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Escape') onClose() }}
+              style={{ width: '100%', boxSizing: 'border-box' as const, fontFamily: "'DM Mono',monospace", fontSize: '18px', padding: '10px 12px', border: '1.5px solid #F5A623', borderRadius: '8px', background: '#0A1525', color: '#F5A623', outline: 'none' }}
+            />
           </div>
         </div>
 
-        <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.30)', letterSpacing: '0.1em', textTransform: 'uppercase' as const, marginBottom: '6px' }}>New interest (EUR)</div>
-          <input
-            autoFocus
-            type="number" step="0.01"
-            value={val}
-            onChange={e => setVal(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') onClose() }}
-            style={{ width: '100%', boxSizing: 'border-box' as const, fontFamily: "'DM Mono',monospace", fontSize: '18px', padding: '10px 12px', border: '1.5px solid #F5A623', borderRadius: '8px', background: '#0A1525', color: '#F5A623', outline: 'none' }}
-          />
-          <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.25)', marginTop: '6px' }}>
-            New annuity: <span style={{ fontFamily: "'DM Mono',monospace", color: '#DCE9F6' }}>{fmtEUR(installment.principal_amount + (parseFloat(val) || 0))}</span>
-          </div>
+        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', padding: '12px 14px', marginBottom: '20px', fontSize: '12px', color: '#7A9BB8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>New annuity</span>
+          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: '16px', fontWeight: '600', color: '#E8F1FB' }}>{fmtEUR(newTotal)}</span>
         </div>
 
         <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
           <button onClick={onClose} style={{ fontFamily: "'Inter',sans-serif", fontSize: '13px', padding: '8px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#7A9BB8', cursor: 'pointer' }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving} style={{ fontFamily: "'Inter',sans-serif", fontSize: '13px', fontWeight: '600', padding: '8px 18px', borderRadius: '8px', border: 'none', background: '#F5A623', color: '#060E1A', cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+          <button onClick={handleSave} disabled={saving} style={{ fontFamily: "'Inter',sans-serif", fontSize: '13px', fontWeight: '600', padding: '8px 18px', borderRadius: '8px', border: 'none', background: '#4EA8FF', color: '#060E1A', cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
             {saving ? 'Saving...' : 'Save'}
           </button>
         </div>
@@ -389,11 +394,9 @@ function CreditRow({ credit, onRefresh, refreshKey }: { credit: Credit; onRefres
                 {f === 'outstanding' ? `Outstanding (${outstanding.length})` : f === 'paid' ? `Paid (${paid.length})` : 'Sve'}
               </button>
             ))}
-            {isVariable && (
-              <div style={{ marginLeft: 'auto', fontSize: '11px', color: '#F5A623', background: 'rgba(245,166,35,0.08)', border: '1px solid rgba(245,166,35,0.25)', padding: '3px 10px', borderRadius: '20px' }}>
-                Variable rate — click ✎ to edit interest
-              </div>
-            )}
+            <div style={{ marginLeft: 'auto', fontSize: '11px', color: '#4EA8FF', background: 'rgba(78,168,255,0.08)', border: '1px solid rgba(78,168,255,0.25)', padding: '3px 10px', borderRadius: '20px' }}>
+              Click ✎ Edit to adjust principal or interest
+            </div>
           </div>
 
           {/* Table */}
@@ -455,11 +458,11 @@ function CreditRow({ credit, onRefresh, refreshKey }: { credit: Credit; onRefres
                         })()}
                       </td>
                       <td style={{ padding: '9px 16px', textAlign: 'right' }}>
-                        {inst.status === 'outstanding' && isVariable && (
+                        {inst.status === 'outstanding' && (
                           <button
                             onClick={e => { e.stopPropagation(); setEditingInst(inst) }}
-                            style={{ fontFamily: "'Inter',sans-serif", fontSize: '11px', fontWeight: '500', padding: '4px 10px', borderRadius: '6px', border: '1px solid rgba(245,166,35,0.3)', background: 'rgba(245,166,35,0.06)', color: '#F5A623', cursor: 'pointer' }}>
-                            ✎ Interest
+                            style={{ fontFamily: "'Inter',sans-serif", fontSize: '11px', fontWeight: '500', padding: '4px 10px', borderRadius: '6px', border: '1px solid rgba(78,168,255,0.3)', background: 'rgba(78,168,255,0.06)', color: '#4EA8FF', cursor: 'pointer' }}>
+                            ✎ Edit
                           </button>
                         )}
                       </td>
@@ -492,7 +495,7 @@ function CreditRow({ credit, onRefresh, refreshKey }: { credit: Credit; onRefres
       )}
 
       {editingInst && (
-        <EditInterestDialog
+        <EditInstallmentDialog
           installment={editingInst}
           onClose={() => setEditingInst(null)}
           onSaved={() => { setEditingInst(null); loadInstallments() }}
