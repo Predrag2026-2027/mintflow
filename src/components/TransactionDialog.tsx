@@ -1571,7 +1571,7 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
           }}
         />
       )}
-    </div>
+  </div>
   )
 }
 
