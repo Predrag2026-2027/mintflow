@@ -93,7 +93,7 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
       if (bankData && bankData.length > 0) { setBankAccounts(bankData); setSelectedBankId((bankData.find(b => b.is_primary) || bankData[0]).id) }
       const { data: profData } = await supabase.from('company_profiles').select('full_legal_name, city, address').eq('company_id', compData.id).single()
       if (profData) setCompanyProfile(profData)
-      const { data: invData } = await supabase.from('invoices').select('*, partners(id, name, address, city)').eq('company_id', compData.id).in('status', ['unpaid', 'partial']).order('due_date', { ascending: true })
+      const { data: invData } = await supabase.from('v_invoice_status').select('*, partners(id, name, address, city)').eq('company_id', compData.id).in('calculated_status', ['unpaid', 'partial']).order('due_date', { ascending: true })
       if (invData && invData.length > 0) {
         setInvoices(invData)
         const partnerIds = [...new Set(invData.map(i => i.partner_id).filter(Boolean))]
@@ -134,7 +134,7 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
       return (a.due_date || '9999') < (b.due_date || '9999') ? -1 : 1
     })
 
-  const totalUnpaid = filtered.reduce((s, i) => s + (i.amount_usd || 0), 0)
+  const totalUnpaid = filtered.reduce((s, i) => s + (i.calculated_status === 'partial' ? (i.remaining_usd || 0) : (i.amount_usd || 0)), 0)
   const overdueCount = filtered.filter(i => i.due_date && i.due_date < today).length
   const selectedInvoices = filtered.filter(i => selected.has(i.id))
   const selectedBank = bankAccounts.find(b => b.id === selectedBankId)
@@ -291,9 +291,16 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
                         <span style={{ fontSize: '13px', fontWeight: '500', color: '#E8F1FB' }}>{inv.partners?.name || '—'}</span>
                       </td>
                       <td style={ps.td}>
-                        <span style={{ fontSize: '11px', fontFamily: "'DM Mono', monospace", background: 'rgba(255,255,255,0.05)', padding: '2px 7px', borderRadius: '5px', color: '#7A9BB8', border: '0.5px solid rgba(255,255,255,0.06)' }}>
-                          {inv.invoice_number || '—'}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <span style={{ fontSize: '11px', fontFamily: "'DM Mono', monospace", background: 'rgba(255,255,255,0.05)', padding: '2px 7px', borderRadius: '5px', color: '#7A9BB8', border: '0.5px solid rgba(255,255,255,0.06)' }}>
+                            {inv.invoice_number || '—'}
+                          </span>
+                          {inv.calculated_status === 'partial' && (
+                            <span style={{ fontSize: '9px', fontWeight: '700', padding: '1px 6px', borderRadius: '20px', background: 'rgba(245,166,35,0.15)', color: '#F5A623', border: '0.5px solid rgba(245,166,35,0.3)', whiteSpace: 'nowrap' as const }}>
+                              PARTIAL
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td style={ps.td}>
                         <span style={{ fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '20px', background: inv.type === 'expense' ? 'rgba(255,91,90,0.12)' : 'rgba(0,212,126,0.12)', color: inv.type === 'expense' ? '#FF5B5A' : '#00D47E', letterSpacing: '0.02em' }}>
@@ -301,12 +308,28 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
                         </span>
                       </td>
                       <td style={{ ...ps.td, textAlign: 'right' as const }}>
-                        <span style={{ fontSize: '13px', fontWeight: '500', fontFamily: "'DM Mono', monospace", color: '#E8F1FB', whiteSpace: 'nowrap' as const }}>
-                          {(inv.amount || 0).toLocaleString('sr-RS')} {inv.currency}
-                        </span>
+                        <div>
+                          <span style={{ fontSize: '13px', fontWeight: '500', fontFamily: "'DM Mono', monospace", color: '#E8F1FB', whiteSpace: 'nowrap' as const }}>
+                            {(inv.amount || 0).toLocaleString('sr-RS')} {inv.currency}
+                          </span>
+                          {inv.calculated_status === 'partial' && (inv.remaining_usd || 0) < (inv.amount_usd || 0) && (
+                            <div style={{ fontSize: '10px', color: '#F5A623', marginTop: '2px', whiteSpace: 'nowrap' as const }}>
+                              Preostalo: {((inv.remaining_usd || 0) * (inv.exchange_rate || 1)).toLocaleString('sr-RS', { maximumFractionDigits: 0 })} {inv.currency}
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td style={{ ...ps.td, textAlign: 'right' as const }}>
-                        <span style={{ fontSize: '13px', fontWeight: '600', fontFamily: "'DM Mono', monospace", color: '#00D47E' }}>{fmt(inv.amount_usd || 0)}</span>
+                        <div>
+                          <span style={{ fontSize: '13px', fontWeight: '600', fontFamily: "'DM Mono', monospace", color: inv.calculated_status === 'partial' ? '#F5A623' : '#00D47E' }}>
+                            {fmt(inv.calculated_status === 'partial' ? (inv.remaining_usd || 0) : (inv.amount_usd || 0))}
+                          </span>
+                          {inv.calculated_status === 'partial' && (
+                            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.30)', marginTop: '2px' }}>
+                              od {fmt(inv.amount_usd || 0)}
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td style={ps.td}>
                         {partnerAccounts.length > 1 ? (

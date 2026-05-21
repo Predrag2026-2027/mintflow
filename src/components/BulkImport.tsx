@@ -817,12 +817,24 @@ export default function BulkImport({ onClose, onImported }: Props) {
           allocated_amount: amount,
           allocated_amount_usd: linkAmtUsd,
         })
-        // Update parent invoice status
-        const { data: invStatus } = await supabase.from('v_invoice_status')
-          .select('calculated_status').eq('id', row.override_linked_invoice_id).single()
-        if (invStatus) {
+        // Update parent invoice status — calculate directly from allocations (view may lag)
+        const { data: allocRows } = await supabase
+          .from('invoice_transaction_links')
+          .select('allocated_amount_usd')
+          .eq('invoice_id', row.override_linked_invoice_id)
+        const { data: parentInvData } = await supabase
+          .from('invoices')
+          .select('amount_usd')
+          .eq('id', row.override_linked_invoice_id)
+          .single()
+        if (allocRows && parentInvData) {
+          const totalAllocated = allocRows.reduce((s: number, r: any) => s + (r.allocated_amount_usd || 0), 0)
+          const parentTotal = parentInvData.amount_usd || 0
+          const finalStatus = totalAllocated <= 0 ? 'unpaid'
+            : totalAllocated >= parentTotal * 0.999 ? 'paid'
+            : 'partial'
           await supabase.from('invoices')
-            .update({ status: invStatus.calculated_status })
+            .update({ status: finalStatus, updated_at: new Date().toISOString() })
             .eq('id', row.override_linked_invoice_id)
         }
         // Auto-close child invoices when parent is fully paid
