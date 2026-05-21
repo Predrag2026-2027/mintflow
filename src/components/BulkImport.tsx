@@ -825,30 +825,37 @@ export default function BulkImport({ onClose, onImported }: Props) {
             .update({ status: invStatus.calculated_status })
             .eq('id', row.override_linked_invoice_id)
         }
-        // Auto-close child invoices proportionally
+        // Auto-close child invoices when parent is fully paid
         const { data: children } = await supabase.from('invoices')
           .select('id, amount, amount_usd')
           .eq('parent_invoice_id', row.override_linked_invoice_id)
         if (children && children.length > 0) {
-          // Get parent total to calculate proportion
-          const { data: parentInv } = await supabase.from('invoices')
-            .select('amount, amount_usd').eq('id', row.override_linked_invoice_id).single()
-          const parentAmt = parentInv?.amount || 1
-          const proportion = amount / parentAmt // how much of parent is being paid
+          // Check parent status after this payment
+          const { data: parentAfter } = await supabase.from('v_invoice_status')
+            .select('calculated_status').eq('id', row.override_linked_invoice_id).single()
+          const parentFullyPaid = parentAfter?.calculated_status === 'paid'
+
           for (const child of children) {
-            const childAlloc = Math.round(child.amount * proportion * 100) / 100
-            const childAllocUsd = Math.round((child.amount_usd || 0) * proportion * 100) / 100
-            await supabase.from('invoice_transaction_links').insert({
-              invoice_id: child.id,
-              transaction_id: newTx.id,
-              allocated_amount: childAlloc,
-              allocated_amount_usd: childAllocUsd,
-            })
-            // Update child status
-            const paidUsd = childAllocUsd
-            const totalUsd = child.amount_usd || 0
-            const childStatus = paidUsd <= 0 ? 'unpaid' : paidUsd >= totalUsd * 0.999 ? 'paid' : 'partial'
-            await supabase.from('invoices').update({ status: childStatus }).eq('id', child.id)
+            if (parentFullyPaid) {
+              // Parent fully paid — close all children
+              await supabase.from('invoices').update({ status: 'paid', updated_at: new Date().toISOString() }).eq('id', child.id)
+            } else {
+              // Parent partial — proportional allocation
+              const { data: parentInv } = await supabase.from('invoices')
+                .select('amount').eq('id', row.override_linked_invoice_id).single()
+              const parentAmt = parentInv?.amount || 1
+              const proportion = amount / parentAmt
+              const childAlloc = Math.round(child.amount * proportion * 100) / 100
+              const childAllocUsd = Math.round((child.amount_usd || 0) * proportion * 100) / 100
+              await supabase.from('invoice_transaction_links').insert({
+                invoice_id: child.id,
+                transaction_id: newTx.id,
+                allocated_amount: childAlloc,
+                allocated_amount_usd: childAllocUsd,
+              })
+              const childStatus = childAllocUsd <= 0 ? 'unpaid' : childAllocUsd >= (child.amount_usd || 0) * 0.999 ? 'paid' : 'partial'
+              await supabase.from('invoices').update({ status: childStatus, updated_at: new Date().toISOString() }).eq('id', child.id)
+            }
           }
         }
       }
