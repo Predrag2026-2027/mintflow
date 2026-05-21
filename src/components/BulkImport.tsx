@@ -808,66 +808,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
         done++; setProgress(Math.round((done / accepted.length) * 100)); continue
       }
 
-      if (row.override_tx_type === 'credit_payment' && row.override_installment_ids.length > 0) {
-        // EUR/USD = eurRsdRate / usdRsdRate (NBS zvanični kurs)
-        let eurUsdRateBI = 1.08 // fallback
-        try {
-          const rates = await getRatesForDate(formatDate(p.date))
-          eurUsdRateBI = rates.eurRsdRate / rates.usdRsdRate
-        } catch { /* use fallback */ }
-
-        const creditName = credits.find((c: any) => c.id === row.override_credit_id)?.name || 'Credit'
-
-        for (const instId of row.override_installment_ids) {
-          const { data: inst } = await supabase
-            .from('credit_installments')
-            .select('id, installment_no, principal_amount, interest_amount')
-            .eq('id', instId).single()
-          if (!inst) continue
-
-          if (inst.principal_amount > 0) {
-            await supabase.from('transactions').insert({
-              company_id: company, bank_id: bank,
-              partner_id: partnerId, transaction_date: formatDate(p.date),
-              statement_number: p.statement_number || null,
-              type: 'credit_payment', tx_subtype: 'expense', currency: 'EUR',
-              amount: inst.principal_amount, exchange_rate: eurUsdRateBI,
-              amount_usd: Math.round(inst.principal_amount * eurUsdRateBI * 100) / 100,
-              pl_impact: true, pl_category: 'Loans/Credits/Dividend',
-              expense_description: `Principal — ${creditName} #${inst.installment_no}`,
-              cf_type: 'recurring', cf_frequency: 'monthly',
-              note: row.override_note || p.description || null, status: 'posted',
-            })
-          }
-          if (inst.interest_amount > 0) {
-            await supabase.from('transactions').insert({
-              company_id: company, bank_id: bank,
-              partner_id: partnerId, transaction_date: formatDate(p.date),
-              statement_number: p.statement_number || null,
-              type: 'credit_payment', tx_subtype: 'expense', currency: 'EUR',
-              amount: inst.interest_amount, exchange_rate: eurUsdRateBI,
-              amount_usd: Math.round(inst.interest_amount * eurUsdRateBI * 100) / 100,
-              pl_impact: true, pl_category: 'Financial Expenses',
-              pl_subcategory: 'Interest',
-              expense_description: `Interest — ${creditName} #${inst.installment_no}`,
-              cf_type: 'recurring', cf_frequency: 'monthly',
-              note: row.override_note || p.description || null, status: 'posted',
-            })
-          }
-          await supabase.from('credit_installments').update({
-            status: 'paid', paid_date: formatDate(p.date), updated_at: new Date().toISOString(),
-          }).eq('id', instId)
-        }
-        if (row.override_credit_id) {
-          const { data: rem } = await supabase.from('credit_installments').select('id')
-            .eq('credit_id', row.override_credit_id).eq('status', 'outstanding')
-          if (rem && rem.length === 0)
-            await supabase.from('credits')
-              .update({ status: 'closed', updated_at: new Date().toISOString() })
-              .eq('id', row.override_credit_id)
-        }
-        done++; setProgress(Math.round((done / accepted.length) * 100)); continue
-      }
 
       if (row.override_tx_type === 'invoice_payment' && row.override_linked_invoice_id && newTx?.id) {
         const { amount_usd: linkAmtUsd } = await getAmountUsd(p, amount)
@@ -1334,43 +1274,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
                             </div>
                           )}
 
-                          {row.override_tx_type === 'credit_payment' && (
-                            <div style={{ gridColumn: '1 / -1', marginTop: '8px' }}>
-                              <div style={s.editSectionTitle}>Credit installments</div>
-                              <CreditInstallmentSelector
-                                credits={credits}
-                                selectedCreditId={row.override_credit_id}
-                                onCreditChange={async id => {
-                                  updateRow(p.id, { override_credit_id: id, override_installment_ids: [] })
-                                  if (id) {
-                                    const { data } = await supabase
-                                      .from('credit_installments')
-                                      .select('id,installment_no,due_date,principal_amount,interest_amount,total_amount,status')
-                                      .eq('credit_id', id).eq('status', 'outstanding').order('due_date')
-                                    if (data) setBulkInstallments(prev => ({ ...prev, [p.id]: data }))
-                                  }
-                                }}
-                                installments={bulkInstallments[p.id] || []}
-                                selectedInstallmentIds={row.override_installment_ids}
-                                onToggle={id => updateRow(p.id, {
-                                  override_installment_ids: row.override_installment_ids.includes(id)
-                                    ? row.override_installment_ids.filter((x: string) => x !== id)
-                                    : [...row.override_installment_ids, id]
-                                })}
-                                onToggleAll={() => {
-                                  const all = (bulkInstallments[p.id] || []).map((i: any) => i.id)
-                                  updateRow(p.id, {
-                                    override_installment_ids:
-                                      row.override_installment_ids.length === all.length ? [] : all
-                                  })
-                                }}
-                                selectedTotal={(bulkInstallments[p.id] || [])
-                                  .filter((i: any) => row.override_installment_ids.includes(i.id))
-                                  .reduce((s: number, i: any) => s + i.total_amount, 0)}
-                                theme="light"
-                              />
-                            </div>
-                          )}
 
                           {row.override_tx_type !== 'passthrough' && (
                             <div style={{ ...s.editGrid2, marginTop: '8px' }}>
