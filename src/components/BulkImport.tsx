@@ -51,6 +51,7 @@ interface ImportRow {
   override_pt_period: string
   override_payment_method: string
   override_linked_invoice_id: string
+  override_linked_invoice_ids: string[]
   override_pl_category_id: string
   override_pl_category_name: string
   override_pl_subcategory_id: string
@@ -343,6 +344,7 @@ function makeImportRow(parsed: ParsedRow): ImportRow {
     override_pt_period: new Date().toISOString().slice(0, 7),
     override_payment_method: 'Wire transfer',
     override_linked_invoice_id: '',
+    override_linked_invoice_ids: [],
     override_pl_category_id: '', override_pl_category_name: '',
     override_pl_subcategory_id: '', override_pl_subcategory_name: '',
     override_department_id: '', override_department_name: '',
@@ -816,64 +818,84 @@ export default function BulkImport({ onClose, onImported }: Props) {
       }
 
 
-      if (row.override_tx_type === 'invoice_payment' && row.override_linked_invoice_id && newTx?.id) {
-        const { amount_usd: linkAmtUsd } = await getAmountUsd(p, amount)
-        await supabase.from('invoice_transaction_links').insert({
-          invoice_id: row.override_linked_invoice_id,
-          transaction_id: newTx.id,
-          allocated_amount: amount,
-          allocated_amount_usd: linkAmtUsd,
-        })
-        // Update parent invoice status — calculate directly from allocations (view may lag)
-        const { data: allocRows } = await supabase
-          .from('invoice_transaction_links')
-          .select('allocated_amount_usd')
-          .eq('invoice_id', row.override_linked_invoice_id)
-        const { data: parentInvData } = await supabase
-          .from('invoices')
-          .select('amount_usd')
-          .eq('id', row.override_linked_invoice_id)
-          .single()
-        if (allocRows && parentInvData) {
-          const totalAllocated = allocRows.reduce((s: number, r: any) => s + (r.allocated_amount_usd || 0), 0)
-          const parentTotal = parentInvData.amount_usd || 0
-          const finalStatus = totalAllocated <= 0 ? 'unpaid'
-            : totalAllocated >= parentTotal * 0.999 ? 'paid'
-            : 'partial'
-          await supabase.from('invoices')
-            .update({ status: finalStatus, updated_at: new Date().toISOString() })
-            .eq('id', row.override_linked_invoice_id)
-        }
-        // Auto-close child invoices when parent is fully paid
-        const { data: children } = await supabase.from('invoices')
-          .select('id, amount, amount_usd')
-          .eq('parent_invoice_id', row.override_linked_invoice_id)
-        if (children && children.length > 0) {
-          // Check parent status after this payment
-          const { data: parentAfter } = await supabase.from('v_invoice_status')
-            .select('calculated_status').eq('id', row.override_linked_invoice_id).single()
-          const parentFullyPaid = parentAfter?.calculated_status === 'paid'
+      if (row.override_tx_type === 'invoice_payment' && newTx?.id) {
+        // Build list of invoices to close — multi-invoice support
+        const invoiceIds = row.override_linked_invoice_ids?.length > 0
+          ? row.override_linked_invoice_ids
+          : row.override_linked_invoice_id ? [row.override_linked_invoice_id] : []
 
-          for (const child of children) {
-            if (parentFullyPaid) {
-              // Parent fully paid — close all children
-              await supabase.from('invoices').update({ status: 'paid', updated_at: new Date().toISOString() }).eq('id', child.id)
-            } else {
-              // Parent partial — proportional allocation
-              const { data: parentInv } = await supabase.from('invoices')
-                .select('amount').eq('id', row.override_linked_invoice_id).single()
-              const parentAmt = parentInv?.amount || 1
-              const proportion = amount / parentAmt
-              const childAlloc = Math.round(child.amount * proportion * 100) / 100
-              const childAllocUsd = Math.round((child.amount_usd || 0) * proportion * 100) / 100
-              await supabase.from('invoice_transaction_links').insert({
-                invoice_id: child.id,
-                transaction_id: newTx.id,
-                allocated_amount: childAlloc,
-                allocated_amount_usd: childAllocUsd,
-              })
-              const childStatus = childAllocUsd <= 0 ? 'unpaid' : childAllocUsd >= (child.amount_usd || 0) * 0.999 ? 'paid' : 'partial'
-              await supabase.from('invoices').update({ status: childStatus, updated_at: new Date().toISOString() }).eq('id', child.id)
+        if (invoiceIds.length > 0) {
+          const { amount_usd: totalAmtUsd } = await getAmountUsd(p, amount)
+          let remainingAmt = amount           // original currency
+          let remainingUsd = totalAmtUsd      // USD
+
+          for (const invoiceId of invoiceIds) {
+            if (remainingUsd <= 0) break
+
+            // Fetch invoice details
+            const { data: inv } = await supabase.from('invoices')
+              .select('id, amount, amount_usd, currency, exchange_rate')
+              .eq('id', invoiceId).single()
+            if (!inv) continue
+
+            // Already allocated to this invoice
+            const { data: prevAlloc } = await supabase.from('invoice_transaction_links')
+              .select('allocated_amount_usd').eq('invoice_id', invoiceId)
+            const alreadyAllocUsd = (prevAlloc || []).reduce((s: number, r: any) => s + (r.allocated_amount_usd || 0), 0)
+            const remainingInvUsd = Math.max(0, (inv.amount_usd || 0) - alreadyAllocUsd)
+
+            if (remainingInvUsd <= 0) continue // already paid
+
+            // Allocate: min(remaining tx, remaining on invoice)
+            const allocUsd = Math.min(remainingUsd, remainingInvUsd)
+            // Convert back to original currency proportionally
+            const allocAmt = totalAmtUsd > 0
+              ? Math.round((allocUsd / totalAmtUsd) * amount * 100) / 100
+              : allocUsd
+
+            await supabase.from('invoice_transaction_links').insert({
+              invoice_id: invoiceId,
+              transaction_id: newTx.id,
+              allocated_amount: allocAmt,
+              allocated_amount_usd: Math.round(allocUsd * 100) / 100,
+            })
+
+            remainingUsd -= allocUsd
+            remainingAmt -= allocAmt
+
+            // Update invoice status from total allocations
+            const { data: allAlloc } = await supabase.from('invoice_transaction_links')
+              .select('allocated_amount_usd').eq('invoice_id', invoiceId)
+            const totalAllocated = (allAlloc || []).reduce((s: number, r: any) => s + (r.allocated_amount_usd || 0), 0)
+            const invTotal = inv.amount_usd || 0
+            const invStatus = totalAllocated <= 0 ? 'unpaid'
+              : totalAllocated >= invTotal * 0.999 ? 'paid'
+              : 'partial'
+            await supabase.from('invoices')
+              .update({ status: invStatus, updated_at: new Date().toISOString() })
+              .eq('id', invoiceId)
+
+            // Auto-close children if parent is fully paid
+            const { data: children } = await supabase.from('invoices')
+              .select('id, amount, amount_usd').eq('parent_invoice_id', invoiceId)
+            if (children && children.length > 0) {
+              if (invStatus === 'paid') {
+                for (const child of children) {
+                  await supabase.from('invoices').update({ status: 'paid', updated_at: new Date().toISOString() }).eq('id', child.id)
+                }
+              } else {
+                for (const child of children) {
+                  const proportion = inv.amount || 1
+                  const childAllocUsd = Math.round((child.amount_usd || 0) * (allocUsd / (inv.amount_usd || 1)) * 100) / 100
+                  const childAllocAmt = Math.round((child.amount || 0) * (allocAmt / (inv.amount || 1)) * 100) / 100
+                  await supabase.from('invoice_transaction_links').insert({
+                    invoice_id: child.id, transaction_id: newTx.id,
+                    allocated_amount: childAllocAmt, allocated_amount_usd: childAllocUsd,
+                  })
+                  const childStatus = childAllocUsd <= 0 ? 'unpaid' : childAllocUsd >= (child.amount_usd || 0) * 0.999 ? 'paid' : 'partial'
+                  await supabase.from('invoices').update({ status: childStatus, updated_at: new Date().toISOString() }).eq('id', child.id)
+                }
+              }
             }
           }
         }
@@ -1328,22 +1350,30 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                 </div>
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>Link to open invoice</label>
-                                  {/* Selected invoice pill */}
-                                  {row.override_linked_invoice_id && !invoicePickerOpen[p.id] && (() => {
-                                    const sel = openInvoices.find(i => i.id === row.override_linked_invoice_id)
-                                    return sel ? (
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 10px', borderRadius: '6px', border: '1.5px solid #00D47E', background: 'rgba(0,212,126,0.08)', marginBottom: '4px' }}>
-                                        <span style={{ fontSize: '12px', fontWeight: '600', color: '#00D47E', flex: 1 }}>✓ {sel.partner_name}</span>
-                                        <span style={{ fontSize: '11px', color: '#7A9BB8' }}>{(sel.amount || 0).toLocaleString()} {sel.currency}</span>
-                                        <button style={{ background: 'none', border: 'none', color: '#7A9BB8', fontSize: '14px', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
-                                          onClick={e => { e.stopPropagation(); setInvoicePickerOpen(prev => ({ ...prev, [p.id]: true })) }}>✎</button>
-                                        <button style={{ background: 'none', border: 'none', color: '#FF5B5A', fontSize: '14px', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
-                                          onClick={e => { e.stopPropagation(); updateRow(p.id, { override_linked_invoice_id: '', status: 'pending' as RowStatus }); setInvoicePickerOpen(prev => ({ ...prev, [p.id]: false })) }}>×</button>
-                                      </div>
-                                    ) : null
-                                  })()}
-                                  {/* Search + list: show when no selection OR picker explicitly open */}
-                                  {(!row.override_linked_invoice_id || invoicePickerOpen[p.id]) && (
+                                  {/* Selected invoices summary */}
+                                  {(row.override_linked_invoice_ids?.length > 0) && !invoicePickerOpen[p.id] && (
+                                    <div style={{ marginBottom: '6px' }}>
+                                      {row.override_linked_invoice_ids.map((invId, idx) => {
+                                        const sel = openInvoices.find(i => i.id === invId)
+                                        if (!sel) return null
+                                        return (
+                                          <div key={invId} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 8px', borderRadius: '6px', border: '1px solid rgba(0,212,126,0.4)', background: 'rgba(0,212,126,0.06)', marginBottom: '3px' }}>
+                                            <span style={{ fontSize: '10px', color: '#7A9BB8', width: '14px' }}>{idx + 1}.</span>
+                                            <span style={{ fontSize: '12px', fontWeight: '500', color: '#00D47E', flex: 1 }}>{sel.partner_name || '—'}</span>
+                                            <span style={{ fontSize: '10px', color: '#7A9BB8' }}>${(sel.remaining_usd || 0).toFixed(0)} rem</span>
+                                            <button style={{ background: 'none', border: 'none', color: '#FF5B5A', fontSize: '13px', cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}
+                                              onClick={e => { e.stopPropagation(); updateRow(p.id, { override_linked_invoice_ids: row.override_linked_invoice_ids.filter(x => x !== invId), status: row.override_linked_invoice_ids.length <= 1 ? 'pending' as RowStatus : 'accepted' as RowStatus }) }}>×</button>
+                                          </div>
+                                        )
+                                      })}
+                                      <button style={{ fontSize: '11px', color: '#7A9BB8', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0' }}
+                                        onClick={e => { e.stopPropagation(); setInvoicePickerOpen(prev => ({ ...prev, [p.id]: true })) }}>
+                                        ✎ Edit selection
+                                      </button>
+                                    </div>
+                                  )}
+                                  {/* Search + checkbox list */}
+                                  {(!(row.override_linked_invoice_ids?.length > 0) || invoicePickerOpen[p.id]) && (
                                     <>
                                   <input
                                     style={{ ...s.editInput, marginBottom: '6px' }}
@@ -1353,11 +1383,11 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                     placeholder="Search partner or invoice #..."
                                     autoFocus={invoicePickerOpen[p.id]}
                                   />
-                                  <div style={{ maxHeight: '200px', overflowY: 'auto' as const, display: 'flex', flexDirection: 'column' as const, gap: '4px' }}>
+                                  <div style={{ maxHeight: '220px', overflowY: 'auto' as const, display: 'flex', flexDirection: 'column' as const, gap: '3px' }}>
                                     <div
                                       style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)', cursor: 'pointer', fontSize: '12px', color: '#7A9BB8' }}
-                                      onClick={e => { e.stopPropagation(); updateRow(p.id, { override_linked_invoice_id: '', status: 'pending' as RowStatus }); setInvoiceSearch(prev => ({ ...prev, [p.id]: '' })); setInvoicePickerOpen(prev => ({ ...prev, [p.id]: false })) }}>
-                                      — No invoice (standalone) —
+                                      onClick={e => { e.stopPropagation(); updateRow(p.id, { override_linked_invoice_ids: [], override_linked_invoice_id: '', status: 'pending' as RowStatus }); setInvoiceSearch(prev => ({ ...prev, [p.id]: '' })); setInvoicePickerOpen(prev => ({ ...prev, [p.id]: false })) }}>
+                                      — Clear selection —
                                     </div>
                                     {openInvoices
                                       .filter(inv => {
@@ -1366,43 +1396,62 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                         return (inv.partner_name || '').toLowerCase().includes(q) || (inv.invoice_number || '').toLowerCase().includes(q)
                                       })
                                       .map(inv => {
-                                        const selected = row.override_linked_invoice_id === inv.id
+                                        const selectedIds = row.override_linked_invoice_ids || []
+                                        const isChecked = selectedIds.includes(inv.id)
                                         const remOrig = inv.currency !== 'USD' && (inv.exchange_rate || 0) > 0
                                           ? ((inv.remaining_usd || 0) * inv.exchange_rate).toFixed(0)
                                           : null
+                                        const orderNum = isChecked ? selectedIds.indexOf(inv.id) + 1 : null
                                         return (
                                           <div key={inv.id}
-                                            style={{ padding: '8px 10px', borderRadius: '6px', border: selected ? '1.5px solid #00D47E' : '1px solid rgba(255,255,255,0.08)', background: selected ? 'rgba(0,212,126,0.08)' : 'rgba(255,255,255,0.03)', cursor: 'pointer' }}
-                                            onClick={e => { e.stopPropagation(); updateRow(p.id, { override_linked_invoice_id: inv.id, status: 'accepted' as RowStatus }); setInvoiceSearch(prev => ({ ...prev, [p.id]: '' })); setInvoicePickerOpen(prev => ({ ...prev, [p.id]: false })) }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                                              <div style={{ minWidth: 0, flex: 1 }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' as const }}>
-                                                  <span style={{ fontSize: '12px', fontWeight: '600', color: '#DCE9F6' }}>{inv.partner_name || '—'}</span>
-                                                  {inv.invoice_number && <span style={{ fontSize: '10px', color: '#7A9BB8', background: 'rgba(255,255,255,0.06)', padding: '1px 6px', borderRadius: '4px', fontFamily: 'monospace' }}>{inv.invoice_number}</span>}
-                                                </div>
-                                                <div style={{ fontSize: '10px', color: '#7A9BB8', marginTop: '2px' }}>
-                                                  {inv.invoice_date}{inv.due_date ? ` · Due: ${inv.due_date}` : ''}
-                                                </div>
-                                                {inv.expense_description && <div style={{ fontSize: '10px', color: '#7A9BB8', fontStyle: 'italic', marginTop: '1px' }}>{inv.expense_description}</div>}
+                                            style={{ padding: '7px 10px', borderRadius: '6px', border: isChecked ? '1.5px solid #00D47E' : '1px solid rgba(255,255,255,0.08)', background: isChecked ? 'rgba(0,212,126,0.08)' : 'rgba(255,255,255,0.03)', cursor: 'pointer', display: 'flex', gap: '8px', alignItems: 'flex-start' }}
+                                            onClick={e => {
+                                              e.stopPropagation()
+                                              const newIds = isChecked
+                                                ? selectedIds.filter(x => x !== inv.id)
+                                                : [...selectedIds, inv.id]
+                                              updateRow(p.id, {
+                                                override_linked_invoice_ids: newIds,
+                                                override_linked_invoice_id: newIds[0] || '',
+                                                status: newIds.length > 0 ? 'accepted' as RowStatus : 'pending' as RowStatus
+                                              })
+                                            }}>
+                                            <div style={{ width: '18px', height: '18px', borderRadius: '4px', border: `2px solid ${isChecked ? '#00D47E' : 'rgba(255,255,255,0.2)'}`, background: isChecked ? '#00D47E' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '1px', fontSize: '10px', color: '#060E1A', fontWeight: '700' }}>
+                                              {isChecked ? orderNum : ''}
+                                            </div>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' as const }}>
+                                                <span style={{ fontSize: '12px', fontWeight: '600', color: '#DCE9F6' }}>{inv.partner_name || '—'}</span>
+                                                {inv.invoice_number && <span style={{ fontSize: '10px', color: '#7A9BB8', background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: '4px', fontFamily: 'monospace' }}>{inv.invoice_number}</span>}
                                               </div>
-                                              <div style={{ textAlign: 'right' as const, flexShrink: 0 }}>
-                                                <div style={{ fontSize: '12px', fontWeight: '600', color: '#DCE9F6' }}>{(inv.amount || 0).toLocaleString()} {inv.currency}</div>
-                                                <div style={{ fontSize: '10px', color: (inv.remaining_usd || 0) > 0 ? '#FF5B5A' : '#00D47E', marginTop: '1px' }}>
-                                                  Rem: {remOrig ? `${remOrig} ${inv.currency}` : `$${(inv.remaining_usd || 0).toFixed(2)}`}
-                                                </div>
+                                              <div style={{ fontSize: '10px', color: '#7A9BB8', marginTop: '1px' }}>
+                                                {inv.invoice_date}{inv.due_date ? ` · Due: ${inv.due_date}` : ''}
+                                              </div>
+                                            </div>
+                                            <div style={{ textAlign: 'right' as const, flexShrink: 0 }}>
+                                              <div style={{ fontSize: '11px', fontWeight: '600', color: '#DCE9F6' }}>{(inv.amount || 0).toLocaleString()} {inv.currency}</div>
+                                              <div style={{ fontSize: '10px', color: (inv.remaining_usd || 0) > 0.01 ? '#FF5B5A' : '#00D47E', marginTop: '1px' }}>
+                                                Rem: {remOrig ? `${remOrig} ${inv.currency}` : `$${(inv.remaining_usd || 0).toFixed(2)}`}
                                               </div>
                                             </div>
                                           </div>
                                         )
                                     })}
                                   </div>
+                                  {(row.override_linked_invoice_ids?.length > 0) && invoicePickerOpen[p.id] && (
+                                    <button style={{ marginTop: '6px', fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '5px 12px', border: '1px solid #00D47E', borderRadius: '6px', background: 'rgba(0,212,126,0.1)', color: '#00D47E', cursor: 'pointer', width: '100%' }}
+                                      onClick={e => { e.stopPropagation(); setInvoicePickerOpen(prev => ({ ...prev, [p.id]: false })) }}>
+                                      ✓ Potvrdi selekciju ({row.override_linked_invoice_ids.length} invoice{row.override_linked_invoice_ids.length > 1 ? 'a' : ''})
+                                    </button>
+                                  )}
                                     </>
                                   )}
                                 </div>
                               </div>
-                              {linkedInvoice && (
+                              {(row.override_linked_invoice_ids?.length > 0) && (
                                 <div style={{ ...s.aiNotes, background: '#E6F1FB', borderColor: '#7FB8EE', color: '#0C447C', marginTop: '8px' }}>
-                                  💳 Will close: <strong>{linkedInvoice.partner_name}</strong>{linkedInvoice.invoice_number ? ` · ${linkedInvoice.invoice_number}` : ''} · Remaining: <strong>${(linkedInvoice.remaining_usd || 0).toFixed(2)}</strong>
+                                  💳 Will close {row.override_linked_invoice_ids.length} invoice{row.override_linked_invoice_ids.length > 1 ? 's' : ''} sequentially ·
+                                  Total rem: <strong>${row.override_linked_invoice_ids.reduce((s, id) => { const inv = openInvoices.find(i => i.id === id); return s + (inv?.remaining_usd || 0) }, 0).toFixed(2)}</strong>
                                 </div>
                               )}
                             </>
