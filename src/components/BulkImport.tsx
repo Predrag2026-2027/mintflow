@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx'
 import { getRate, convertToUSD, getRatesForDate } from '../services/currencyService'
 import PartnerDialog from './PartnerDialog'
 import CreditInstallmentSelector from './CreditInstallmentSelector'
+import { QUICK_FILL_SCRIPTS } from '../data/quickfill'
 // credit payment P&L logic is inline
 
 interface Props {
@@ -1457,6 +1458,40 @@ export default function BulkImport({ onClose, onImported }: Props) {
                           {row.override_tx_type === 'direct' && row.override_tx_subtype === 'expense' && (
                             <>
                               <div style={s.editSectionTitle}>P&L Classification</div>
+                              {/* Quick Fill */}
+                              <div style={{ marginBottom: '10px' }}>
+                                <select
+                                  style={{ ...s.editSelect, width: '100%', border: '1px solid rgba(0,212,126,0.3)', background: 'rgba(0,212,126,0.05)', color: '#00D47E', fontSize: '12px' }}
+                                  value=""
+                                  onChange={e => {
+                                    const script = QUICK_FILL_SCRIPTS.find(s => s.id === e.target.value)
+                                    if (!script) return
+                                    const matchCat = plCategories.find(c => c.name === script.pl_category)
+                                    const matchDept = departments.find(d => d.name === script.department)
+                                    const matchSub = plSubcategories.find(s => s.name === script.pl_subcategory && s.category_id === matchCat?.id)
+                                    const matchDeptSub = deptSubcategories.find(s => s.name === script.dept_subcategory && s.department_id === matchDept?.id)
+                                    updateRow(p.id, {
+                                      override_pl_category_id: matchCat?.id || '',
+                                      override_pl_category_name: matchCat?.name || script.pl_category,
+                                      override_pl_subcategory_id: matchSub?.id || '',
+                                      override_pl_subcategory_name: matchSub?.name || script.pl_subcategory,
+                                      override_department_id: matchDept?.id || '',
+                                      override_department_name: matchDept?.name || script.department,
+                                      override_dept_subcategory_id: matchDeptSub?.id || '',
+                                      override_dept_subcategory_name: matchDeptSub?.name || script.dept_subcategory,
+                                      override_expense_description: script.expense_description,
+                                      override_rev_alloc: script.rev_alloc,
+                                      override_opex_type: script.opex_type,
+                                      override_cf_type: script.cf_type,
+                                      status: 'accepted' as RowStatus,
+                                    })
+                                  }}>
+                                  <option value="">⚡ Quick fill — odaberi skriptu...</option>
+                                  {QUICK_FILL_SCRIPTS.map(sc => (
+                                    <option key={sc.id} value={sc.id}>{sc.icon} {sc.name}</option>
+                                  ))}
+                                </select>
+                              </div>
                               <div style={s.editGrid2}>
                                 <div style={s.editField}>
                                   <label style={s.editLbl}>P&L Category</label>
