@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx'
 import { getRate, convertToUSD, getRatesForDate } from '../services/currencyService'
 import PartnerDialog from './PartnerDialog'
 import CreditInstallmentSelector from './CreditInstallmentSelector'
-import { QUICK_FILL_SCRIPTS } from '../data/quickfill'
+
 // credit payment P&L logic is inline
 
 interface Props {
@@ -401,6 +401,44 @@ export default function BulkImport({ onClose, onImported }: Props) {
   const [partnerAccounts, setPartnerAccounts] = useState<any[]>([])
   const [credits, setCredits] = useState<any[]>([])
   const [bulkInstallments, setBulkInstallments] = useState<Record<string, any[]>>({})
+
+  // ── Quick Fill Scripts ────────────────────────────────────────────────────
+  interface QuickFillScript {
+    id: string
+    name: string
+    icon: string
+    pl_category: string
+    pl_subcategory: string
+    department: string
+    dept_subcategory: string
+    expense_description: string
+    rev_alloc: string
+    opex_type: string
+    cf_type: string
+  }
+  const DEFAULT_SCRIPTS: QuickFillScript[] = [
+    { id: 'bank_fee_domestic', name: 'Bank fee — domestic', icon: '🏦', pl_category: 'Banking and Finance', pl_subcategory: 'Bank Fees (domestic provisions and services)', department: 'General Business Expenses', dept_subcategory: 'Banking and Finance', expense_description: '', rev_alloc: 'sg100', opex_type: 'opex', cf_type: 'recurring' },
+    { id: 'bank_fee_abroad', name: 'Bank fee — abroad', icon: '🌍', pl_category: 'Banking and Finance', pl_subcategory: 'Bank Fees (abroad)', department: 'General Business Expenses', dept_subcategory: 'Banking and Finance', expense_description: '', rev_alloc: 'sg100', opex_type: 'opex', cf_type: 'recurring' },
+    { id: 'paid_ads_aimfox', name: 'Paid Advertising — Aimfox', icon: '📢', pl_category: 'Marketing Expenses', pl_subcategory: 'Paid Advertising', department: 'Marketing Expenses', dept_subcategory: 'Paid Advertising', expense_description: '', rev_alloc: 'af100', opex_type: 'performance', cf_type: 'recurring' },
+    { id: 'paid_ads_sg', name: 'Paid Advertising — Social Growth', icon: '📣', pl_category: 'Marketing Expenses', pl_subcategory: 'Paid Advertising', department: 'Marketing Expenses', dept_subcategory: 'Paid Advertising', expense_description: '', rev_alloc: 'sg100', opex_type: 'performance', cf_type: 'recurring' },
+    { id: 'affiliates', name: 'Affiliates expenses', icon: '🤝', pl_category: 'Marketing Expenses', pl_subcategory: 'Affiliates expenses', department: 'Marketing Expenses', dept_subcategory: 'Affiliates expenses', expense_description: '', rev_alloc: 'shared', opex_type: 'performance', cf_type: 'recurring' },
+    { id: 'dev_saas', name: 'Development SaaS', icon: '⚙️', pl_category: 'Development Expenses', pl_subcategory: 'SaaS expenses', department: 'Development Expenses', dept_subcategory: 'SaaS expenses', expense_description: '', rev_alloc: 'shared', opex_type: 'opex', cf_type: 'recurring' },
+    { id: 'dev_outsource', name: 'Development Outsourcing', icon: '👨‍💻', pl_category: 'Development Expenses', pl_subcategory: 'Outsourcing services and Associates', department: 'Development Expenses', dept_subcategory: 'Outsourcing services and Associates', expense_description: '', rev_alloc: 'shared', opex_type: 'opex', cf_type: 'recurring' },
+    { id: 'general_saas', name: 'General SaaS', icon: '🔧', pl_category: 'General Business Expenses', pl_subcategory: 'SaaS expenses', department: 'General Business Expenses', dept_subcategory: 'SaaS expenses', expense_description: '', rev_alloc: 'sg100', opex_type: 'opex', cf_type: 'recurring' },
+    { id: 'general_professional', name: 'Professional services', icon: '📋', pl_category: 'General Business Expenses', pl_subcategory: 'Professional and production services', department: 'General Business Expenses', dept_subcategory: 'Professional and production services', expense_description: '', rev_alloc: 'sg100', opex_type: 'opex', cf_type: 'one_time' },
+    { id: 'general_taxes', name: 'Taxes & duties', icon: '🧾', pl_category: 'General Business Expenses', pl_subcategory: 'Taxes', department: 'General Business Expenses', dept_subcategory: 'Taxes', expense_description: '', rev_alloc: 'sg100', opex_type: 'opex', cf_type: 'one_time' },
+  ]
+  const loadScripts = (): QuickFillScript[] => {
+    try { const s = localStorage.getItem('mintflow_quickfill_scripts'); return s ? JSON.parse(s) : DEFAULT_SCRIPTS } catch { return DEFAULT_SCRIPTS }
+  }
+  const [quickFillScripts, setQuickFillScripts] = useState<QuickFillScript[]>(loadScripts)
+  const saveScripts = (scripts: QuickFillScript[]) => {
+    try { localStorage.setItem('mintflow_quickfill_scripts', JSON.stringify(scripts)) } catch {}
+    setQuickFillScripts(scripts)
+  }
+  const [qfDialogOpen, setQfDialogOpen] = useState(false)
+  const [qfEditing, setQfEditing] = useState<QuickFillScript | null>(null)
+  const EMPTY_SCRIPT: QuickFillScript = { id: '', name: '', icon: '⚡', pl_category: '', pl_subcategory: '', department: '', dept_subcategory: '', expense_description: '', rev_alloc: 'sg100', opex_type: 'opex', cf_type: 'recurring' }
 
   useEffect(() => {
     const load = async () => {
@@ -1459,17 +1497,18 @@ export default function BulkImport({ onClose, onImported }: Props) {
                             <>
                               <div style={s.editSectionTitle}>P&L Classification</div>
                               {/* Quick Fill */}
-                              <div style={{ marginBottom: '10px' }}>
+                              <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', alignItems: 'center' }}>
                                 <select
-                                  style={{ ...s.editSelect, width: '100%', border: '1px solid rgba(0,212,126,0.3)', background: 'rgba(0,212,126,0.05)', color: '#00D47E', fontSize: '12px' }}
+                                  style={{ ...s.editSelect, flex: 1, border: '1px solid rgba(0,212,126,0.3)', background: 'rgba(0,212,126,0.05)', color: '#00D47E', fontSize: '12px' }}
                                   value=""
                                   onChange={e => {
-                                    const script = QUICK_FILL_SCRIPTS.find(s => s.id === e.target.value)
+                                    const script = quickFillScripts.find(sc => sc.id === e.target.value)
                                     if (!script) return
                                     const matchCat = plCategories.find(c => c.name === script.pl_category)
                                     const matchDept = departments.find(d => d.name === script.department)
-                                    const matchSub = plSubcategories.find(s => s.name === script.pl_subcategory && s.category_id === matchCat?.id)
-                                    const matchDeptSub = deptSubcategories.find(s => s.name === script.dept_subcategory && s.department_id === matchDept?.id)
+                                    const matchSub = plSubcategories.find(sub => sub.name === script.pl_subcategory && sub.category_id === matchCat?.id)
+                                    const matchDeptSub = deptSubcategories.find(sub => sub.name === script.dept_subcategory && sub.department_id === matchDept?.id)
+                                    const matchExpDesc = expenseDescriptions.find(ed => ed.name === script.expense_description && ed.dept_subcategory_id === matchDeptSub?.id)
                                     updateRow(p.id, {
                                       override_pl_category_id: matchCat?.id || '',
                                       override_pl_category_name: matchCat?.name || script.pl_category,
@@ -1487,10 +1526,20 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                     })
                                   }}>
                                   <option value="">⚡ Quick fill — odaberi skriptu...</option>
-                                  {QUICK_FILL_SCRIPTS.map(sc => (
+                                  {quickFillScripts.map(sc => (
                                     <option key={sc.id} value={sc.id}>{sc.icon} {sc.name}</option>
                                   ))}
                                 </select>
+                                <button
+                                  style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '5px 10px', border: '1px solid rgba(0,212,126,0.3)', borderRadius: '6px', background: 'rgba(0,212,126,0.08)', color: '#00D47E', cursor: 'pointer', whiteSpace: 'nowrap' as const }}
+                                  onClick={e => { e.stopPropagation(); setQfEditing({ ...EMPTY_SCRIPT, id: `script_${Date.now()}` }); setQfDialogOpen(true) }}>
+                                  + Nova
+                                </button>
+                                <button
+                                  style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '5px 10px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', background: 'transparent', color: '#7A9BB8', cursor: 'pointer', whiteSpace: 'nowrap' as const }}
+                                  onClick={e => { e.stopPropagation(); setQfEditing(null); setQfDialogOpen(true) }}>
+                                  ✎ Uredi
+                                </button>
                               </div>
                               <div style={s.editGrid2}>
                                 <div style={s.editField}>
@@ -1681,6 +1730,153 @@ export default function BulkImport({ onClose, onImported }: Props) {
           )}
         </div>
       </div>
+
+      {/* Quick Fill Script Manager Dialog */}
+      {qfDialogOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200 }}
+          onClick={() => setQfDialogOpen(false)}>
+          <div style={{ background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '14px', width: '680px', maxWidth: '95vw', maxHeight: '85vh', display: 'flex', flexDirection: 'column' as const, overflow: 'hidden' }}
+            onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div style={{ background: '#060E1A', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+              <div style={{ color: '#DCE9F6', fontSize: '14px', fontWeight: '500' }}>
+                {qfEditing && qfEditing.name === '' ? '➕ Nova skripta' : qfEditing ? `✎ Uredi: ${qfEditing.name}` : '⚡ Quick Fill skripte'}
+              </div>
+              <button style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '20px', cursor: 'pointer' }} onClick={() => { setQfDialogOpen(false); setQfEditing(null) }}>×</button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto' as const, padding: '16px 20px' }}>
+              {qfEditing ? (
+                /* Edit / New form */
+                <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '60px 1fr', gap: '8px' }}>
+                    <div>
+                      <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)', marginBottom: '4px', textTransform: 'uppercase' as const }}>Ikona</div>
+                      <input style={{ ...s.editInput, textAlign: 'center' as const, fontSize: '20px' }} value={qfEditing.icon} onChange={e => setQfEditing({ ...qfEditing, icon: e.target.value })} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)', marginBottom: '4px', textTransform: 'uppercase' as const }}>Naziv skripte *</div>
+                      <input style={s.editInput} value={qfEditing.name} onChange={e => setQfEditing({ ...qfEditing, name: e.target.value })} placeholder="e.g. Bank fee — domestic" />
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div>
+                      <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)', marginBottom: '4px', textTransform: 'uppercase' as const }}>P&L Category</div>
+                      <select style={s.editSelect} value={qfEditing.pl_category} onChange={e => setQfEditing({ ...qfEditing, pl_category: e.target.value, pl_subcategory: '' })}>
+                        <option value="">Select...</option>
+                        {plCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)', marginBottom: '4px', textTransform: 'uppercase' as const }}>P&L Sub-category</div>
+                      <select style={s.editSelect} value={qfEditing.pl_subcategory} onChange={e => setQfEditing({ ...qfEditing, pl_subcategory: e.target.value })}>
+                        <option value="">Select...</option>
+                        {plSubcategories.filter(sub => { const cat = plCategories.find(c => c.name === qfEditing.pl_category); return cat && sub.category_id === cat.id }).map(sub => <option key={sub.id} value={sub.name}>{sub.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div>
+                      <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)', marginBottom: '4px', textTransform: 'uppercase' as const }}>Department</div>
+                      <select style={s.editSelect} value={qfEditing.department} onChange={e => setQfEditing({ ...qfEditing, department: e.target.value, dept_subcategory: '', expense_description: '' })}>
+                        <option value="">Select...</option>
+                        {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)', marginBottom: '4px', textTransform: 'uppercase' as const }}>Dept. Sub-category</div>
+                      <select style={s.editSelect} value={qfEditing.dept_subcategory} onChange={e => setQfEditing({ ...qfEditing, dept_subcategory: e.target.value, expense_description: '' })}>
+                        <option value="">Select...</option>
+                        {deptSubcategories.filter(sub => { const dept = departments.find(d => d.name === qfEditing.department); return dept && sub.department_id === dept.id }).map(sub => <option key={sub.id} value={sub.name}>{sub.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)', marginBottom: '4px', textTransform: 'uppercase' as const }}>Expense Description</div>
+                    {(() => {
+                      const deptSub = deptSubcategories.find(sub => sub.name === qfEditing.dept_subcategory)
+                      const descs = deptSub ? expenseDescriptions.filter(ed => ed.dept_subcategory_id === deptSub.id) : []
+                      return descs.length > 0
+                        ? <select style={s.editSelect} value={qfEditing.expense_description} onChange={e => setQfEditing({ ...qfEditing, expense_description: e.target.value })}>
+                            <option value="">Select...</option>
+                            {descs.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                          </select>
+                        : <input style={s.editInput} value={qfEditing.expense_description} onChange={e => setQfEditing({ ...qfEditing, expense_description: e.target.value })} placeholder="e.g. AWS, Telekom..." />
+                    })()}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                    <div>
+                      <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)', marginBottom: '4px', textTransform: 'uppercase' as const }}>Revenue Alloc</div>
+                      <select style={s.editSelect} value={qfEditing.rev_alloc} onChange={e => setQfEditing({ ...qfEditing, rev_alloc: e.target.value })}>
+                        <option value="sg100">100% Social Growth</option>
+                        <option value="af100">100% Aimfox</option>
+                        <option value="shared">Shared 50/50</option>
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)', marginBottom: '4px', textTransform: 'uppercase' as const }}>OPEX Type</div>
+                      <select style={s.editSelect} value={qfEditing.opex_type} onChange={e => setQfEditing({ ...qfEditing, opex_type: e.target.value })}>
+                        <option value="opex">OPEX</option>
+                        <option value="performance">Performance</option>
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)', marginBottom: '4px', textTransform: 'uppercase' as const }}>CF Type</div>
+                      <select style={s.editSelect} value={qfEditing.cf_type} onChange={e => setQfEditing({ ...qfEditing, cf_type: e.target.value })}>
+                        <option value="recurring">Recurring</option>
+                        <option value="one_time">One-time</option>
+                        <option value="accrual">Accrual</option>
+                        <option value="capex">CapEx</option>
+                        <option value="">— None —</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+                    <button style={{ fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '7px 16px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', background: 'transparent', color: '#7A9BB8', cursor: 'pointer' }}
+                      onClick={() => setQfEditing(null)}>← Nazad</button>
+                    <button style={{ fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '7px 16px', border: 'none', borderRadius: '8px', background: '#00D47E', color: '#060E1A', cursor: 'pointer', fontWeight: '600', opacity: !qfEditing.name.trim() ? 0.5 : 1 }}
+                      disabled={!qfEditing.name.trim()}
+                      onClick={() => {
+                        const exists = quickFillScripts.find(sc => sc.id === qfEditing.id)
+                        const updated = exists ? quickFillScripts.map(sc => sc.id === qfEditing.id ? qfEditing : sc) : [...quickFillScripts, qfEditing]
+                        saveScripts(updated)
+                        setQfEditing(null)
+                      }}>
+                      ✓ Sačuvaj skriptu
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Script list */
+                <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '6px' }}>
+                  {quickFillScripts.map(sc => (
+                    <div key={sc.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '8px' }}>
+                      <span style={{ fontSize: '18px', width: '28px', textAlign: 'center' as const }}>{sc.icon}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '13px', fontWeight: '500', color: '#DCE9F6' }}>{sc.name}</div>
+                        <div style={{ fontSize: '10px', color: '#7A9BB8', marginTop: '2px' }}>
+                          {sc.pl_category}{sc.pl_subcategory ? ` › ${sc.pl_subcategory}` : ''} · {sc.department}{sc.dept_subcategory ? ` › ${sc.dept_subcategory}` : ''}
+                          {sc.expense_description ? ` · ${sc.expense_description}` : ''}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '4px 10px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', background: 'transparent', color: '#7A9BB8', cursor: 'pointer' }}
+                          onClick={() => setQfEditing(sc)}>✎ Uredi</button>
+                        <button style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '4px 10px', border: '1px solid rgba(255,91,90,0.3)', borderRadius: '6px', background: 'transparent', color: '#FF5B5A', cursor: 'pointer' }}
+                          onClick={() => { if (window.confirm(`Obriši "${sc.name}"?`)) saveScripts(quickFillScripts.filter(x => x.id !== sc.id)) }}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                  <button style={{ marginTop: '8px', fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '8px', border: '1px dashed rgba(0,212,126,0.3)', borderRadius: '8px', background: 'transparent', color: '#00D47E', cursor: 'pointer', width: '100%' }}
+                    onClick={() => setQfEditing({ ...EMPTY_SCRIPT, id: `script_${Date.now()}` })}>
+                    + Dodaj novu skriptu
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {partnerDialogRow && (
         <PartnerDialog
