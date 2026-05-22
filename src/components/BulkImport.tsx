@@ -826,7 +826,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
 
         if (invoiceIds.length > 0) {
           const { amount_usd: totalAmtUsd } = await getAmountUsd(p, amount)
-          let remainingAmt = amount           // original currency
           let remainingUsd = totalAmtUsd      // USD
 
           for (const invoiceId of invoiceIds) {
@@ -861,7 +860,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
             })
 
             remainingUsd -= allocUsd
-            remainingAmt -= allocAmt
 
             // Update invoice status from total allocations
             const { data: allAlloc } = await supabase.from('invoice_transaction_links')
@@ -885,7 +883,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
                 }
               } else {
                 for (const child of children) {
-                  const proportion = inv.amount || 1
                   const childAllocUsd = Math.round((child.amount_usd || 0) * (allocUsd / (inv.amount_usd || 1)) * 100) / 100
                   const childAllocAmt = Math.round((child.amount || 0) * (allocAmt / (inv.amount || 1)) * 100) / 100
                   await supabase.from('invoice_transaction_links').insert({
