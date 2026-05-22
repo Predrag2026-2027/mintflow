@@ -514,9 +514,14 @@ export default function PayrollImportDialog({ onClose, onPosted }: Props) {
         // contrib_employee includes tax_on_salary — subtract it to avoid double-counting
         const totalEEOnly = Math.round(accepted.reduce((s, e) => s + (e.contrib_employee - e.tax_on_salary), 0) * 100) / 100
         const totalEROnly = accepted.reduce((s, e) => s + e.contrib_employer, 0)
-        const taxSplit = calcSplit(e => e.tax_on_salary)
-        const eeSplit = calcSplit(e => e.contrib_employee)
-        const erSplit = calcSplit(e => e.contrib_employer)
+        const taxSplitRaw = calcSplit(e => e.tax_on_salary)
+        const eeSplitRaw = calcSplit(e => e.contrib_employee - e.tax_on_salary)
+        const erSplitRaw = calcSplit(e => e.contrib_employer)
+        // Convert split amounts to USD
+        const splitToUsd = (v: number) => currency === 'USD' ? v : Math.round((v / usdRate) * 100) / 100
+        const taxSplit = { sg: splitToUsd(taxSplitRaw.sg), af: splitToUsd(taxSplitRaw.af) }
+        const eeSplit = { sg: splitToUsd(eeSplitRaw.sg), af: splitToUsd(eeSplitRaw.af) }
+        const erSplit = { sg: splitToUsd(erSplitRaw.sg), af: splitToUsd(erSplitRaw.af) }
 
         // PARENT invoice — cash flow only, no P&L impact, used for bank matching
         const { data: parentInv } = await supabase.from('invoices').insert({
