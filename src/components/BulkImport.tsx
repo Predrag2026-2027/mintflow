@@ -735,11 +735,18 @@ export default function BulkImport({ onClose, onImported }: Props) {
         done++; setProgress(Math.round((done / accepted.length) * 100)); continue
       }
       const isDirectWithPL = row.override_tx_type === 'direct'
-      const aimfoxAmount = row.override_rev_alloc === 'byval' ? (parseFloat(row.override_aimfox_val) || null) : null
-      const sgAmount = row.override_rev_alloc === 'byval' ? (parseFloat(row.override_sg_val) || null) : null
-      const opexAmount = row.override_opex_type === 'split' ? (parseFloat(row.override_opex_val) || null) : null
-      const perfAmount = row.override_opex_type === 'split' ? (parseFloat(row.override_performance_val) || null) : null
       const { amount_usd, exchange_rate } = await getAmountUsd(p, amount)
+      // Convert byval split amounts to USD using same exchange rate
+      const rate = exchange_rate || 1
+      const toUsd = (val: string) => {
+        const raw = parseFloat(val) || 0
+        if (!raw) return null
+        return p.currency === 'USD' ? raw : Math.round((raw / rate) * 100) / 100
+      }
+      const aimfoxAmount = row.override_rev_alloc === 'byval' ? toUsd(row.override_aimfox_val) : null
+      const sgAmount = row.override_rev_alloc === 'byval' ? toUsd(row.override_sg_val) : null
+      const opexAmount = row.override_opex_type === 'split' ? toUsd(row.override_opex_val) : null
+      const perfAmount = row.override_opex_type === 'split' ? toUsd(row.override_performance_val) : null
       const { data: newTx } = await supabase.from('transactions').insert({
         company_id: company, bank_id: bank, partner_id: partnerId, transaction_date: formatDate(p.date), statement_number: p.statement_number || null, type: row.override_tx_type, tx_subtype: row.override_tx_subtype, payment_method: row.override_payment_method || null, currency: p.currency, amount, exchange_rate, amount_usd, pl_impact: isDirectWithPL,
         pl_category: isDirectWithPL ? (row.override_pl_category_name || null) : null, pl_subcategory: isDirectWithPL ? (row.override_pl_subcategory_name || null) : null, department: isDirectWithPL ? (row.override_department_name || null) : null, dept_subcategory: isDirectWithPL ? (row.override_dept_subcategory_name || null) : null, expense_description: isDirectWithPL ? (row.override_expense_description || null) : null, revenue_stream: isDirectWithPL ? (row.override_revenue_stream || null) : null,
