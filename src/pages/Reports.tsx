@@ -93,9 +93,21 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
       if (bankData && bankData.length > 0) { setBankAccounts(bankData); setSelectedBankId((bankData.find(b => b.is_primary) || bankData[0]).id) }
       const { data: profData } = await supabase.from('company_profiles').select('full_legal_name, city, address').eq('company_id', compData.id).single()
       if (profData) setCompanyProfile(profData)
-      const { data: invData } = await supabase.from('v_invoice_status').select('*, partners(id, name, address, city)').eq('company_id', compData.id).in('calculated_status', ['unpaid', 'partial']).order('due_date', { ascending: true })
+      const { data: invData } = await supabase.from('invoices').select('*, partners(id, name, address, city)').eq('company_id', compData.id).in('status', ['unpaid', 'partial']).order('due_date', { ascending: true })
+      // Fetch remaining amounts separately from v_invoice_status
+      const invIds = (invData || []).map((i: any) => i.id)
+      let remainingMap: Record<string, number> = {}
+      if (invIds.length > 0) {
+        const { data: remData } = await supabase.from('v_invoice_status').select('id,remaining_usd,calculated_status').in('id', invIds)
+        if (remData) remData.forEach((r: any) => { remainingMap[r.id] = r.remaining_usd || 0 })
+      }
+      const invDataWithRemaining = (invData || []).map((i: any) => ({
+        ...i,
+        calculated_status: i.status,
+        remaining_usd: i.status === 'partial' ? (remainingMap[i.id] ?? i.amount_usd) : 0,
+      }))
       if (invData && invData.length > 0) {
-        setInvoices(invData)
+        setInvoices(invDataWithRemaining)
         const partnerIds = [...new Set(invData.map(i => i.partner_id).filter(Boolean))]
         if (partnerIds.length > 0) {
           const { data: pAccounts } = await supabase.from('partner_accounts').select('*').in('partner_id', partnerIds).eq('currency', 'RSD').order('is_primary', { ascending: false })
