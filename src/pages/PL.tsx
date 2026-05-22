@@ -66,8 +66,9 @@ export default function PL() {
     if (e.rev_alloc_type === 'sg100') return stream === 'sg' ? amt : 0
     if (e.rev_alloc_type === 'af100') return stream === 'af' ? amt : 0
     if (e.rev_alloc_type === 'byval') {
-      if (stream === 'af') return e.rev_alloc_aimfox || amt / 2
-      return e.rev_alloc_sg || amt / 2
+      // Use null check, not falsy — 0 is a valid allocation value
+      if (stream === 'af') return e.rev_alloc_aimfox != null ? e.rev_alloc_aimfox : amt / 2
+      return e.rev_alloc_sg != null ? e.rev_alloc_sg : amt / 2
     }
     return amt / 2
   }
