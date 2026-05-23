@@ -1508,7 +1508,6 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                     const matchDept = departments.find(d => d.name === script.department)
                                     const matchSub = plSubcategories.find(sub => sub.name === script.pl_subcategory && sub.category_id === matchCat?.id)
                                     const matchDeptSub = deptSubcategories.find(sub => sub.name === script.dept_subcategory && sub.department_id === matchDept?.id)
-                                    const matchExpDesc = expenseDescriptions.find(ed => ed.name === script.expense_description && ed.dept_subcategory_id === matchDeptSub?.id)
                                     updateRow(p.id, {
                                       override_pl_category_id: matchCat?.id || '',
                                       override_pl_category_name: matchCat?.name || script.pl_category,
