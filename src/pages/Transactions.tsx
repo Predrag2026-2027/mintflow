@@ -164,8 +164,12 @@ export default function Transactions() {
     const company = t.companies?.name || ''
     const partner = t.partners?.name || ''
     const txDate = (t.transaction_date || '').slice(0, 10)
+    const typeMatch = filterType === 'all' ? true
+      : filterType === 'revenue' ? t.tx_subtype === 'revenue'
+      : filterType === 'expense' ? t.tx_subtype === 'expense'
+      : t.type === filterType
     return (filterEntity === 'all' || company.toLowerCase().includes(filterEntity)) &&
-      (filterType === 'all' || t.type === filterType) &&
+      typeMatch &&
       (filterPlCategory === 'all' || (t.pl_category || '') === filterPlCategory) &&
       (!filterDateFrom || txDate >= filterDateFrom) &&
       (!filterDateTo || txDate <= filterDateTo) &&
@@ -175,8 +179,11 @@ export default function Transactions() {
   const filteredPassthroughs = passthroughs.filter(p => {
     const company = p.companies?.name || ''
     const partner = p.partners?.name || ''
+    const ptDate = (p.transaction_date || '').slice(0, 10)
     return (filterEntity === 'all' || company.toLowerCase().includes(filterEntity)) &&
       (filterStatus === 'all' || p.status === filterStatus) &&
+      (!filterDateFrom || ptDate >= filterDateFrom) &&
+      (!filterDateTo || ptDate <= filterDateTo) &&
       (!search || partner.toLowerCase().includes(search.toLowerCase()) || (p.note || '').toLowerCase().includes(search.toLowerCase()))
   })
 
@@ -281,9 +288,19 @@ export default function Transactions() {
                 <option value="reconciled">Reconciled</option>
               </select>
             )}
+            {activeTab === 'passthrough' && (
+              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={s.filterSelect}>
+                <option value="all">All statuses</option>
+                <option value="unpaired">Unpaired</option>
+                <option value="paired">Paired</option>
+                <option value="balanced">Balanced</option>
+              </select>
+            )}
             {activeTab === 'transactions' && (
               <select value={filterType} onChange={e => setFilterType(e.target.value)} style={s.filterSelect}>
                 <option value="all">All types</option>
+                <option value="expense">Expenses</option>
+                <option value="revenue">Revenue</option>
                 <option value="direct">Direct only</option>
                 <option value="invoice_payment">Invoice payments</option>
                 <option value="credit_payment">Credit payments</option>
