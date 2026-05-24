@@ -168,9 +168,13 @@ export default function Transactions() {
       : filterType === 'revenue' ? t.tx_subtype === 'revenue'
       : filterType === 'expense' ? t.tx_subtype === 'expense'
       : t.type === filterType
+    const catMatch = filterPlCategory === 'all' ? true
+      : filterType === 'revenue'
+        ? (t.revenue_stream || '') === filterPlCategory
+        : (t.pl_category || '') === filterPlCategory
     return (filterEntity === 'all' || company.toLowerCase().includes(filterEntity)) &&
       typeMatch &&
-      (filterPlCategory === 'all' || (t.pl_category || '') === filterPlCategory) &&
+      catMatch &&
       (!filterDateFrom || txDate >= filterDateFrom) &&
       (!filterDateTo || txDate <= filterDateTo) &&
       (!search || partner.toLowerCase().includes(search.toLowerCase()) || (t.note || '').toLowerCase().includes(search.toLowerCase()))
@@ -306,14 +310,27 @@ export default function Transactions() {
                 <option value="credit_payment">Credit payments</option>
               </select>
             )}
-            {(activeTab === 'invoices' || activeTab === 'transactions') && (
+            {activeTab === 'invoices' && (
               <select value={filterPlCategory} onChange={e => setFilterPlCategory(e.target.value)} style={s.filterSelect}>
                 <option value="all">All P&L categories</option>
-                {[...new Set(
-                  (activeTab === 'invoices' ? invoices : transactions)
-                    .map((x: any) => x.pl_category).filter(Boolean)
-                )].sort().map((cat: any) => (
+                {[...new Set(invoices.map((x: any) => x.pl_category).filter(Boolean))].sort().map((cat: any) => (
                   <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            )}
+            {activeTab === 'transactions' && filterType !== 'revenue' && (
+              <select value={filterPlCategory} onChange={e => setFilterPlCategory(e.target.value)} style={s.filterSelect}>
+                <option value="all">All P&L categories</option>
+                {[...new Set(transactions.map((x: any) => x.pl_category).filter(Boolean))].sort().map((cat: any) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            )}
+            {activeTab === 'transactions' && filterType === 'revenue' && (
+              <select value={filterPlCategory} onChange={e => setFilterPlCategory(e.target.value)} style={s.filterSelect}>
+                <option value="all">All revenue streams</option>
+                {[...new Set(transactions.filter(t => t.tx_subtype === 'revenue').map((x: any) => x.revenue_stream).filter(Boolean))].sort().map((stream: any) => (
+                  <option key={stream} value={stream}>{stream}</option>
                 ))}
               </select>
             )}
