@@ -1793,7 +1793,12 @@ export default function BulkImport({ onClose, onImported }: Props) {
                   <div>
                     <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)', marginBottom: '4px', textTransform: 'uppercase' as const }}>Expense Description</div>
                     {(() => {
-                      const deptSub = deptSubcategories.find(sub => sub.name === qfEditing.dept_subcategory)
+                      // Match dept_subcategory by BOTH name AND parent department to avoid cross-dept collisions
+                      const parentDept = departments.find(d => d.name === qfEditing.department)
+                      const deptSub = deptSubcategories.find(sub =>
+                        sub.name === qfEditing.dept_subcategory &&
+                        sub.department_id === parentDept?.id
+                      )
                       const descs = deptSub ? expenseDescriptions.filter(ed => ed.dept_subcategory_id === deptSub.id) : []
                       return descs.length > 0
                         ? <select style={s.editSelect} value={qfEditing.expense_description} onChange={e => setQfEditing({ ...qfEditing, expense_description: e.target.value })}>
