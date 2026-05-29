@@ -86,6 +86,36 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
   const [cfCapexMonths, setCfCapexMonths] = useState(invoice?.cf_capex_months?.toString() || '')
   const [cfReimbursableDate, setCfReimbursableDate] = useState(invoice?.cf_reimbursable_date || '')
 
+  // ── Quick Fill Scripts ──────────────────────────────────────────────────
+  interface QuickFillScript {
+    id: string; name: string; icon: string
+    pl_category: string; pl_subcategory: string
+    department: string; dept_subcategory: string
+    expense_description: string; rev_alloc: string
+    opex_type: string; cf_type: string
+  }
+  const loadScripts = (): QuickFillScript[] => {
+    try { const s = localStorage.getItem('mintflow_quickfill_scripts'); return s ? JSON.parse(s) : [] } catch { return [] }
+  }
+  const [quickFillScripts] = useState<QuickFillScript[]>(loadScripts)
+
+  const applyQuickFill = (scriptId: string) => {
+    const script = quickFillScripts.find(sc => sc.id === scriptId)
+    if (!script) return
+    const matchCat = plCategories.find(c => c.name === script.pl_category)
+    const matchDept = departments.find(d => d.name === script.department)
+    const matchSub = plSubcategories.find(s => s.name === script.pl_subcategory && s.category_id === matchCat?.id)
+    const matchDeptSub = deptSubcategories.find(s => s.name === script.dept_subcategory && s.department_id === matchDept?.id)
+    if (matchCat) { setPlCatId(matchCat.id); setPlCatName(matchCat.name) }
+    if (matchSub) { setPlSubId(matchSub.id); setPlSubName(matchSub.name) }
+    if (matchDept) { setDeptId(matchDept.id); setDeptName(matchDept.name) }
+    if (matchDeptSub) { setDeptSubId(matchDeptSub.id); setDeptSubName(matchDeptSub.name) }
+    setExpDesc(script.expense_description || '')
+    setRevAlloc(script.rev_alloc || 'sg100')
+    setOpexType(script.opex_type || 'opex')
+    setCfType(script.cf_type || '')
+  }
+
   const handleAimfoxChange = (val: string) => {
     setAimfoxVal(val)
     const af = parseFloat(val) || 0
@@ -876,6 +906,19 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                 <>
                   <div style={s.section}>
                     <div style={s.sectionTitle}>P&L classification</div>
+                    {quickFillScripts.length > 0 && (
+                      <div style={{ marginBottom: '12px' }}>
+                        <select
+                          style={{ width: '100%', fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '8px 10px', border: '1px solid rgba(29,158,117,0.3)', borderRadius: '8px', background: 'rgba(29,158,117,0.05)', color: '#0F6E56', outline: 'none', cursor: 'pointer' }}
+                          value=""
+                          onChange={e => { applyQuickFill(e.target.value) }}>
+                          <option value="">⚡ Quick fill — odaberi skriptu...</option>
+                          {quickFillScripts.map(sc => (
+                            <option key={sc.id} value={sc.id}>{sc.icon} {sc.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div style={s.row2}>
                       <div style={s.field}>
                         <label style={s.lbl}>P&L Category {!linkedTxId && <span style={s.req}>*</span>}</label>
