@@ -103,6 +103,44 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
   const [posting, setPosting] = useState(false)
   const [credits, setCredits] = useState<any[]>([])
   const [rowInstallments, setRowInstallments] = useState<Record<string, any[]>>({})
+
+  // ── Quick Fill Scripts ────────────────────────────────────────────────────
+  interface QuickFillScript {
+    id: string; name: string; icon: string
+    pl_category: string; pl_subcategory: string
+    department: string; dept_subcategory: string
+    expense_description: string; rev_alloc: string
+    opex_type: string; cf_type: string
+  }
+  const loadQfScripts = (): QuickFillScript[] => {
+    try { const s = localStorage.getItem('mintflow_quickfill_scripts'); return s ? JSON.parse(s) : [] } catch { return [] }
+  }
+  const [quickFillScripts] = useState<QuickFillScript[]>(loadQfScripts)
+  const [qfSearch, setQfSearch] = useState<Record<string, string>>({})
+  const [qfOpen, setQfOpen] = useState<string | null>(null)
+
+  const applyQuickFillRow = (rowId: string, scriptId: string) => {
+    const script = quickFillScripts.find(sc => sc.id === scriptId)
+    if (!script) return
+    const matchCat = plCategories.find(c => c.name === script.pl_category)
+    const matchDept = departments.find(d => d.name === script.department)
+    const matchSub = plSubcategories.find(s => s.name === script.pl_subcategory && s.category_id === matchCat?.id)
+    const matchDeptSub = deptSubcategories.find(s => s.name === script.dept_subcategory && s.department_id === matchDept?.id)
+    updateRow(rowId, {
+      pl_category_id: matchCat?.id || '',
+      pl_category_name: matchCat?.name || script.pl_category,
+      pl_subcategory_id: matchSub?.id || '',
+      pl_subcategory_name: matchSub?.name || script.pl_subcategory,
+      department_id: matchDept?.id || '',
+      department_name: matchDept?.name || script.department,
+      dept_subcategory_id: matchDeptSub?.id || '',
+      dept_subcategory_name: matchDeptSub?.name || script.dept_subcategory,
+      expense_description: script.expense_description || '',
+      rev_alloc: script.rev_alloc || 'sg100',
+      opex_type: script.opex_type || 'opex',
+      cf_type: script.cf_type || '',
+    })
+  }
   const [posted, setPosted] = useState(false)
   const [error, setError] = useState('')
   const [invoiceSearch, setInvoiceSearch] = useState<Record<string, string>>({})
@@ -730,6 +768,50 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                             {row.tx_subtype === 'expense' && (
                               <>
                                 <div style={s.classTitle}>P&L Classification</div>
+                                {quickFillScripts.length > 0 && (
+                                  <div style={{ marginBottom: '10px', position: 'relative' as const }}>
+                                    <div style={{ position: 'relative' as const }}>
+                                      <input
+                                        style={{ width: '100%', boxSizing: 'border-box' as const, fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '7px 28px 7px 10px', border: `1px solid ${qfOpen === row.id ? '#1D9E75' : 'rgba(29,158,117,0.3)'}`, borderRadius: '8px', background: 'rgba(29,158,117,0.05)', color: '#0F6E56', outline: 'none' }}
+                                        value={qfSearch[row.id] || ''}
+                                        onChange={e => setQfSearch(prev => ({ ...prev, [row.id]: e.target.value }))}
+                                        onFocus={() => setQfOpen(row.id)}
+                                        onBlur={() => setTimeout(() => setQfOpen(null), 150)}
+                                        placeholder="⚡ Quick fill — klikni ili pretraži..."
+                                      />
+                                      <span style={{ position: 'absolute' as const, right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '10px', color: '#1D9E75', pointerEvents: 'none' as const }}>
+                                        {qfOpen === row.id ? '▲' : '▼'}
+                                      </span>
+                                    </div>
+                                    {qfOpen === row.id && (
+                                      <div style={{ position: 'absolute' as const, top: '100%', left: 0, right: 0, background: '#fff', border: '0.5px solid #1D9E75', borderRadius: '8px', zIndex: 300, maxHeight: '200px', overflowY: 'auto' as const, marginTop: '2px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
+                                        {(() => {
+                                          const filtered = quickFillScripts.filter(sc =>
+                                            !(qfSearch[row.id]) ||
+                                            sc.name.toLowerCase().includes((qfSearch[row.id] || '').toLowerCase()) ||
+                                            sc.pl_category.toLowerCase().includes((qfSearch[row.id] || '').toLowerCase()) ||
+                                            sc.department.toLowerCase().includes((qfSearch[row.id] || '').toLowerCase())
+                                          )
+                                          return filtered.length === 0
+                                            ? <div style={{ padding: '10px 12px', fontSize: '12px', color: '#888' }}>Nema rezultata za "{qfSearch[row.id]}"</div>
+                                            : filtered.map(sc => (
+                                                <div key={sc.id}
+                                                  style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '0.5px solid #f0f0ee', display: 'flex', flexDirection: 'column' as const, gap: '2px' }}
+                                                  onMouseDown={e => {
+                                                    e.preventDefault()
+                                                    applyQuickFillRow(row.id, sc.id)
+                                                    setQfSearch(prev => ({ ...prev, [row.id]: '' }))
+                                                    setQfOpen(null)
+                                                  }}>
+                                                  <span style={{ fontSize: '12px', fontWeight: '500', color: '#085041' }}>{sc.icon} {sc.name}</span>
+                                                  <span style={{ fontSize: '10px', color: '#888' }}>{sc.pl_category}{sc.dept_subcategory ? ` · ${sc.dept_subcategory}` : ''}</span>
+                                                </div>
+                                              ))
+                                        })()}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
                                   <div style={s.field}>
                                     <label style={s.lbl}>P&L Category</label>
@@ -902,19 +984,36 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                               ))}
                             </div>
                             {row.cf_type === 'recurring' && (
-                              <div style={{ marginBottom: '10px', background: '#f5f5f3', borderRadius: '8px', padding: '10px', border: '0.5px solid #e5e5e5' }}>
-                                <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
-                                  {[{ id: 'monthly', label: 'Monthly' }, { id: 'quarterly', label: 'Quarterly' }, { id: 'yearly', label: 'Yearly' }].map(f => (
+                              <div style={{ marginBottom: '10px', background: '#f5f5f3', borderRadius: '8px', padding: '12px', border: '0.5px solid #e5e5e5' }}>
+                                <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+                                  {[{ id: 'monthly', label: '📆 Monthly' }, { id: 'quarterly', label: '📊 Quarterly' }, { id: 'yearly', label: '📅 Yearly' }].map(f => (
                                     <div key={f.id}
-                                      style={{ flex: 1, padding: '5px', border: row.cf_frequency === f.id ? '2px solid #1D9E75' : '0.5px solid #e5e5e5', borderRadius: '6px', background: row.cf_frequency === f.id ? '#E1F5EE' : '#fff', cursor: 'pointer', textAlign: 'center' as const, fontSize: '11px', color: row.cf_frequency === f.id ? '#085041' : '#666' }}
+                                      style={{ flex: 1, padding: '7px', border: row.cf_frequency === f.id ? '2px solid #1D9E75' : '0.5px solid #e5e5e5', borderRadius: '8px', background: row.cf_frequency === f.id ? '#E1F5EE' : '#fff', cursor: 'pointer', textAlign: 'center' as const, fontSize: '11px', fontWeight: row.cf_frequency === f.id ? '600' : '400', color: row.cf_frequency === f.id ? '#085041' : '#666' }}
                                       onClick={() => updateRow(row.id, { cf_frequency: f.id })}>{f.label}</div>
                                   ))}
                                 </div>
                                 <div style={s.field}>
                                   <label style={s.lbl}>Next month estimate ({row.currency})</label>
-                                  <input type="number" style={s.input} value={row.cf_next_month_est}
-                                    onChange={e => updateRow(row.id, { cf_next_month_est: e.target.value })}
-                                    placeholder={row.debit ? `Auto: ${parseFloat(row.debit).toLocaleString()}` : '0.00'} />
+                                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                    <input type="number" style={{ ...s.input, flex: 1 }} value={row.cf_next_month_est}
+                                      onChange={e => updateRow(row.id, { cf_next_month_est: e.target.value })}
+                                      placeholder={row.debit ? `Auto: ${parseFloat(row.debit).toLocaleString()}` : '0.00'} />
+                                    {!row.cf_next_month_est && row.debit && (
+                                      <button style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '5px 10px', border: '1px solid rgba(29,158,117,0.3)', borderRadius: '6px', background: 'transparent', color: '#1D9E75', cursor: 'pointer', whiteSpace: 'nowrap' as const }}
+                                        onClick={() => updateRow(row.id, { cf_next_month_est: row.debit })}>
+                                        Use this amount
+                                      </button>
+                                    )}
+                                  </div>
+                                  {row.debit && (
+                                    <div style={{ fontSize: '10px', color: '#888', marginTop: '4px' }}>
+                                      Auto: {row.cf_frequency === 'quarterly'
+                                        ? (parseFloat(row.debit) / 3).toFixed(2)
+                                        : row.cf_frequency === 'yearly'
+                                        ? (parseFloat(row.debit) / 12).toFixed(2)
+                                        : parseFloat(row.debit).toLocaleString()} {row.currency}/mo
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             )}
