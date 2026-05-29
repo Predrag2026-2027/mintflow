@@ -115,6 +115,38 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
   const [cfCapexMonths, setCfCapexMonths] = useState(transaction?.cf_capex_months?.toString() || '')
   const [cfReimbursableDate, setCfReimbursableDate] = useState(transaction?.cf_reimbursable_date || '')
 
+  // ── Quick Fill Scripts ──────────────────────────────────────────────────
+  interface QuickFillScript {
+    id: string; name: string; icon: string
+    pl_category: string; pl_subcategory: string
+    department: string; dept_subcategory: string
+    expense_description: string; rev_alloc: string
+    opex_type: string; cf_type: string
+  }
+  const loadScripts = (): QuickFillScript[] => {
+    try { const s = localStorage.getItem('mintflow_quickfill_scripts'); return s ? JSON.parse(s) : [] } catch { return [] }
+  }
+  const [quickFillScripts] = useState<QuickFillScript[]>(loadScripts)
+  const [qfSearch, setQfSearch] = useState('')
+  const [qfOpen, setQfOpen] = useState(false)
+
+  const applyQuickFill = (scriptId: string) => {
+    const script = quickFillScripts.find(sc => sc.id === scriptId)
+    if (!script) return
+    const matchCat = plCategories.find(c => c.name === script.pl_category)
+    const matchDept = departments.find(d => d.name === script.department)
+    const matchSub = plSubcategories.find(s => s.name === script.pl_subcategory && s.category_id === matchCat?.id)
+    const matchDeptSub = deptSubcategories.find(s => s.name === script.dept_subcategory && s.department_id === matchDept?.id)
+    if (matchCat) { setPlCatId(matchCat.id); setPlCatName(matchCat.name) }
+    if (matchSub) { setPlSubId(matchSub.id); setPlSubName(matchSub.name) }
+    if (matchDept) { setDeptId(matchDept.id); setDeptName(matchDept.name) }
+    if (matchDeptSub) { setDeptSubId(matchDeptSub.id); setDeptSubName(matchDeptSub.name) }
+    setExpDesc(script.expense_description || '')
+    setRevAlloc(script.rev_alloc || 'sg100')
+    setOpexType(script.opex_type || 'opex')
+    setCfType(script.cf_type || '')
+  }
+
   // Step 2
   const [amount, setAmount] = useState('')
   const [exRate, setExRate] = useState('')
@@ -1234,6 +1266,45 @@ export default function TransactionDialog({ onClose, transaction }: Props) {
                     <>
                       <div style={s.section}>
                         <div style={s.sectionTitle}>P&L classification</div>
+                        {quickFillScripts.length > 0 && (
+                          <div style={{ marginBottom: '12px', position: 'relative' as const }}>
+                            <div style={{ position: 'relative' as const }}>
+                              <input
+                                style={{ width: '100%', boxSizing: 'border-box' as const, fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '8px 28px 8px 10px', border: `1px solid ${qfOpen ? '#1D9E75' : 'rgba(29,158,117,0.3)'}`, borderRadius: '8px', background: 'rgba(29,158,117,0.05)', color: '#0F6E56', outline: 'none' }}
+                                value={qfSearch}
+                                onChange={e => setQfSearch(e.target.value)}
+                                onFocus={() => setQfOpen(true)}
+                                onBlur={() => setTimeout(() => setQfOpen(false), 150)}
+                                placeholder="⚡ Quick fill — klikni ili pretraži..."
+                              />
+                              <span style={{ position: 'absolute' as const, right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '10px', color: '#1D9E75', pointerEvents: 'none' as const }}>
+                                {qfOpen ? '▲' : '▼'}
+                              </span>
+                            </div>
+                            {qfOpen && (
+                              <div style={{ position: 'absolute' as const, top: '100%', left: 0, right: 0, background: '#fff', border: '0.5px solid #1D9E75', borderRadius: '8px', zIndex: 200, maxHeight: '220px', overflowY: 'auto' as const, marginTop: '2px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
+                                {(() => {
+                                  const filtered = quickFillScripts.filter(sc =>
+                                    !qfSearch ||
+                                    sc.name.toLowerCase().includes(qfSearch.toLowerCase()) ||
+                                    sc.pl_category.toLowerCase().includes(qfSearch.toLowerCase()) ||
+                                    sc.department.toLowerCase().includes(qfSearch.toLowerCase())
+                                  )
+                                  return filtered.length === 0
+                                    ? <div style={{ padding: '10px 12px', fontSize: '12px', color: '#888' }}>Nema rezultata za "{qfSearch}"</div>
+                                    : filtered.map(sc => (
+                                        <div key={sc.id}
+                                          style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '0.5px solid #f0f0ee', display: 'flex', flexDirection: 'column' as const, gap: '2px' }}
+                                          onMouseDown={e => { e.preventDefault(); applyQuickFill(sc.id); setQfSearch(''); setQfOpen(false) }}>
+                                          <span style={{ fontSize: '12px', fontWeight: '500', color: '#085041' }}>{sc.icon} {sc.name}</span>
+                                          <span style={{ fontSize: '10px', color: '#888' }}>{sc.pl_category}{sc.dept_subcategory ? ` · ${sc.dept_subcategory}` : ''}</span>
+                                        </div>
+                                      ))
+                                })()}
+                              </div>
+                            )}
+                          </div>
+                        )}
                         <div style={s.row2}>
                           <div style={s.field}>
                             <label style={s.lbl}>P&L Category <span style={s.req}>*</span></label>
