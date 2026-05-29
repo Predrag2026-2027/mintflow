@@ -807,35 +807,65 @@ export default function BulkImport({ onClose, onImported }: Props) {
 
         const creditName = credits.find((c: any) => c.id === row.override_credit_id)?.name || 'Credit'
 
+        // Ukupan plaćeni iznos u EUR (iz USD amount)
+        let remainingEUR = amount_usd / eurUsdRateBI
+
         for (const instId of row.override_installment_ids) {
+          if (remainingEUR <= 0.005) break
+
           const { data: inst } = await supabase
             .from('credit_installments')
-            .select('id, installment_no, principal_amount, interest_amount')
+            .select('id, installment_no, principal_amount, interest_amount, total_amount, paid_amount, status')
             .eq('id', instId).single()
           if (!inst) continue
 
-          if (inst.principal_amount > 0) {
+          // Uzmi u obzir već plaćeni iznos (partial iz prethodnih plaćanja)
+          const alreadyPaid = inst.paid_amount || 0
+          const remainingPrincipal = Math.max(0, inst.principal_amount - alreadyPaid)
+          const remainingInterest = Math.max(0, inst.interest_amount - Math.max(0, alreadyPaid - inst.principal_amount))
+          const remainingTotal = remainingPrincipal + remainingInterest
+
+          if (remainingTotal <= 0.005) continue // već potpuno plaćeno
+
+          let instPaidEUR = 0
+
+          // 1. Glavnica → Loans/Credits/Dividend
+          if (remainingPrincipal > 0 && remainingEUR > 0.005) {
+            const paidPrincipalEUR = Math.min(remainingPrincipal, remainingEUR)
+            const paidPrincipalUSD = Math.round(paidPrincipalEUR * eurUsdRateBI * 100) / 100
+            remainingEUR = Math.max(0, remainingEUR - paidPrincipalEUR)
+            instPaidEUR += paidPrincipalEUR
+
             await supabase.from('transactions').insert({
               company_id: company, bank_id: bank,
               partner_id: partnerId, transaction_date: formatDate(p.date),
               statement_number: p.statement_number || null,
               type: 'credit_payment', tx_subtype: 'expense', currency: 'EUR',
-              amount: inst.principal_amount, exchange_rate: eurUsdRateBI,
-              amount_usd: Math.round(inst.principal_amount * eurUsdRateBI * 100) / 100,
+              amount: Math.round(paidPrincipalEUR * 100) / 100,
+              exchange_rate: eurUsdRateBI,
+              amount_usd: paidPrincipalUSD,
               pl_impact: true, pl_category: 'Loans/Credits/Dividend',
               expense_description: `Principal — ${creditName} #${inst.installment_no}`,
               cf_type: 'recurring', cf_frequency: 'monthly',
               note: row.override_note || p.description || null, status: 'posted',
             })
           }
-          if (inst.interest_amount > 0) {
+
+          // 2. Kamata → Financial Expenses / Interest
+          if (remainingInterest > 0 && remainingEUR > 0.005) {
+            const paidInterestEUR = Math.min(remainingInterest, remainingEUR)
+            const paidInterestUSD = Math.round(paidInterestEUR * eurUsdRateBI * 100) / 100
+            remainingEUR = Math.max(0, remainingEUR - paidInterestEUR)
+            instPaidEUR += paidInterestEUR
+
             await supabase.from('transactions').insert({
               company_id: company, bank_id: bank,
               partner_id: partnerId, transaction_date: formatDate(p.date),
               statement_number: p.statement_number || null,
               type: 'credit_payment', tx_subtype: 'expense', currency: 'EUR',
-              amount: inst.interest_amount, exchange_rate: eurUsdRateBI,
-              amount_usd: Math.round(inst.interest_amount * eurUsdRateBI * 100) / 100,
+              amount: Math.round(paidInterestEUR * 100) / 100,
+              exchange_rate: eurUsdRateBI,
+              amount_usd: paidInterestUSD,
               pl_impact: true, pl_category: 'Financial Expenses',
               pl_subcategory: 'Interest',
               expense_description: `Interest — ${creditName} #${inst.installment_no}`,
@@ -843,10 +873,20 @@ export default function BulkImport({ onClose, onImported }: Props) {
               note: row.override_note || p.description || null, status: 'posted',
             })
           }
+
+          // 3. Ažuriraj ratu: partial ili paid
+          const totalPaidEUR = alreadyPaid + instPaidEUR
+          const instFullyPaid = totalPaidEUR >= inst.total_amount - 0.005
+
           await supabase.from('credit_installments').update({
-            status: 'paid', paid_date: formatDate(p.date), updated_at: new Date().toISOString(),
+            paid_amount: Math.round(totalPaidEUR * 100) / 100,
+            status: instFullyPaid ? 'paid' : 'outstanding', // ostaje outstanding ako nije u potpunosti plaćeno
+            paid_date: instFullyPaid ? formatDate(p.date) : null,
+            updated_at: new Date().toISOString(),
           }).eq('id', instId)
         }
+
+        // Zatvori kredit samo ako su sve rate plaćene
         if (row.override_credit_id) {
           const { data: rem } = await supabase.from('credit_installments').select('id')
             .eq('credit_id', row.override_credit_id).eq('status', 'outstanding')
