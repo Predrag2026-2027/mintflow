@@ -439,6 +439,7 @@ export default function BulkImport({ onClose, onImported }: Props) {
   const [qfDialogOpen, setQfDialogOpen] = useState(false)
   const [qfEditing, setQfEditing] = useState<QuickFillScript | null>(null)
   const [qfSearch, setQfSearch] = useState('')
+  const [qfOpen, setQfOpen] = useState<string | null>(null)
   const EMPTY_SCRIPT: QuickFillScript = { id: '', name: '', icon: '⚡', pl_category: '', pl_subcategory: '', department: '', dept_subcategory: '', expense_description: '', rev_alloc: 'sg100', opex_type: 'opex', cf_type: 'recurring' }
 
   useEffect(() => {
@@ -1500,50 +1501,61 @@ export default function BulkImport({ onClose, onImported }: Props) {
                               {/* Quick Fill */}
                               <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', alignItems: 'center' }}>
                                 <div style={{ flex: 1, position: 'relative' as const }}>
-                                  <input
-                                    style={{ ...s.editInput, width: '100%', boxSizing: 'border-box' as const, border: '1px solid rgba(0,212,126,0.3)', background: 'rgba(0,212,126,0.05)', color: '#00D47E', fontSize: '12px' }}
-                                    value={qfSearch}
-                                    onChange={e => setQfSearch(e.target.value)}
-                                    placeholder="⚡ Quick fill — pretraži skriptu..."
-                                  />
-                                  {qfSearch && (
-                                    <div style={{ position: 'absolute' as const, top: '100%', left: 0, right: 0, background: '#111F30', border: '1px solid rgba(0,212,126,0.2)', borderRadius: '8px', zIndex: 400, maxHeight: '200px', overflowY: 'auto' as const, marginTop: '2px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
-                                      {quickFillScripts.filter(sc => sc.name.toLowerCase().includes(qfSearch.toLowerCase()) || sc.pl_category.toLowerCase().includes(qfSearch.toLowerCase()) || sc.department.toLowerCase().includes(qfSearch.toLowerCase())).length === 0
-                                        ? <div style={{ padding: '10px 12px', fontSize: '12px', color: '#7A9BB8' }}>Nema rezultata za "{qfSearch}"</div>
-                                        : quickFillScripts
-                                            .filter(sc => sc.name.toLowerCase().includes(qfSearch.toLowerCase()) || sc.pl_category.toLowerCase().includes(qfSearch.toLowerCase()) || sc.department.toLowerCase().includes(qfSearch.toLowerCase()))
-                                            .map(sc => (
+                                  <div style={{ position: 'relative' as const }}>
+                                    <input
+                                      style={{ ...s.editInput, width: '100%', boxSizing: 'border-box' as const, border: `1px solid ${qfOpen === p.id ? '#00D47E' : 'rgba(0,212,126,0.3)'}`, background: 'rgba(0,212,126,0.05)', color: '#00D47E', fontSize: '12px', paddingRight: '28px' }}
+                                      value={qfSearch}
+                                      onChange={e => setQfSearch(e.target.value)}
+                                      onFocus={() => setQfOpen(p.id)}
+                                      onBlur={() => setTimeout(() => setQfOpen(null), 150)}
+                                      placeholder="⚡ Quick fill — klikni ili pretraži..."
+                                    />
+                                    <span style={{ position: 'absolute' as const, right: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '10px', color: '#00D47E', pointerEvents: 'none' as const }}>
+                                      {qfOpen === p.id ? '▲' : '▼'}
+                                    </span>
+                                  </div>
+                                  {qfOpen === p.id && (
+                                    <div style={{ position: 'absolute' as const, top: '100%', left: 0, right: 0, background: '#111F30', border: '1px solid rgba(0,212,126,0.3)', borderRadius: '8px', zIndex: 400, maxHeight: '220px', overflowY: 'auto' as const, marginTop: '2px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
+                                      {(() => {
+                                        const filtered = quickFillScripts.filter(sc =>
+                                          !qfSearch ||
+                                          sc.name.toLowerCase().includes(qfSearch.toLowerCase()) ||
+                                          sc.pl_category.toLowerCase().includes(qfSearch.toLowerCase()) ||
+                                          sc.department.toLowerCase().includes(qfSearch.toLowerCase())
+                                        )
+                                        return filtered.length === 0
+                                          ? <div style={{ padding: '10px 12px', fontSize: '12px', color: '#7A9BB8' }}>Nema rezultata za "{qfSearch}"</div>
+                                          : filtered.map(sc => (
                                               <div key={sc.id}
-                                                style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column' as const, gap: '2px' }}
+                                                style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column' as const, gap: '2px' }}
                                                 onMouseDown={e => {
                                                   e.preventDefault()
-                                                  const script = sc
-                                                  const matchCat = plCategories.find(c => c.name === script.pl_category)
-                                                  const matchDept = departments.find(d => d.name === script.department)
-                                                  const matchSub = plSubcategories.find(sub => sub.name === script.pl_subcategory && sub.category_id === matchCat?.id)
-                                                  const matchDeptSub = deptSubcategories.find(sub => sub.name === script.dept_subcategory && sub.department_id === matchDept?.id)
+                                                  const matchCat = plCategories.find(c => c.name === sc.pl_category)
+                                                  const matchDept = departments.find(d => d.name === sc.department)
+                                                  const matchSub = plSubcategories.find(sub => sub.name === sc.pl_subcategory && sub.category_id === matchCat?.id)
+                                                  const matchDeptSub = deptSubcategories.find(sub => sub.name === sc.dept_subcategory && sub.department_id === matchDept?.id)
                                                   updateRow(p.id, {
                                                     override_pl_category_id: matchCat?.id || '',
-                                                    override_pl_category_name: matchCat?.name || script.pl_category,
+                                                    override_pl_category_name: matchCat?.name || sc.pl_category,
                                                     override_pl_subcategory_id: matchSub?.id || '',
-                                                    override_pl_subcategory_name: matchSub?.name || script.pl_subcategory,
+                                                    override_pl_subcategory_name: matchSub?.name || sc.pl_subcategory,
                                                     override_department_id: matchDept?.id || '',
-                                                    override_department_name: matchDept?.name || script.department,
+                                                    override_department_name: matchDept?.name || sc.department,
                                                     override_dept_subcategory_id: matchDeptSub?.id || '',
-                                                    override_dept_subcategory_name: matchDeptSub?.name || script.dept_subcategory,
-                                                    override_expense_description: script.expense_description,
-                                                    override_rev_alloc: script.rev_alloc,
-                                                    override_opex_type: script.opex_type,
-                                                    override_cf_type: script.cf_type,
+                                                    override_dept_subcategory_name: matchDeptSub?.name || sc.dept_subcategory,
+                                                    override_expense_description: sc.expense_description,
+                                                    override_rev_alloc: sc.rev_alloc,
+                                                    override_opex_type: sc.opex_type,
+                                                    override_cf_type: sc.cf_type,
                                                     status: 'accepted' as RowStatus,
                                                   })
-                                                  setQfSearch('')
+                                                  setQfSearch(''); setQfOpen(null)
                                                 }}>
                                                 <span style={{ fontSize: '12px', fontWeight: '500', color: '#00D47E' }}>{sc.icon} {sc.name}</span>
                                                 <span style={{ fontSize: '10px', color: '#7A9BB8' }}>{sc.pl_category}{sc.dept_subcategory ? ` · ${sc.dept_subcategory}` : ''}</span>
                                               </div>
                                             ))
-                                      }
+                                      })()}
                                     </div>
                                   )}
                                 </div>
