@@ -98,6 +98,7 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
     try { const s = localStorage.getItem('mintflow_quickfill_scripts'); return s ? JSON.parse(s) : [] } catch { return [] }
   }
   const [quickFillScripts] = useState<QuickFillScript[]>(loadScripts)
+  const [qfSearch, setQfSearch] = useState('')
 
   const applyQuickFill = (scriptId: string) => {
     const script = quickFillScripts.find(sc => sc.id === scriptId)
@@ -906,38 +907,35 @@ export default function InvoiceDialog({ onClose, invoice }: Props) {
                 <>
                   <div style={s.section}>
                     <div style={s.sectionTitle}>P&L classification</div>
-                    {quickFillScripts.length > 0 && (() => {
-                      const [qfSearch, setQfSearch] = React.useState('')
-                      return (
-                        <div style={{ marginBottom: '12px', position: 'relative' as const }}>
-                          <input
-                            style={{ width: '100%', boxSizing: 'border-box' as const, fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '8px 10px', border: '1px solid rgba(29,158,117,0.3)', borderRadius: '8px', background: 'rgba(29,158,117,0.05)', color: '#0F6E56', outline: 'none' }}
-                            value={qfSearch}
-                            onChange={e => setQfSearch(e.target.value)}
-                            placeholder="⚡ Quick fill — pretraži skriptu..."
-                          />
-                          {qfSearch && (
-                            <div style={{ position: 'absolute' as const, top: '100%', left: 0, right: 0, background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '8px', zIndex: 200, maxHeight: '200px', overflowY: 'auto' as const, marginTop: '2px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
-                              {quickFillScripts
-                                .filter(sc => sc.name.toLowerCase().includes(qfSearch.toLowerCase()) || sc.pl_category.toLowerCase().includes(qfSearch.toLowerCase()) || sc.department.toLowerCase().includes(qfSearch.toLowerCase()))
-                                .length === 0
-                                ? <div style={{ padding: '10px 12px', fontSize: '12px', color: '#888' }}>Nema rezultata za "{qfSearch}"</div>
-                                : quickFillScripts
-                                    .filter(sc => sc.name.toLowerCase().includes(qfSearch.toLowerCase()) || sc.pl_category.toLowerCase().includes(qfSearch.toLowerCase()) || sc.department.toLowerCase().includes(qfSearch.toLowerCase()))
-                                    .map(sc => (
-                                      <div key={sc.id}
-                                        style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '0.5px solid #f0f0ee', display: 'flex', flexDirection: 'column' as const, gap: '2px' }}
-                                        onMouseDown={e => { e.preventDefault(); applyQuickFill(sc.id); setQfSearch('') }}>
-                                        <span style={{ fontSize: '12px', fontWeight: '500', color: '#085041' }}>{sc.icon} {sc.name}</span>
-                                        <span style={{ fontSize: '10px', color: '#888' }}>{sc.pl_category}{sc.dept_subcategory ? ` · ${sc.dept_subcategory}` : ''}</span>
-                                      </div>
-                                    ))
-                              }
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })()}
+                    {quickFillScripts.length > 0 && (
+                      <div style={{ marginBottom: '12px', position: 'relative' as const }}>
+                        <input
+                          style={{ width: '100%', boxSizing: 'border-box' as const, fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '8px 10px', border: '1px solid rgba(29,158,117,0.3)', borderRadius: '8px', background: 'rgba(29,158,117,0.05)', color: '#0F6E56', outline: 'none' }}
+                          value={qfSearch}
+                          onChange={e => setQfSearch(e.target.value)}
+                          placeholder="⚡ Quick fill — pretraži skriptu..."
+                        />
+                        {qfSearch && (
+                          <div style={{ position: 'absolute' as const, top: '100%', left: 0, right: 0, background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '8px', zIndex: 200, maxHeight: '200px', overflowY: 'auto' as const, marginTop: '2px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
+                            {quickFillScripts
+                              .filter(sc => sc.name.toLowerCase().includes(qfSearch.toLowerCase()) || sc.pl_category.toLowerCase().includes(qfSearch.toLowerCase()) || sc.department.toLowerCase().includes(qfSearch.toLowerCase()))
+                              .length === 0
+                              ? <div style={{ padding: '10px 12px', fontSize: '12px', color: '#888' }}>Nema rezultata za "{qfSearch}"</div>
+                              : quickFillScripts
+                                  .filter(sc => sc.name.toLowerCase().includes(qfSearch.toLowerCase()) || sc.pl_category.toLowerCase().includes(qfSearch.toLowerCase()) || sc.department.toLowerCase().includes(qfSearch.toLowerCase()))
+                                  .map(sc => (
+                                    <div key={sc.id}
+                                      style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '0.5px solid #f0f0ee', display: 'flex', flexDirection: 'column' as const, gap: '2px' }}
+                                      onMouseDown={e => { e.preventDefault(); applyQuickFill(sc.id); setQfSearch('') }}>
+                                      <span style={{ fontSize: '12px', fontWeight: '500', color: '#085041' }}>{sc.icon} {sc.name}</span>
+                                      <span style={{ fontSize: '10px', color: '#888' }}>{sc.pl_category}{sc.dept_subcategory ? ` · ${sc.dept_subcategory}` : ''}</span>
+                                    </div>
+                                  ))
+                            }
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div style={s.row2}>
                       <div style={s.field}>
                         <label style={s.lbl}>P&L Category {!linkedTxId && <span style={s.req}>*</span>}</label>
