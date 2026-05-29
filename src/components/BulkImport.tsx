@@ -1699,6 +1699,47 @@ export default function BulkImport({ onClose, onImported }: Props) {
                                   </div>
                                 ))}
                               </div>
+                              {row.override_cf_type === 'recurring' && (
+                                <div style={{ marginTop: '10px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', padding: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                                  <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+                                    {[{ id: 'monthly', label: '📆 Monthly' }, { id: 'quarterly', label: '📊 Quarterly' }, { id: 'yearly', label: '📅 Yearly' }].map(f => (
+                                      <div key={f.id}
+                                        style={{ flex: 1, padding: '7px', border: row.override_cf_frequency === f.id ? '2px solid #00D47E' : '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', background: row.override_cf_frequency === f.id ? 'rgba(0,212,126,0.10)' : 'transparent', cursor: 'pointer', textAlign: 'center' as const, fontSize: '11px', fontWeight: row.override_cf_frequency === f.id ? '600' : '400', color: row.override_cf_frequency === f.id ? '#00D47E' : '#7A9BB8' }}
+                                        onClick={() => updateRow(p.id, { override_cf_frequency: f.id })}>
+                                        {f.label}
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '4px' }}>
+                                    <label style={s.editLbl}>Next month estimate ({p.currency || '—'})</label>
+                                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                      <input
+                                        type="number"
+                                        style={{ ...s.editInput, flex: 1 }}
+                                        value={row.override_cf_next_month_est}
+                                        onChange={e => updateRow(p.id, { override_cf_next_month_est: e.target.value })}
+                                        placeholder={`Auto: ${(p.debit || p.credit || 0).toLocaleString()}`}
+                                      />
+                                      {!row.override_cf_next_month_est && (
+                                        <button
+                                          style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '5px 10px', border: '1px solid rgba(0,212,126,0.3)', borderRadius: '6px', background: 'transparent', color: '#00D47E', cursor: 'pointer', whiteSpace: 'nowrap' as const }}
+                                          onClick={() => updateRow(p.id, { override_cf_next_month_est: String(p.debit || p.credit || '') })}>
+                                          Use this amount
+                                        </button>
+                                      )}
+                                    </div>
+                                    {(p.debit || p.credit) && (
+                                      <div style={{ fontSize: '10px', color: '#7A9BB8', marginTop: '2px' }}>
+                                        Auto: {row.override_cf_frequency === 'quarterly'
+                                          ? ((p.debit || p.credit || 0) / 3).toFixed(2)
+                                          : row.override_cf_frequency === 'yearly'
+                                          ? ((p.debit || p.credit || 0) / 12).toFixed(2)
+                                          : (p.debit || p.credit || 0).toLocaleString()} {p.currency}/mo
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </>
                           )}
 
