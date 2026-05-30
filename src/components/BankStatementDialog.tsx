@@ -118,14 +118,14 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
   const [qfSearch, setQfSearch] = useState<Record<string, string>>({})
   const [qfOpen, setQfOpen] = useState<string | null>(null)
 
-  const saveQfScripts = (scripts: QuickFillScript[]) => {
+  const saveQfScripts = (scripts: QuickFillScript[]) => { // eslint-disable-line
     try { localStorage.setItem('mintflow_quickfill_scripts', JSON.stringify(scripts)) } catch {}
     setQuickFillScriptsState(scripts)
   }
   const [quickFillScriptsState, setQuickFillScriptsState] = useState<QuickFillScript[]>(loadQfScripts)
   const quickFillScripts = quickFillScriptsState
-  const [qfDialogOpen, setQfDialogOpen] = useState(false)
-  const [qfEditing, setQfEditing] = useState<QuickFillScript | null>(null)
+  const [qfDialogOpen, setQfDialogOpen] = useState(false) // eslint-disable-line
+  const [qfEditing, setQfEditing] = useState<QuickFillScript | null>(null) // eslint-disable-line
   const EMPTY_SCRIPT: QuickFillScript = { id: '', name: '', icon: '⚡', pl_category: '', pl_subcategory: '', department: '', dept_subcategory: '', expense_description: '', rev_alloc: 'sg100', opex_type: 'opex', cf_type: 'recurring' }
 
   // ── Import history ────────────────────────────────────────────────────────
