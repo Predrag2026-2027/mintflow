@@ -848,9 +848,8 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                             {row.tx_subtype === 'expense' && (
                               <>
                                 <div style={s.classTitle}>P&L Classification</div>
-                                {(quickFillScripts.length > 0 || true) && (
-                                  <div style={{ marginBottom: '10px', display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
-                                    <div style={{ flex: 1, position: 'relative' as const }}>
+                                <div style={{ marginBottom: '10px', display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
+                                  <div style={{ flex: 1, position: 'relative' as const }}>
                                     <div style={{ position: 'relative' as const }}>
                                       <input
                                         style={{ width: '100%', boxSizing: 'border-box' as const, fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '7px 28px 7px 10px', border: `1px solid ${qfOpen === row.id ? '#1D9E75' : 'rgba(29,158,117,0.3)'}`, borderRadius: '8px', background: 'rgba(29,158,117,0.05)', color: '#0F6E56', outline: 'none' }}
@@ -864,16 +863,6 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                                         {qfOpen === row.id ? '▲' : '▼'}
                                       </span>
                                     </div>
-                                    <button
-                                      style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '5px 10px', border: '1px solid rgba(29,158,117,0.3)', borderRadius: '6px', background: 'rgba(29,158,117,0.08)', color: '#0F6E56', cursor: 'pointer', whiteSpace: 'nowrap' as const, flexShrink: 0 }}
-                                      onClick={e => { e.stopPropagation(); setQfEditing({ ...EMPTY_SCRIPT, id: `script_${Date.now()}` }); setQfDialogOpen(true) }}>
-                                      + Nova
-                                    </button>
-                                    <button
-                                      style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '5px 10px', border: '0.5px solid #e5e5e5', borderRadius: '6px', background: 'transparent', color: '#888', cursor: 'pointer', whiteSpace: 'nowrap' as const, flexShrink: 0 }}
-                                      onClick={e => { e.stopPropagation(); setQfEditing(null); setQfDialogOpen(true) }}>
-                                      ✎ Uredi
-                                    </button>
                                     {qfOpen === row.id && (
                                       <div style={{ position: 'absolute' as const, top: '100%', left: 0, right: 0, background: '#fff', border: '0.5px solid #1D9E75', borderRadius: '8px', zIndex: 300, maxHeight: '200px', overflowY: 'auto' as const, marginTop: '2px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
                                         {(() => {
@@ -901,9 +890,18 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                                         })()}
                                       </div>
                                     )}
-                                    </div>
                                   </div>
-                                )}
+                                  <button
+                                    style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '5px 10px', border: '1px solid rgba(29,158,117,0.3)', borderRadius: '6px', background: 'rgba(29,158,117,0.08)', color: '#0F6E56', cursor: 'pointer', whiteSpace: 'nowrap' as const, flexShrink: 0 }}
+                                    onClick={e => { e.stopPropagation(); setQfEditing({ ...EMPTY_SCRIPT, id: `script_${Date.now()}` }); setQfDialogOpen(true) }}>
+                                    + Nova
+                                  </button>
+                                  <button
+                                    style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '5px 10px', border: '0.5px solid #e5e5e5', borderRadius: '6px', background: 'transparent', color: '#888', cursor: 'pointer', whiteSpace: 'nowrap' as const, flexShrink: 0 }}
+                                    onClick={e => { e.stopPropagation(); setQfEditing(null); setQfDialogOpen(true) }}>
+                                    ✎ Uredi
+                                  </button>
+                                </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
                                   <div style={s.field}>
                                     <label style={s.lbl}>P&L Category</label>
