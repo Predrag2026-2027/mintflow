@@ -115,9 +115,22 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
   const loadQfScripts = (): QuickFillScript[] => {
     try { const s = localStorage.getItem('mintflow_quickfill_scripts'); return s ? JSON.parse(s) : [] } catch { return [] }
   }
-  const [quickFillScripts] = useState<QuickFillScript[]>(loadQfScripts)
   const [qfSearch, setQfSearch] = useState<Record<string, string>>({})
   const [qfOpen, setQfOpen] = useState<string | null>(null)
+
+  const saveQfScripts = (scripts: QuickFillScript[]) => {
+    try { localStorage.setItem('mintflow_quickfill_scripts', JSON.stringify(scripts)) } catch {}
+    setQuickFillScriptsState(scripts)
+  }
+  const [quickFillScriptsState, setQuickFillScriptsState] = useState<QuickFillScript[]>(loadQfScripts)
+  const quickFillScripts = quickFillScriptsState
+  const [qfDialogOpen, setQfDialogOpen] = useState(false)
+  const [qfEditing, setQfEditing] = useState<QuickFillScript | null>(null)
+  const EMPTY_SCRIPT: QuickFillScript = { id: '', name: '', icon: '⚡', pl_category: '', pl_subcategory: '', department: '', dept_subcategory: '', expense_description: '', rev_alloc: 'sg100', opex_type: 'opex', cf_type: 'recurring' }
+
+  // ── Import history ────────────────────────────────────────────────────────
+  const [importHistory, setImportHistory] = useState<any[]>([])
+  const [historyExpanded, setHistoryExpanded] = useState(false)
 
   const applyQuickFillRow = (rowId: string, scriptId: string) => {
     const script = quickFillScripts.find(sc => sc.id === scriptId)
@@ -184,6 +197,23 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
     if (company) setBanks(allBanks.filter(b => b.company_id === company))
     else setBanks([])
   }, [company, allBanks])
+
+  useEffect(() => {
+    if (!company || !bank) { setImportHistory([]); return }
+    const fetchHistory = async () => {
+      const { data } = await supabase
+        .from('import_logs')
+        .select('*')
+        .eq('company_id', company)
+        .eq('bank_id', bank)
+        .eq('import_type', 'manual_statement')
+        .order('created_at', { ascending: false })
+        .limit(30)
+      setImportHistory(data || [])
+      if (data && data.length > 0) setHistoryExpanded(true)
+    }
+    fetchHistory()
+  }, [company, bank])
 
   useEffect(() => {
     if (!company) return
@@ -471,6 +501,17 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
           if (invStatus) await supabase.from('invoices').update({ status: invStatus.calculated_status }).eq('id', row.linked_invoice_id)
         }
       }
+      // Logiraj import
+      await supabase.from('import_logs').insert({
+        company_id: company,
+        bank_id: bank,
+        import_type: 'manual_statement',
+        file_name: statementNumber ? `Izvod #${statementNumber}` : 'Manual entry',
+        date_from: validRows.map(r => r.date).sort()[0] || null,
+        date_to: validRows.map(r => r.date).sort().reverse()[0] || null,
+        row_count: validRows.length,
+        note: `${validRows.length} rows posted manually`,
+      })
       setPosted(true)
       setTimeout(() => { onImported(); onClose() }, 1500)
     } catch (err: any) {
@@ -533,6 +574,45 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
               </div>
             </div>
           </div>
+
+          {/* Import history */}
+          {company && bank && (
+            <div style={{ ...s.section, marginTop: '-8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', paddingBottom: '6px', borderBottom: '0.5px solid #e5e5e5', marginBottom: '10px' }}
+                onClick={() => setHistoryExpanded(prev => !prev)}>
+                <div style={{ fontSize: '10px', fontWeight: '600', color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.08em' }}>
+                  🕐 Prethodni ručni unosi — ovaj račun
+                  {importHistory.length > 0 && <span style={{ marginLeft: '8px', background: '#E1F5EE', color: '#085041', padding: '1px 7px', borderRadius: '20px', fontSize: '10px' }}>{importHistory.length}</span>}
+                </div>
+                <span style={{ fontSize: '10px', color: '#888' }}>{historyExpanded ? '▲ Sakrij' : '▼ Prikaži'}</span>
+              </div>
+              {historyExpanded && (
+                importHistory.length === 0 ? (
+                  <div style={{ fontSize: '12px', color: '#aaa', padding: '10px 12px', background: '#f9f9f7', borderRadius: '8px', border: '0.5px solid #e5e5e5' }}>
+                    Nema prethodnih unosa za ovaj račun.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '5px', maxHeight: '180px', overflowY: 'auto' as const }}>
+                    {importHistory.map(log => (
+                      <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 12px', background: '#f9f9f7', borderRadius: '8px', border: '0.5px solid #e5e5e5' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '12px', fontWeight: '500', color: '#111' }}>{log.file_name || 'Manual entry'}</div>
+                          <div style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>
+                            {log.date_from && log.date_to ? `${log.date_from} → ${log.date_to}` : log.date_from || '—'}
+                            {log.row_count ? ` · ${log.row_count} rows` : ''}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#888', whiteSpace: 'nowrap' as const }}>
+                          {new Date(log.created_at).toLocaleDateString('sr-RS')}
+                        </div>
+                        <div style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '20px', background: '#E1F5EE', color: '#085041' }}>✓ Proknjiženo</div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              )}
+            </div>
+          )}
 
           {/* Rows */}
           <div style={s.section}>
@@ -768,8 +848,9 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                             {row.tx_subtype === 'expense' && (
                               <>
                                 <div style={s.classTitle}>P&L Classification</div>
-                                {quickFillScripts.length > 0 && (
-                                  <div style={{ marginBottom: '10px', position: 'relative' as const }}>
+                                {(quickFillScripts.length > 0 || true) && (
+                                  <div style={{ marginBottom: '10px', display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
+                                    <div style={{ flex: 1, position: 'relative' as const }}>
                                     <div style={{ position: 'relative' as const }}>
                                       <input
                                         style={{ width: '100%', boxSizing: 'border-box' as const, fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '7px 28px 7px 10px', border: `1px solid ${qfOpen === row.id ? '#1D9E75' : 'rgba(29,158,117,0.3)'}`, borderRadius: '8px', background: 'rgba(29,158,117,0.05)', color: '#0F6E56', outline: 'none' }}
@@ -783,6 +864,16 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                                         {qfOpen === row.id ? '▲' : '▼'}
                                       </span>
                                     </div>
+                                    <button
+                                      style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '5px 10px', border: '1px solid rgba(29,158,117,0.3)', borderRadius: '6px', background: 'rgba(29,158,117,0.08)', color: '#0F6E56', cursor: 'pointer', whiteSpace: 'nowrap' as const, flexShrink: 0 }}
+                                      onClick={e => { e.stopPropagation(); setQfEditing({ ...EMPTY_SCRIPT, id: `script_${Date.now()}` }); setQfDialogOpen(true) }}>
+                                      + Nova
+                                    </button>
+                                    <button
+                                      style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '5px 10px', border: '0.5px solid #e5e5e5', borderRadius: '6px', background: 'transparent', color: '#888', cursor: 'pointer', whiteSpace: 'nowrap' as const, flexShrink: 0 }}
+                                      onClick={e => { e.stopPropagation(); setQfEditing(null); setQfDialogOpen(true) }}>
+                                      ✎ Uredi
+                                    </button>
                                     {qfOpen === row.id && (
                                       <div style={{ position: 'absolute' as const, top: '100%', left: 0, right: 0, background: '#fff', border: '0.5px solid #1D9E75', borderRadius: '8px', zIndex: 300, maxHeight: '200px', overflowY: 'auto' as const, marginTop: '2px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
                                         {(() => {
@@ -810,6 +901,7 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
                                         })()}
                                       </div>
                                     )}
+                                    </div>
                                   </div>
                                 )}
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
@@ -1181,6 +1273,152 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
         </div>
       </div>
     </div>
+
+      {/* Quick Fill Script Manager Dialog */}
+      {qfDialogOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200 }}
+          onClick={() => setQfDialogOpen(false)}>
+          <div style={{ background: '#fff', border: '0.5px solid #e5e5e5', borderRadius: '14px', width: '660px', maxWidth: '95vw', maxHeight: '85vh', display: 'flex', flexDirection: 'column' as const, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ background: '#0a1628', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ color: '#fff', fontSize: '14px', fontWeight: '500' }}>
+                {qfEditing && qfEditing.name === '' ? '➕ Nova skripta' : qfEditing ? `✎ Uredi: ${qfEditing.name}` : '⚡ Quick Fill skripte'}
+              </div>
+              <button style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '20px', cursor: 'pointer' }} onClick={() => { setQfDialogOpen(false); setQfEditing(null) }}>×</button>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto' as const, padding: '16px 20px' }}>
+              {qfEditing ? (
+                <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '60px 1fr', gap: '8px' }}>
+                    <div>
+                      <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px', textTransform: 'uppercase' as const }}>Ikona</div>
+                      <input style={{ ...s.input, textAlign: 'center' as const, fontSize: '20px' }} value={qfEditing.icon} onChange={e => setQfEditing({ ...qfEditing, icon: e.target.value })} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px', textTransform: 'uppercase' as const }}>Naziv skripte *</div>
+                      <input style={s.input} value={qfEditing.name} onChange={e => setQfEditing({ ...qfEditing, name: e.target.value })} placeholder="e.g. Bank fee — domestic" />
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div>
+                      <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px', textTransform: 'uppercase' as const }}>P&L Category</div>
+                      <select style={s.select} value={qfEditing.pl_category} onChange={e => setQfEditing({ ...qfEditing, pl_category: e.target.value, pl_subcategory: '' })}>
+                        <option value="">Select...</option>
+                        {plCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px', textTransform: 'uppercase' as const }}>P&L Sub-category</div>
+                      <select style={s.select} value={qfEditing.pl_subcategory} onChange={e => setQfEditing({ ...qfEditing, pl_subcategory: e.target.value })}>
+                        <option value="">Select...</option>
+                        {plSubcategories.filter(sub => { const cat = plCategories.find(c => c.name === qfEditing.pl_category); return cat && sub.category_id === cat.id }).map(sub => <option key={sub.id} value={sub.name}>{sub.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div>
+                      <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px', textTransform: 'uppercase' as const }}>Department</div>
+                      <select style={s.select} value={qfEditing.department} onChange={e => setQfEditing({ ...qfEditing, department: e.target.value, dept_subcategory: '', expense_description: '' })}>
+                        <option value="">Select...</option>
+                        {departments.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px', textTransform: 'uppercase' as const }}>Dept. Sub-category</div>
+                      <select style={s.select} value={qfEditing.dept_subcategory} onChange={e => setQfEditing({ ...qfEditing, dept_subcategory: e.target.value, expense_description: '' })}>
+                        <option value="">Select...</option>
+                        {deptSubcategories.filter(sub => { const dept = departments.find(d => d.name === qfEditing.department); return dept && sub.department_id === dept.id }).map(sub => <option key={sub.id} value={sub.name}>{sub.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px', textTransform: 'uppercase' as const }}>Expense Description</div>
+                    {(() => {
+                      const parentDept = departments.find(d => d.name === qfEditing.department)
+                      const deptSub = deptSubcategories.find(sub => sub.name === qfEditing.dept_subcategory && sub.department_id === parentDept?.id)
+                      const descs = deptSub ? expenseDescriptions.filter(ed => ed.dept_subcategory_id === deptSub.id) : []
+                      return descs.length > 0
+                        ? <select style={s.select} value={qfEditing.expense_description} onChange={e => setQfEditing({ ...qfEditing, expense_description: e.target.value })}>
+                            <option value="">Select...</option>
+                            {descs.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+                          </select>
+                        : <input style={s.input} value={qfEditing.expense_description} onChange={e => setQfEditing({ ...qfEditing, expense_description: e.target.value })} placeholder="e.g. AWS, Telekom..." />
+                    })()}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                    <div>
+                      <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px', textTransform: 'uppercase' as const }}>Revenue Alloc</div>
+                      <select style={s.select} value={qfEditing.rev_alloc} onChange={e => setQfEditing({ ...qfEditing, rev_alloc: e.target.value })}>
+                        <option value="sg100">100% Social Growth</option>
+                        <option value="af100">100% Aimfox</option>
+                        <option value="shared">Shared 50/50</option>
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px', textTransform: 'uppercase' as const }}>OPEX Type</div>
+                      <select style={s.select} value={qfEditing.opex_type} onChange={e => setQfEditing({ ...qfEditing, opex_type: e.target.value })}>
+                        <option value="opex">OPEX</option>
+                        <option value="performance">Performance</option>
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px', textTransform: 'uppercase' as const }}>CF Type</div>
+                      <select style={s.select} value={qfEditing.cf_type} onChange={e => setQfEditing({ ...qfEditing, cf_type: e.target.value })}>
+                        <option value="recurring">Recurring</option>
+                        <option value="one_time">One-time</option>
+                        <option value="accrual">Accrual</option>
+                        <option value="capex">CapEx</option>
+                        <option value="">— None —</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '8px', borderTop: '0.5px solid #e5e5e5' }}>
+                    <button style={{ fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '7px 16px', border: '0.5px solid #e5e5e5', borderRadius: '8px', background: 'transparent', color: '#666', cursor: 'pointer' }}
+                      onClick={() => setQfEditing(null)}>← Nazad</button>
+                    <button style={{ fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '7px 16px', border: 'none', borderRadius: '8px', background: '#1D9E75', color: '#fff', cursor: 'pointer', fontWeight: '600', opacity: !qfEditing.name.trim() ? 0.5 : 1 }}
+                      disabled={!qfEditing.name.trim()}
+                      onClick={() => {
+                        const exists = quickFillScripts.find(sc => sc.id === qfEditing.id)
+                        const updated = exists ? quickFillScripts.map(sc => sc.id === qfEditing.id ? qfEditing : sc) : [...quickFillScripts, qfEditing]
+                        saveQfScripts(updated)
+                        setQfEditing(null)
+                      }}>
+                      ✓ Sačuvaj skriptu
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '6px' }}>
+                  {quickFillScripts.map(sc => (
+                    <div key={sc.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: '#f9f9f7', border: '0.5px solid #e5e5e5', borderRadius: '8px' }}>
+                      <span style={{ fontSize: '18px', width: '28px', textAlign: 'center' as const }}>{sc.icon}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '13px', fontWeight: '500', color: '#111' }}>{sc.name}</div>
+                        <div style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>
+                          {sc.pl_category}{sc.pl_subcategory ? ` › ${sc.pl_subcategory}` : ''} · {sc.department}{sc.dept_subcategory ? ` › ${sc.dept_subcategory}` : ''}
+                        </div>
+                      </div>
+                      <button style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '4px 10px', border: '0.5px solid #e5e5e5', borderRadius: '6px', background: 'transparent', color: '#666', cursor: 'pointer' }}
+                        onClick={() => setQfEditing(sc)}>✎ Uredi</button>
+                      <button style={{ fontFamily: 'system-ui,sans-serif', fontSize: '11px', padding: '4px 10px', border: '0.5px solid #F5A9A9', borderRadius: '6px', background: 'transparent', color: '#A32D2D', cursor: 'pointer' }}
+                        onClick={() => { if (window.confirm(`Obriši "${sc.name}"?`)) saveQfScripts(quickFillScripts.filter(x => x.id !== sc.id)) }}>✕</button>
+                    </div>
+                  ))}
+                  {quickFillScripts.length === 0 && (
+                    <div style={{ fontSize: '12px', color: '#aaa', padding: '16px', textAlign: 'center' as const, background: '#f9f9f7', borderRadius: '8px' }}>
+                      Nema skripti. Dodaj prvu klikom ispod.
+                    </div>
+                  )}
+                  <button style={{ marginTop: '8px', fontFamily: 'system-ui,sans-serif', fontSize: '12px', padding: '8px', border: '1px dashed rgba(29,158,117,0.4)', borderRadius: '8px', background: 'transparent', color: '#1D9E75', cursor: 'pointer', width: '100%' }}
+                    onClick={() => setQfEditing({ ...EMPTY_SCRIPT, id: `script_${Date.now()}` })}>
+                    + Dodaj novu skriptu
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
   )
 }
 
