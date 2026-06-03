@@ -110,6 +110,7 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
   const [companyProfile, setCompanyProfile] = useState<any>(null)
   const [invoiceAccountMap, setInvoiceAccountMap] = useState<Record<string, { account_number: string; model: string; bank_name: string }>>({})
   const [partnerAccountsMap, setPartnerAccountsMap] = useState<Record<string, any[]>>({})
+  const [asOfDate, setAsOfDate] = useState('')
   const today = new Date().toISOString().split('T')[0]
 
   useEffect(() => {
@@ -160,13 +161,16 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
     load()
   }, [])
 
+  const effectiveDate = asOfDate || today
   const filtered = invoices
     .filter(inv => {
       const partner = inv.partners?.name || ''
       const matchSearch = !search || partner.toLowerCase().includes(search.toLowerCase()) || (inv.invoice_number || '').toLowerCase().includes(search.toLowerCase())
-      const isOverdue = inv.due_date && inv.due_date < today
+      // asOf filter: faktura mora biti izdata prije ili na taj datum i nije bila plaćena tada
+      const matchAsOf = !asOfDate || (inv.invoice_date <= asOfDate)
+      const isOverdue = inv.due_date && inv.due_date < effectiveDate
       const matchStatus = filterStatus === 'all' || (filterStatus === 'overdue' && isOverdue) || (filterStatus === 'upcoming' && !isOverdue)
-      return matchSearch && matchStatus
+      return matchSearch && matchStatus && matchAsOf
     })
     .sort((a, b) => {
       if (sortBy === 'amount') return (b.amount_usd || 0) - (a.amount_usd || 0)
@@ -175,9 +179,19 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
     })
 
   const totalUnpaid = filtered.reduce((s, i) => s + (i.calculated_status === 'partial' ? (i.remaining_usd || 0) : (i.amount_usd || 0)), 0)
-  const overdueCount = filtered.filter(i => i.due_date && i.due_date < today).length
+  const overdueCount = filtered.filter(i => i.due_date && i.due_date < effectiveDate).length
   const selectedInvoices = filtered.filter(i => selected.has(i.id))
   const selectedBank = bankAccounts.find(b => b.id === selectedBankId)
+
+  // Međuzbir selektovanih
+  const selectedTotalRsd = selectedInvoices.reduce((s, i) => {
+    const amt = i.calculated_status === 'partial'
+      ? (i.remaining_usd || 0) * (i.exchange_rate || 1)
+      : (i.amount || 0)
+    return s + amt
+  }, 0)
+  const selectedTotalUsd = selectedInvoices.reduce((s, i) =>
+    s + (i.calculated_status === 'partial' ? (i.remaining_usd || 0) : (i.amount_usd || 0)), 0)
 
   const toggleSelect = (id: string) => { setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   const toggleAll = () => { if (selected.size === filtered.length) setSelected(new Set()); else setSelected(new Set(filtered.map(i => i.id))) }
@@ -199,7 +213,7 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
 
   const daysUntilDue = (dueDate: string | null) => {
     if (!dueDate) return null
-    return Math.ceil((new Date(dueDate).getTime() - new Date(today).getTime()) / 86400000)
+    return Math.ceil((new Date(dueDate).getTime() - new Date(effectiveDate).getTime()) / 86400000)
   }
 
   const missingAccountCount = filtered.filter(i => !invoiceAccountMap[i.id]?.account_number && !i.account_number).length
@@ -241,7 +255,49 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
             <option value="amount">Sort: Amount</option>
             <option value="partner">Sort: Partner</option>
           </select>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', borderLeft: '1px solid rgba(255,255,255,0.08)', paddingLeft: '10px' }}>
+            <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', whiteSpace: 'nowrap' as const }}>Stanje na dan:</span>
+            <input
+              type="date"
+              style={{ ...ps.sel, fontSize: '12px', padding: '5px 8px' }}
+              value={asOfDate}
+              onChange={e => setAsOfDate(e.target.value)}
+            />
+            {asOfDate && (
+              <button
+                style={{ fontFamily: "'Inter',sans-serif", fontSize: '11px', padding: '5px 8px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', background: 'transparent', color: '#7A9BB8', cursor: 'pointer' }}
+                onClick={() => setAsOfDate('')}>✕</button>
+            )}
+          </div>
         </div>
+
+        {/* ── Međuzbir selektovanih ── */}
+        {selected.size > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '10px 18px', background: 'rgba(0,212,126,0.08)', borderBottom: '1px solid rgba(0,212,126,0.2)', flexShrink: 0 }}>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#00D47E', letterSpacing: '0.08em', textTransform: 'uppercase' as const }}>
+              ✓ {selected.size} selektovano
+            </div>
+            <div style={{ display: 'flex', gap: '20px', flex: 1 }}>
+              <div>
+                <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', marginBottom: '2px' }}>Ukupno RSD</div>
+                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '15px', fontWeight: '600', color: '#E8F1FB' }}>
+                  {selectedTotalRsd.toLocaleString('sr-RS', { maximumFractionDigits: 2 })} RSD
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.3)', marginBottom: '2px' }}>Ukupno USD</div>
+                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '15px', fontWeight: '600', color: '#00D47E' }}>
+                  {fmt(selectedTotalUsd)}
+                </div>
+              </div>
+              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  style={{ fontFamily: "'Inter',sans-serif", fontSize: '11px', padding: '5px 12px', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px', background: 'transparent', color: '#7A9BB8', cursor: 'pointer' }}
+                  onClick={() => setSelected(new Set())}>Poništi selekciju</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Export bar ── */}
         <div style={ps.exportBar}>
@@ -303,7 +359,7 @@ function UnpaidInvoicesPanel({ onClose }: { onClose: () => void }) {
               </thead>
               <tbody>
                 {filtered.map((inv, i) => {
-                  const isOverdue = inv.due_date && inv.due_date < today
+                  const isOverdue = inv.due_date && inv.due_date < effectiveDate
                   const days = daysUntilDue(inv.due_date)
                   const isSelected = selected.has(inv.id)
                   const partnerId = inv.partner_id
