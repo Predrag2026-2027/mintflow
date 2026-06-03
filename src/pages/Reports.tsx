@@ -20,25 +20,32 @@ function padR(s: string, n: number): string {
   return (s || '').substring(0, n).padEnd(n, ' ')
 }
 function cleanAccount(acc: string): string {
-  // NBS format: BBB-CCCCCCCCCCCC-KK → ukupno 18 cifara bez crtica
-  // Core dio mora biti tačno 12 cifara (padovan nulama lijevo)
-  const raw = (acc || '').replace(/[\s]/g, '')
-  const parts = raw.split('-')
+  // Halcom TKDIS format: tačno 18 cifara bez crtica
+  // NBS format sa crticama: BBB-CCCCCCCCCCCCCCC (3+15) ILI BBB-CCCCCCCCCC-KK (stari)
+  // Uvijek normalizujemo na 18 cifara: 3 (banka) + 13 (core) + 2 (ctrl) = 18
+  const raw = (acc || '').replace(/\s/g, '')
+  const digits = raw.replace(/[^0-9]/g, '')
+  const parts = raw.split('-').filter(p => p.length > 0)
+
   if (parts.length === 3) {
+    // Stari format sa crticama: BBB-CORE-KK
     const bank = parts[0].padStart(3, '0').slice(-3)
-    const core = parts[1].padStart(12, '0').slice(-12)
     const ctrl = parts[2].padStart(2, '0').slice(-2)
-    return bank + core + ctrl  // tačno 17 cifara — bez crtica, standardni NBS
+    const core = parts[1].padStart(13, '0').slice(-13)  // 13 cifara = 18 ukupno
+    return bank + core + ctrl
   }
-  // Ako već nema crtica, provjeri dužinu
-  const digits = raw.replace(/\D/g, '')
-  if (digits.length === 18) return digits
-  if (digits.length === 17) return digits
-  // Pokušaj rekonstrukciju: prvih 3 = banka, zadnja 2 = kontrola, sredina = core
+  if (parts.length === 2) {
+    // Format BBB-CCCCCCCCCCCCCCC (novi NBS, 3+15)
+    const bank = parts[0].padStart(3, '0').slice(-3)
+    const rest = parts[1].padStart(15, '0').slice(-15)
+    return bank + rest
+  }
+  // Već bez crtica — pad do 18 cifara
+  if (digits.length >= 18) return digits.slice(-18)
   if (digits.length > 5) {
     const bank = digits.slice(0, 3)
     const ctrl = digits.slice(-2)
-    const core = digits.slice(3, -2).padStart(12, '0').slice(-12)
+    const core = digits.slice(3, -2).padStart(13, '0').slice(-13)
     return bank + core + ctrl
   }
   return digits
