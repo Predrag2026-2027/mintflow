@@ -492,13 +492,37 @@ export default function BankStatementDialog({ onClose, onImported }: Props) {
         }
 
         if (row.tx_type === 'invoice_payment' && row.linked_invoice_id && newTx?.id) {
-          const invAmount = amountUsd
-          await supabase.from('invoice_transaction_links').insert({
-            invoice_id: row.linked_invoice_id, transaction_id: newTx.id,
-            allocated_amount: amount, allocated_amount_usd: cur === 'USD' ? amount : invAmount,
-          })
-          const { data: invStatus } = await supabase.from('v_invoice_status').select('calculated_status').eq('id', row.linked_invoice_id).single()
-          if (invStatus) await supabase.from('invoices').update({ status: invStatus.calculated_status }).eq('id', row.linked_invoice_id)
+          // Fetch invoice to determine correct rate
+          const { data: inv } = await supabase.from('invoices')
+            .select('id, amount, amount_usd, currency, exchange_rate, is_indexed')
+            .eq('id', row.linked_invoice_id).single()
+
+          if (inv) {
+            // For non-indexed invoices: use invoice-date rate to avoid FX partial closing
+            // For indexed invoices: use payment-date rate
+            const invRateUsd = inv.is_indexed
+              ? (amount > 0 ? amountUsd / amount : (inv.exchange_rate ? 1 / inv.exchange_rate : 1))
+              : (inv.exchange_rate ? 1 / inv.exchange_rate : (amount > 0 ? amountUsd / amount : 1))
+
+            // How much of invoice original amount is being paid
+            const allocOrig = amount  // paying full stated amount in original currency
+            const allocUsd = Math.round(allocOrig * invRateUsd * 100) / 100
+
+            await supabase.from('invoice_transaction_links').insert({
+              invoice_id: row.linked_invoice_id, transaction_id: newTx.id,
+              allocated_amount: Math.round(allocOrig * 100) / 100,
+              allocated_amount_usd: allocUsd,
+            })
+
+            // Check status based on original currency
+            const { data: allAlloc } = await supabase.from('invoice_transaction_links')
+              .select('allocated_amount').eq('invoice_id', row.linked_invoice_id)
+            const totalAllocOrig = (allAlloc || []).reduce((s: number, r: any) => s + (r.allocated_amount || 0), 0)
+            const invStatus = totalAllocOrig <= 0 ? 'unpaid'
+              : totalAllocOrig >= (inv.amount || 0) * 0.999 ? 'paid'
+              : 'partial'
+            await supabase.from('invoices').update({ status: invStatus }).eq('id', row.linked_invoice_id)
+          }
         }
       }
       // Logiraj import

@@ -907,48 +907,56 @@ export default function BulkImport({ onClose, onImported }: Props) {
 
         if (invoiceIds.length > 0) {
           const { amount_usd: totalAmtUsd } = await getAmountUsd(p, amount)
-          let remainingUsd = totalAmtUsd      // USD
+          // remainingUsd tracks how much of the PAYMENT is left to allocate (payment currency)
+          // But for non-indexed invoices, we close based on ORIGINAL AMOUNT in invoice currency
+          // so we track remaining in original currency (amount paid)
+          let remainingOrig = amount   // original currency amount (e.g. RSD)
 
           for (const invoiceId of invoiceIds) {
-            if (remainingUsd <= 0) break
+            if (remainingOrig <= 0) break
 
-            // Fetch invoice details
+            // Fetch invoice details including is_indexed flag
             const { data: inv } = await supabase.from('invoices')
-              .select('id, amount, amount_usd, currency, exchange_rate')
+              .select('id, amount, amount_usd, currency, exchange_rate, is_indexed')
               .eq('id', invoiceId).single()
             if (!inv) continue
 
-            // Already allocated to this invoice
+            // For is_indexed invoices: use payment-date rate (totalAmtUsd/amount)
+            // For standard invoices: use invoice-date rate (inv.exchange_rate)
+            // This prevents FX differences from leaving partial invoices
+            const invRateUsd = inv.is_indexed
+              ? (amount > 0 ? totalAmtUsd / amount : (inv.exchange_rate ? 1 / inv.exchange_rate : 1))
+              : (inv.exchange_rate ? 1 / inv.exchange_rate : (amount > 0 ? totalAmtUsd / amount : 1))
+
+            // Already allocated in original currency
             const { data: prevAlloc } = await supabase.from('invoice_transaction_links')
-              .select('allocated_amount_usd').eq('invoice_id', invoiceId)
-            const alreadyAllocUsd = (prevAlloc || []).reduce((s: number, r: any) => s + (r.allocated_amount_usd || 0), 0)
-            const remainingInvUsd = Math.max(0, (inv.amount_usd || 0) - alreadyAllocUsd)
+              .select('allocated_amount').eq('invoice_id', invoiceId)
+            const alreadyAllocOrig = (prevAlloc || []).reduce((s: number, r: any) => s + (r.allocated_amount || 0), 0)
+            const remainingInvOrig = Math.max(0, (inv.amount || 0) - alreadyAllocOrig)
 
-            if (remainingInvUsd <= 0) continue // already paid
+            if (remainingInvOrig <= 0.005) continue // already paid
 
-            // Allocate: min(remaining tx, remaining on invoice)
-            const allocUsd = Math.min(remainingUsd, remainingInvUsd)
-            // Convert back to original currency proportionally
-            const allocAmt = totalAmtUsd > 0
-              ? Math.round((allocUsd / totalAmtUsd) * amount * 100) / 100
-              : allocUsd
+            // Allocate: min(remaining payment, remaining invoice) in original currency
+            const allocOrig = Math.min(remainingOrig, remainingInvOrig)
+            // Convert to USD using the correct rate
+            const allocUsd = Math.round(allocOrig * invRateUsd * 100) / 100
 
             await supabase.from('invoice_transaction_links').insert({
               invoice_id: invoiceId,
               transaction_id: newTx.id,
-              allocated_amount: allocAmt,
-              allocated_amount_usd: Math.round(allocUsd * 100) / 100,
+              allocated_amount: Math.round(allocOrig * 100) / 100,
+              allocated_amount_usd: allocUsd,
             })
 
-            remainingUsd -= allocUsd
+            remainingOrig -= allocOrig
 
-            // Update invoice status from total allocations
+            // Update invoice status based on original currency (prevents FX rounding partial)
             const { data: allAlloc } = await supabase.from('invoice_transaction_links')
-              .select('allocated_amount_usd').eq('invoice_id', invoiceId)
-            const totalAllocated = (allAlloc || []).reduce((s: number, r: any) => s + (r.allocated_amount_usd || 0), 0)
-            const invTotal = inv.amount_usd || 0
-            const invStatus = totalAllocated <= 0 ? 'unpaid'
-              : totalAllocated >= invTotal * 0.999 ? 'paid'
+              .select('allocated_amount').eq('invoice_id', invoiceId)
+            const totalAllocatedOrig = (allAlloc || []).reduce((s: number, r: any) => s + (r.allocated_amount || 0), 0)
+            const invTotal = inv.amount || 0
+            const invStatus = totalAllocatedOrig <= 0 ? 'unpaid'
+              : totalAllocatedOrig >= invTotal * 0.999 ? 'paid'
               : 'partial'
             await supabase.from('invoices')
               .update({ status: invStatus, updated_at: new Date().toISOString() })
@@ -964,13 +972,14 @@ export default function BulkImport({ onClose, onImported }: Props) {
                 }
               } else {
                 for (const child of children) {
-                  const childAllocUsd = Math.round((child.amount_usd || 0) * (allocUsd / (inv.amount_usd || 1)) * 100) / 100
-                  const childAllocAmt = Math.round((child.amount || 0) * (allocAmt / (inv.amount || 1)) * 100) / 100
+                  // Use original currency ratio for children too
+                  const childAllocOrig = Math.round((child.amount || 0) * (allocOrig / (inv.amount || 1)) * 100) / 100
+                  const childAllocUsd = Math.round(childAllocOrig * invRateUsd * 100) / 100
                   await supabase.from('invoice_transaction_links').insert({
                     invoice_id: child.id, transaction_id: newTx.id,
-                    allocated_amount: childAllocAmt, allocated_amount_usd: childAllocUsd,
+                    allocated_amount: childAllocOrig, allocated_amount_usd: childAllocUsd,
                   })
-                  const childStatus = childAllocUsd <= 0 ? 'unpaid' : childAllocUsd >= (child.amount_usd || 0) * 0.999 ? 'paid' : 'partial'
+                  const childStatus = childAllocOrig <= 0 ? 'unpaid' : childAllocOrig >= (child.amount || 0) * 0.999 ? 'paid' : 'partial'
                   await supabase.from('invoices').update({ status: childStatus, updated_at: new Date().toISOString() }).eq('id', child.id)
                 }
               }
