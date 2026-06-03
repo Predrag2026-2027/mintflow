@@ -20,7 +20,28 @@ function padR(s: string, n: number): string {
   return (s || '').substring(0, n).padEnd(n, ' ')
 }
 function cleanAccount(acc: string): string {
-  return (acc || '').replace(/[-\s]/g, '')
+  // NBS format: BBB-CCCCCCCCCCCC-KK → ukupno 18 cifara bez crtica
+  // Core dio mora biti tačno 12 cifara (padovan nulama lijevo)
+  const raw = (acc || '').replace(/[\s]/g, '')
+  const parts = raw.split('-')
+  if (parts.length === 3) {
+    const bank = parts[0].padStart(3, '0').slice(-3)
+    const core = parts[1].padStart(12, '0').slice(-12)
+    const ctrl = parts[2].padStart(2, '0').slice(-2)
+    return bank + core + ctrl  // tačno 17 cifara — bez crtica, standardni NBS
+  }
+  // Ako već nema crtica, provjeri dužinu
+  const digits = raw.replace(/\D/g, '')
+  if (digits.length === 18) return digits
+  if (digits.length === 17) return digits
+  // Pokušaj rekonstrukciju: prvih 3 = banka, zadnja 2 = kontrola, sredina = core
+  if (digits.length > 5) {
+    const bank = digits.slice(0, 3)
+    const ctrl = digits.slice(-2)
+    const core = digits.slice(3, -2).padStart(12, '0').slice(-12)
+    return bank + core + ctrl
+  }
+  return digits
 }
 function fmtDatumDDMMYY(date: Date): string {
   const d = String(date.getDate()).padStart(2, '0')
