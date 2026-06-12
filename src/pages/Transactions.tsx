@@ -48,9 +48,9 @@ export default function Transactions() {
 
   // ── Paginacija ────────────────────────────────────────────────────────────
   const PAGE_SIZE = 50
-  const [invPage, setInvPage] = useState(0)
-  const [txPage, setTxPage] = useState(0)
-  const [ptPage, setPtPage] = useState(0)
+  const [invPage, setInvPage] = useState(0) // eslint-disable-line
+  const [txPage, setTxPage] = useState(0) // eslint-disable-line
+  const [ptPage, setPtPage] = useState(0) // eslint-disable-line
   const [invTotal, setInvTotal] = useState(0)
   const [txTotal, setTxTotal] = useState(0)
   const [ptTotal, setPtTotal] = useState(0)
