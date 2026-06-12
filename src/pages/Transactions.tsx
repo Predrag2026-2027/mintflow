@@ -46,32 +46,77 @@ export default function Transactions() {
   const [passthroughs, setPassthroughs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  const fetchInvoices = async () => {
+  // ── Paginacija ────────────────────────────────────────────────────────────
+  const PAGE_SIZE = 50
+  const [invPage, setInvPage] = useState(0)
+  const [txPage, setTxPage] = useState(0)
+  const [ptPage, setPtPage] = useState(0)
+  const [invTotal, setInvTotal] = useState(0)
+  const [txTotal, setTxTotal] = useState(0)
+  const [ptTotal, setPtTotal] = useState(0)
+
+  const fetchInvoices = async (page = 0) => {
     setLoading(true)
-    const { data, error } = await supabase.from('v_invoice_status').select('*').order('invoice_date', { ascending: false })
-    if (!error && data) setInvoices(data)
+    let q = supabase.from('v_invoice_status').select('*', { count: 'exact' })
+    // Server-side filteri
+    if (filterEntity !== 'all') q = q.ilike('company_name', `%${filterEntity}%`)
+    if (filterType !== 'all') q = q.eq('type', filterType)
+    if (filterStatus !== 'all') q = q.eq('calculated_status', filterStatus)
+    if (filterPlCategory !== 'all') q = q.eq('pl_category', filterPlCategory)
+    if (filterDateFrom) q = q.gte('invoice_date', filterDateFrom)
+    if (filterDateTo) q = q.lte('invoice_date', filterDateTo)
+    if (search) q = q.or(`partner_name.ilike.%${search}%,invoice_number.ilike.%${search}%`)
+    q = q.order('invoice_date', { ascending: false }).range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+    const { data, error, count } = await q
+    if (!error && data) { setInvoices(data); setInvTotal(count || 0); setInvPage(page) }
     setLoading(false)
   }
 
-  const fetchTransactions = async () => {
+  const fetchTransactions = async (page = 0) => {
     setLoading(true)
-    const { data, error } = await supabase.from('transactions')
-      .select('*, companies!transactions_company_id_fkey(name), banks!transactions_bank_id_fkey(name), partners!transactions_partner_id_fkey(name)')
-      .order('transaction_date', { ascending: false })
-    if (!error && data) setTransactions(data)
+    let q = supabase.from('transactions')
+      .select('*, companies!transactions_company_id_fkey(name), banks!transactions_bank_id_fkey(name), partners!transactions_partner_id_fkey(name)', { count: 'exact' })
+    // Server-side filteri
+    if (filterEntity !== 'all') q = q.ilike('companies.name', `%${filterEntity}%`)
+    if (filterDateFrom) q = q.gte('transaction_date', filterDateFrom)
+    if (filterDateTo) q = q.lte('transaction_date', filterDateTo)
+    if (filterType === 'expense') q = q.eq('tx_subtype', 'expense')
+    else if (filterType === 'revenue') q = q.eq('tx_subtype', 'revenue')
+    else if (filterType !== 'all') q = q.eq('type', filterType)
+    if (filterPlCategory !== 'all') {
+      if (filterType === 'revenue') q = q.eq('revenue_stream', filterPlCategory)
+      else q = q.eq('pl_category', filterPlCategory)
+    }
+    if (search) q = q.or(`partners.name.ilike.%${search}%,note.ilike.%${search}%`)
+    q = q.order('transaction_date', { ascending: false }).range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+    const { data, error, count } = await q
+    if (!error && data) { setTransactions(data); setTxTotal(count || 0); setTxPage(page) }
     setLoading(false)
   }
 
-  const fetchPassthroughs = async () => {
+  const fetchPassthroughs = async (page = 0) => {
     setLoading(true)
-    const { data, error } = await supabase.from('passthrough')
-      .select('*, companies(name), banks(name), partners(name)')
-      .order('transaction_date', { ascending: false })
-    if (!error && data) setPassthroughs(data)
+    let q = supabase.from('passthrough')
+      .select('*, companies(name), banks(name), partners(name)', { count: 'exact' })
+    if (filterEntity !== 'all') q = q.ilike('companies.name', `%${filterEntity}%`)
+    if (filterStatus !== 'all') q = q.eq('status', filterStatus)
+    if (filterDateFrom) q = q.gte('transaction_date', filterDateFrom)
+    if (filterDateTo) q = q.lte('transaction_date', filterDateTo)
+    if (search) q = q.or(`partners.name.ilike.%${search}%,note.ilike.%${search}%`)
+    q = q.order('transaction_date', { ascending: false }).range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+    const { data, error, count } = await q
+    if (!error && data) { setPassthroughs(data); setPtTotal(count || 0); setPtPage(page) }
     setLoading(false)
   }
 
-  const fetchAll = () => { fetchInvoices(); fetchTransactions(); fetchPassthroughs() }
+  const fetchAll = () => { fetchInvoices(0); fetchTransactions(0); fetchPassthroughs(0) }
+
+  // Refetch kad se promijene filteri — reset na page 0
+  useEffect(() => {
+    if (activeTab === 'invoices') fetchInvoices(0)
+    else if (activeTab === 'transactions') fetchTransactions(0)
+    else if (activeTab === 'passthrough') fetchPassthroughs(0)
+  }, [search, filterEntity, filterType, filterStatus, filterPlCategory, filterDateFrom, filterDateTo, activeTab]) // eslint-disable-line
 
   useEffect(() => { fetchAll() }, []) // eslint-disable-line
 
@@ -147,57 +192,38 @@ export default function Transactions() {
     balanced: { bg: 'rgba(0,212,126,0.12)', color: '#00D47E' },
   }
 
-  const filteredInvoices = invoices.filter(inv => {
-    const company = inv.company_name || ''
-    const partner = inv.partner_name || ''
-    const invDate = (inv.invoice_date || '').slice(0, 10)
-    return (filterEntity === 'all' || company.toLowerCase().includes(filterEntity)) &&
-      (filterType === 'all' || inv.type === filterType) &&
-      (filterStatus === 'all' || inv.calculated_status === filterStatus) &&
-      (filterPlCategory === 'all' || (inv.pl_category || '') === filterPlCategory) &&
-      (!filterDateFrom || invDate >= filterDateFrom) &&
-      (!filterDateTo || invDate <= filterDateTo) &&
-      (!search || partner.toLowerCase().includes(search.toLowerCase()) || (inv.invoice_number || '').toLowerCase().includes(search.toLowerCase()))
-  })
+  // Server-side filtriranje — data već filtrirana, samo rename-ujemo za kompatibilnost
+  const filteredInvoices = invoices
+  const filteredTransactions = transactions
+  const filteredPassthroughs = passthroughs
 
-  const filteredTransactions = transactions.filter(t => {
-    const company = t.companies?.name || ''
-    const partner = t.partners?.name || ''
-    const txDate = (t.transaction_date || '').slice(0, 10)
-    const typeMatch = filterType === 'all' ? true
-      : filterType === 'revenue' ? t.tx_subtype === 'revenue'
-      : filterType === 'expense' ? t.tx_subtype === 'expense'
-      : t.type === filterType
-    const catMatch = filterPlCategory === 'all' ? true
-      : filterType === 'revenue'
-        ? (t.revenue_stream || '') === filterPlCategory
-        : (t.pl_category || '') === filterPlCategory
-    return (filterEntity === 'all' || company.toLowerCase().includes(filterEntity)) &&
-      typeMatch &&
-      catMatch &&
-      (!filterDateFrom || txDate >= filterDateFrom) &&
-      (!filterDateTo || txDate <= filterDateTo) &&
-      (!search || partner.toLowerCase().includes(search.toLowerCase()) || (t.note || '').toLowerCase().includes(search.toLowerCase()))
-  })
-
-  const filteredPassthroughs = passthroughs.filter(p => {
-    const company = p.companies?.name || ''
-    const partner = p.partners?.name || ''
-    const ptDate = (p.transaction_date || '').slice(0, 10)
-    return (filterEntity === 'all' || company.toLowerCase().includes(filterEntity)) &&
-      (filterStatus === 'all' || p.status === filterStatus) &&
-      (!filterDateFrom || ptDate >= filterDateFrom) &&
-      (!filterDateTo || ptDate <= filterDateTo) &&
-      (!search || partner.toLowerCase().includes(search.toLowerCase()) || (p.note || '').toLowerCase().includes(search.toLowerCase()))
-  })
-
-  const unpaidTotal = invoices.filter(i => ['unpaid', 'partial'].includes(i.calculated_status)).reduce((s, i) => s + (i.remaining_usd || 0), 0)
-  const overdueCount = invoices.filter(i => i.due_date && new Date(i.due_date) < new Date() && ['unpaid', 'partial'].includes(i.calculated_status)).length
-  const unpairedPt = passthroughs.filter(p => p.status === 'unpaired').length
-  const directWithPL = transactions.filter(t => t.type === 'direct' && t.pl_impact && t.status !== 'reconciled').length
+  // Summary stats — fetch aggregate data separately (not filtered)
+  const [summaryStats, setSummaryStats] = useState({ unpaidTotal: 0, overdueCount: 0, unpairedPt: 0, directWithPL: 0, unpaidCount: 0 })
+  useEffect(() => {
+    const fetchStats = async () => {
+      const today = new Date().toISOString().split('T')[0]
+      const [{ data: unpaidData }, { data: ptData }, { data: directData }] = await Promise.all([
+        supabase.from('v_invoice_status').select('remaining_usd,due_date,calculated_status').in('calculated_status', ['unpaid', 'partial']),
+        supabase.from('passthrough').select('id', { count: 'exact' }).eq('status', 'unpaired'),
+        supabase.from('transactions').select('id', { count: 'exact' }).eq('type', 'direct').eq('pl_impact', true).neq('status', 'reconciled'),
+      ])
+      const unpaidTotal = (unpaidData || []).reduce((s, i) => s + (i.remaining_usd || 0), 0)
+      const overdueCount = (unpaidData || []).filter(i => i.due_date && i.due_date < today).length
+      setSummaryStats({
+        unpaidTotal,
+        overdueCount,
+        unpairedPt: ptData?.length || 0,
+        directWithPL: directData?.length || 0,
+        unpaidCount: (unpaidData || []).length,
+      })
+    }
+    fetchStats()
+  }, [])
+  const { unpaidTotal, overdueCount, unpairedPt, directWithPL } = summaryStats
 
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab); setSearch(''); setFilterType('all'); setFilterStatus('all'); setFilterPlCategory('all'); setShowMenu(null)
+    setInvPage(0); setTxPage(0); setPtPage(0)
   }
 
   return (
@@ -244,9 +270,9 @@ export default function Transactions() {
         <div style={s.tabBar}>
           <div style={{ display: 'flex', gap: 0 }}>
             {([
-              { id: 'invoices', label: '📄 Invoices', count: invoices.length },
-              { id: 'transactions', label: '💳 Transactions', count: transactions.length },
-              { id: 'passthrough', label: '⚡ Pass-through', count: passthroughs.length },
+              { id: 'invoices', label: '📄 Invoices', count: invTotal },
+              { id: 'transactions', label: '💳 Transactions', count: txTotal },
+              { id: 'passthrough', label: '⚡ Pass-through', count: ptTotal },
             ] as { id: Tab; label: string; count: number }[]).map(tab => (
               <button key={tab.id}
                 style={{ ...s.tab, ...(activeTab === tab.id ? s.tabActive : {}) }}
@@ -341,9 +367,9 @@ export default function Transactions() {
               </button>
             )}
             <div style={{ ...s.totalBadge, marginLeft: 'auto', whiteSpace: 'nowrap' as const }}>
-              {activeTab === 'invoices' && `${filteredInvoices.length} invoices · ${fmtUSD(filteredInvoices.reduce((s, i) => s + (i.remaining_usd || 0), 0))}`}
-              {activeTab === 'transactions' && `${filteredTransactions.length} entries · ${fmtUSD(filteredTransactions.reduce((s, t) => s + (t.amount_usd || 0), 0))}`}
-              {activeTab === 'passthrough' && `${filteredPassthroughs.length} entries`}
+              {activeTab === 'invoices' && `${invTotal} invoices`}
+              {activeTab === 'transactions' && `${txTotal} entries`}
+              {activeTab === 'passthrough' && `${ptTotal} entries`}
             </div>
           </div>
         </div>
@@ -585,4 +611,7 @@ const s: Record<string, React.CSSProperties> = {
   editBtn: { background: 'none', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', color: '#7A9BB8', fontSize: '14px' },
   contextMenu: { position: 'absolute' as const, right: 0, top: '100%', marginTop: '4px', background: '#0D1B2C', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '8px', zIndex: 9999, minWidth: '140px', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' },
   contextItem: { padding: '8px 14px', fontSize: '13px', color: '#DCE9F6', cursor: 'pointer', borderBottom: '0.5px solid rgba(255,255,255,0.05)' },
+  pagination: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', padding: '14px 16px', borderTop: '1px solid rgba(255,255,255,0.07)', background: '#0A1525' },
+  pageBtn: { fontFamily: 'system-ui,sans-serif', fontSize: '13px', padding: '7px 16px', border: '1px solid rgba(255,255,255,0.10)', borderRadius: '8px', background: 'transparent', color: '#DCE9F6', cursor: 'pointer' },
+  pageInfo: { fontSize: '12px', color: '#7A9BB8' },
 }
